@@ -14,3 +14,7 @@ output-*.xml
 output-*.js
 output-*.pdf
 tmp-*
+data-local.sqlite
+data-local.sqlite-shm
+data-local.sqlite-wal
+backup/
