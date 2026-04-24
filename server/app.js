@@ -1,6 +1,6 @@
 import express from "express";
 import { randomBytes } from "node:crypto";
-import { dirname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDatabase, getDefaultDbPath } from "./db.js";
 import { createAgisAssessmentService } from "./services/agisAssessmentService.js";
@@ -49,6 +49,18 @@ const placeholderPasswordValues = new Set([
   "bittevordemreleaseaendern123"
 ]);
 const placeholderSyncSourceMarkers = ["example.test", "beispiel", "placeholder"];
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: https:",
+  "connect-src 'self' https://www.ag.ch"
+].join("; ");
 
 function nowIso() {
   return new Date().toISOString();
@@ -222,6 +234,34 @@ function buildSessionCookie(sessionId, request) {
 function buildExpiredSessionCookie(request) {
   const secureAttribute = isSecureRequest(request) ? "; Secure" : "";
   return `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureAttribute}`;
+}
+
+function setCommonSecurityHeaders(_request, response, next) {
+  response.setHeader("Content-Security-Policy", contentSecurityPolicy);
+  response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response.setHeader("X-Frame-Options", "DENY");
+  next();
+}
+
+function setStaticAssetHeaders(response, filePath) {
+  const extension = extname(filePath).toLowerCase();
+
+  if (extension === ".html") {
+    response.setHeader("Cache-Control", "no-store");
+    return;
+  }
+
+  if ([".css", ".js"].includes(extension)) {
+    response.setHeader("Cache-Control", "no-cache");
+    return;
+  }
+
+  if ([".svg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico"].includes(extension)) {
+    response.setHeader("Cache-Control", "public, max-age=86400");
+  }
 }
 
 function validateLoginPayload(payload) {
@@ -643,7 +683,12 @@ export function createApp(options = {}) {
 
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
+  app.use(setCommonSecurityHeaders);
   app.use(express.json({ limit: "2mb" }));
+  app.use("/api", (_request, response, next) => {
+    response.setHeader("Cache-Control", "no-store");
+    next();
+  });
 
   const healthDatabasePath = options.dbPath ?? getDefaultDbPath();
   app.get("/health", (_request, response) => handleHealthCheck(_request, response, healthDatabasePath));
@@ -1271,12 +1316,22 @@ export function createApp(options = {}) {
     }
   });
 
-  app.use(express.static(publicDir));
+  app.use(express.static(publicDir, {
+    etag: true,
+    lastModified: true,
+    setHeaders: setStaticAssetHeaders
+  }));
   app.get(/^(?!\/api).*/, (_request, response) => {
+    response.setHeader("Cache-Control", "no-store");
     response.sendFile(join(publicDir, "index.html"));
   });
 
-  app.use((error, _request, response, _next) => {
+  app.use((error, _request, response, next) => {
+    if (response.headersSent) {
+      next(error);
+      return;
+    }
+
     console.error(error);
     response.status(500).json({ error: "Unexpected server error" });
   });
@@ -1295,12 +1350,28 @@ export function createApp(options = {}) {
 
 const isDirectRun = process.argv[1] && resolve(process.argv[1]) === currentFile;
 
+// Kantonsweite Standardquelle: Das offizielle Amtsblatt (amtsblatt.ag.ch) listet
+// alle "Bau- und Rodungsgesuche" des ganzen Kantons zentral. Es wird beim
+// produktiven Start automatisch als Quelle genutzt, damit die Datenbank ohne
+// weitere Konfiguration moeglichst vollstaendig alle wichtigen Baugesuche erfasst.
+const defaultCantonSyncSourceUrl = "https://amtsblatt.ag.ch/publikationen/";
+
 if (isDirectRun) {
   validateProductionRuntimeConfiguration();
   const port = Number.parseInt(process.env.PORT ?? "3000", 10);
+  // Eine per SYNC_SOURCE_URL gesetzte Quelle hat Vorrang. Ist nichts gesetzt,
+  // wird das Amtsblatt als kantonsweite Vollquelle aktiviert. Abschaltbar mit
+  // SYNC_DISABLE_DEFAULT_AMTSBLATT=true (dann gelten nur die Gemeindequellen).
+  const configuredSyncSourceUrl = normalizeEnvString(process.env.SYNC_SOURCE_URL ?? "");
+  const defaultAmtsblattDisabled =
+    String(process.env.SYNC_DISABLE_DEFAULT_AMTSBLATT ?? "").toLowerCase() === "true";
+  const effectiveSyncSourceUrl =
+    configuredSyncSourceUrl || (defaultAmtsblattDisabled ? "" : defaultCantonSyncSourceUrl);
+
   const { app, ready } = createApp({
     agisAssessmentEnabled: true,
-    agisRefreshOnStart: process.env.AGIS_REFRESH_ON_START !== "false"
+    agisRefreshOnStart: process.env.AGIS_REFRESH_ON_START !== "false",
+    syncSourceUrl: effectiveSyncSourceUrl
   });
 
   await ready;

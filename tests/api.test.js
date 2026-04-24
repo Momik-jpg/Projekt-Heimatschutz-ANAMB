@@ -9,6 +9,7 @@ import {
   validateProductionRuntimeConfiguration
 } from "../server/app.js";
 import { createDatabase } from "../server/db.js";
+import { createApplicationsRepository } from "../server/repository/applicationsRepository.js";
 
 function createTestServer(options = {}) {
   const directory = options.directory ?? mkdtempSync(join(tmpdir(), "heimatschutz-aargau-"));
@@ -53,6 +54,12 @@ function createJsonResponse(payload, status = 200) {
       "Content-Type": "application/json"
     }
   });
+}
+
+function dateOnlyDaysFromNow(days) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function closeTestServer(testServer) {
@@ -193,6 +200,26 @@ test("health endpoint is available at /health and /api/health", async (context) 
   assert.equal(apiHealthResponse.status, 200);
   assert.equal(healthResponse.payload.status, "ok");
   assert.deepEqual(healthResponse.payload, apiHealthResponse.payload);
+});
+
+test("server sends security and cache headers for app assets", async (context) => {
+  const testServer = createTestServer({
+    seedDemoApplications: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const healthResponse = await requestJson(testServer.baseUrl, "/health");
+  const scriptResponse = await requestText(testServer.baseUrl, "/app.js");
+  const indexResponse = await requestText(testServer.baseUrl, "/");
+
+  assert.equal(healthResponse.headers.get("x-content-type-options"), "nosniff");
+  assert.match(healthResponse.headers.get("content-security-policy"), /default-src 'self'/);
+  assert.match(scriptResponse.headers.get("cache-control"), /no-cache/);
+  assert.match(indexResponse.headers.get("cache-control"), /no-store/);
 });
 
 test("production startup validation rejects placeholder passwords", () => {
@@ -2209,6 +2236,120 @@ test("municipality import geocodes valid addresses through the official swiss se
   assert.match(syncResponse.payload.items[0].automatedAssessment, /Adresssuchdienst/i);
 });
 
+test("municipality import geocodes addresses without a street suffix and skips coarse municipality hits", async (context) => {
+  const syncFetchImpl = async () => {
+    return new Response(
+      `
+        <html>
+          <body>
+            <main>
+              <article>
+                <a href="/bg-2026-077">Baugesuch Vorstadt 7</a>
+                <p>Bauobjekt: Umbau Wohnhaus</p>
+                <p>Bauplatz: Vorstadt 7</p>
+                <p>Publiziert: 21. März 2026</p>
+              </article>
+            </main>
+          </body>
+        </html>
+      `,
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html"
+        }
+      }
+    );
+  };
+  const geocodeFetchImpl = async (url) => {
+    const requestUrl = new URL(String(url));
+    assert.match(requestUrl.searchParams.get("searchText") ?? "", /Vorstadt 7, Aarau/i);
+
+    return createJsonResponse({
+      results: [
+        {
+          // Grober Gemeindeumriss-Treffer: muss verworfen werden, damit kein
+          // falscher "kein Schutz"-Befund am Ortszentrum entsteht.
+          attrs: {
+            origin: "gg25",
+            label: "Aarau",
+            municipality: "Aarau",
+            x: 2645000,
+            y: 1248000
+          }
+        },
+        {
+          // Genauer Adresstreffer: dieser zaehlt.
+          attrs: {
+            origin: "address",
+            label: "Vorstadt 7, 5000 Aarau",
+            municipality: "Aarau",
+            x: 2648777,
+            y: 1249777
+          }
+        }
+      ]
+    });
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl,
+    geocodeEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: "HouseisGood1999?"
+  });
+
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Aarau");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: {
+      Cookie: masterCookie
+    },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://aarau.example.org/baugesuche",
+      includePattern: "baugesuch|bauobjekt|bauplatz",
+      excludePattern: "newsletter|facebook|archiv",
+      notes: "Offizielle Baugesuchseite"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(syncResponse.payload.items[0].address, "Vorstadt 7");
+  // Der grobe gg25-Treffer wird ignoriert, der genaue Adresstreffer gewinnt.
+  assert.equal(syncResponse.payload.items[0].coordinates, "2648777,1249777");
+  assert.equal(syncResponse.payload.items[0].protectionStatus, "no-hit");
+});
+
 test("municipality import can geocode parcel-based locations through the official swiss search service", async (context) => {
   const syncFetchImpl = async (url) => {
     if (String(url) === "https://auenstein.example.org/baugesuche") {
@@ -4019,6 +4160,76 @@ test("dashboard exposes seeded statistics", async (context) => {
   assert.equal(response.payload.stats.totalApplications, 8);
   assert.ok(response.payload.stats.relevantApplications >= 4);
   assert.ok(Array.isArray(response.payload.municipalities));
+});
+
+test("dashboard calculates due-soon cases from the current date", async (context) => {
+  const testServer = createTestServer({
+    seedDemoApplications: false
+  });
+  const repository = createApplicationsRepository(testServer.db);
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  repository.importItems([
+    {
+      source: "Test",
+      sourceReference: "DUE-SOON-CURRENT-01",
+      sourceUrl: "https://example.org/due-soon",
+      municipality: "Aarau",
+      address: "Teststrasse 1",
+      publicationDate: dateOnlyDaysFromNow(-1),
+      deadlineDate: dateOnlyDaysFromNow(6),
+      projectType: "Testfall",
+      description: "Aktueller Testfall mit naher Frist",
+      protectionStatus: "no-hit",
+      agisMatch: "Kein Schutz gefunden",
+      agisLayers: [],
+      workflowStatus: "new"
+    },
+    {
+      source: "Test",
+      sourceReference: "DUE-SOON-CURRENT-02",
+      sourceUrl: "https://example.org/later",
+      municipality: "Aarau",
+      address: "Teststrasse 2",
+      publicationDate: dateOnlyDaysFromNow(-1),
+      deadlineDate: dateOnlyDaysFromNow(8),
+      projectType: "Testfall",
+      description: "Aktueller Testfall mit spaeterer Frist",
+      protectionStatus: "no-hit",
+      agisMatch: "Kein Schutz gefunden",
+      agisLayers: [],
+      workflowStatus: "new"
+    },
+    {
+      source: "Test",
+      sourceReference: "DUE-SOON-CURRENT-03",
+      sourceUrl: "https://example.org/cleared",
+      municipality: "Aarau",
+      address: "Teststrasse 3",
+      publicationDate: dateOnlyDaysFromNow(-1),
+      deadlineDate: dateOnlyDaysFromNow(3),
+      projectType: "Testfall",
+      description: "Erledigter Testfall mit naher Frist",
+      protectionStatus: "no-hit",
+      agisMatch: "Kein Schutz gefunden",
+      agisLayers: [],
+      workflowStatus: "cleared"
+    }
+  ]);
+
+  const cookie = await login(testServer.baseUrl);
+  const response = await requestJson(testServer.baseUrl, "/api/dashboard", {
+    headers: {
+      Cookie: cookie
+    }
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.payload.stats.dueSoon, 1);
 });
 
 test("startup AGIS refresh replaces stale seed hits with official hits", async (context) => {
