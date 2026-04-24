@@ -1,0 +1,16 @@
+node_modules/
+data/
+coverage/
+.playwright-cli/
+.playwright-mcp/
+output/
+.server-port.txt
+server.out.log
+server.err.log
+.env
+heimatschutz-*.png
+output-*.html
+output-*.xml
+output-*.js
+output-*.pdf
+tmp-*

@@ -1,0 +1,36 @@
+{
+  "name": "heimatschutz-aargau",
+  "version": "1.0.0",
+  "description": "Interner Prototyp zur Vorsortierung von Baugesuchen fuer den Heimatschutz Aargau.",
+  "main": "server/app.js",
+  "scripts": {
+    "dev": "node --watch server/app.js",
+    "start": "node server/app.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Momik-jpg/Projekt-Heimatschutz-ANAMB.git"
+  },
+  "keywords": [
+    "heimatschutz",
+    "aargau",
+    "baugesuche",
+    "agis",
+    "amtsblatt"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Momik-jpg/Projekt-Heimatschutz-ANAMB/issues"
+  },
+  "homepage": "https://github.com/Momik-jpg/Projekt-Heimatschutz-ANAMB#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "pdf-parse": "^2.4.5"
+  }
+}
