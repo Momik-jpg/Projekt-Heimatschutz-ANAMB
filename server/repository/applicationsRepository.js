@@ -155,6 +155,12 @@ function buildImportedRecord(item, syncedAt) {
   };
 }
 
+function toDateOnly(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  return safeDate.toISOString().slice(0, 10);
+}
+
 export function createApplicationsRepository(db) {
   const findBySourceReferenceStatement = db.prepare(`
     SELECT id
@@ -448,7 +454,34 @@ export function createApplicationsRepository(db) {
       }
     },
 
-    getDashboard() {
+    // Ablaufdatum / Aufbewahrung: loescht unberuehrte Faelle, deren Auflagefrist
+    // laenger als retentionDays zurueckliegt. Vom Team bearbeitete Faelle (Status
+    // ungleich "new", mit Notiz, Zustaendiger oder Kommentar) bleiben erhalten.
+    pruneExpiredApplications({ retentionDays = 90, referenceDate = new Date() } = {}) {
+      const days = Number(retentionDays);
+
+      if (!Number.isFinite(days) || days < 0) {
+        return 0;
+      }
+
+      const cutoff = new Date(referenceDate.getTime() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const result = db
+        .prepare(`
+          DELETE FROM applications
+          WHERE workflow_status = 'new'
+            AND IFNULL(assignee, '') = ''
+            AND IFNULL(note, '') = ''
+            AND IFNULL(deadline_date, '') <> ''
+            AND date(deadline_date) < date(?)
+            AND id NOT IN (SELECT application_id FROM application_comments)
+        `)
+        .run(cutoff);
+
+      return result.changes ?? 0;
+    },
+
+    getDashboard({ referenceDate = new Date() } = {}) {
+      const referenceDateText = toDateOnly(referenceDate);
       const totalApplications = db.prepare("SELECT COUNT(*) AS count FROM applications").get().count;
       const relevantApplications = db
         .prepare(`
@@ -469,9 +502,10 @@ export function createApplicationsRepository(db) {
           SELECT COUNT(*) AS count
           FROM applications
           WHERE workflow_status NOT IN ('cleared', 'archived')
-            AND julianday(deadline_date) - julianday('2026-03-20') <= 7
+            AND IFNULL(deadline_date, '') <> ''
+            AND julianday(deadline_date) - julianday(?) <= 7
         `)
-        .get().count;
+        .get(referenceDateText).count;
       const municipalities = db
         .prepare("SELECT name FROM municipalities ORDER BY name ASC")
         .all()
@@ -513,6 +547,10 @@ export function createApplicationsRepository(db) {
               WHEN protection_status = 'protected-point' THEN 2
               WHEN protection_status = 'protected-zone' THEN 3
               ELSE 4
+            END,
+            CASE
+              WHEN IFNULL(deadline_date, '') = '' THEN 1
+              ELSE 0
             END,
             date(deadline_date) ASC
           LIMIT 5

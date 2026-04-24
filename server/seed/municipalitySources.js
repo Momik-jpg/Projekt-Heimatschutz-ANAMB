@@ -1,4 +1,4 @@
-const aargauMunicipalityNames = [
+export const aargauMunicipalityNames = [
   "Aarau",
   "Würenlos",
   "Aarburg",

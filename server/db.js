@@ -210,6 +210,11 @@ const schema = `
   CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
   CREATE INDEX IF NOT EXISTS idx_application_comments_application_id ON application_comments(application_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_applications_municipality ON applications(municipality);
+  CREATE INDEX IF NOT EXISTS idx_applications_protection_status ON applications(protection_status);
+  CREATE INDEX IF NOT EXISTS idx_applications_workflow_deadline ON applications(workflow_status, deadline_date);
+  CREATE INDEX IF NOT EXISTS idx_applications_source_municipality ON applications(source, municipality);
+  CREATE INDEX IF NOT EXISTS idx_applications_last_sync_at ON applications(last_sync_at DESC);
   CREATE INDEX IF NOT EXISTS idx_registration_keys_created_at ON registration_keys(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_registration_keys_key_code ON registration_keys(key_code);
   CREATE INDEX IF NOT EXISTS idx_sync_jobs_next_run_at ON sync_jobs(next_run_at);

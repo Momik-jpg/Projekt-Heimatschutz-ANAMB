@@ -1,5 +1,30 @@
 import { createHash, randomBytes } from "node:crypto";
 import { PDFParse } from "pdf-parse";
+import { aargauMunicipalityNames } from "../seed/municipalitySources.js";
+
+// Normalisierter Suchschluessel fuer Gemeindenamen: ohne Diakritika, ohne
+// Kantonszusatz "AG"/"(AG)", damit "Hausen AG" -> "Hausen" und "Arni" -> "Arni (AG)".
+function normalizeMunicipalityKey(name) {
+  return String(name ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\(ag\)/g, " ")
+    .replace(/\bag\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+const officialAargauMunicipalityByKey = new Map(
+  aargauMunicipalityNames.map((name) => [normalizeMunicipalityKey(name), name])
+);
+
+// Gibt den offiziellen Aargauer Gemeindenamen zurueck oder "" wenn der Wert
+// keine echte Aargauer Gemeinde ist (z. B. Projekttext oder Fremdkantons-Ort).
+function resolveOfficialAargauMunicipality(name) {
+  const key = normalizeMunicipalityKey(name);
+  return key ? officialAargauMunicipalityByKey.get(key) ?? "" : "";
+}
 
 const protectionStatusAliasMap = new Map([
   ["no-hit", "no-hit"],
@@ -65,6 +90,24 @@ const unreliableProxyUrlPattern = /readspeaker\.com\/cgi-bin\/rsent/i;
 const streetLikeAddressPattern =
   /(?:strasse|straße|weg|gasse|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)\b/i;
 const parcelLikeAddressPattern = /^Parzelle\s+\d{1,6}$/i;
+// Generische "Strassenname + Hausnummer"-Adresse ohne bekanntes Strassen-Suffix
+// (z. B. "Oberdorf 12", "Im Grund 4", "Vorstadt 3a"). Hausnummern auf 1-3 Stellen
+// begrenzt, damit Jahreszahlen (2024) oder Postleitzahlen (5000) nicht faelschlich
+// als Adresse geokodiert werden. So bekommen mehr echte Adressen automatisch
+// Koordinaten statt "Von Hand pruefen".
+const houseNumberAddressPattern =
+  /^[A-Za-zÄÖÜäöü][A-Za-zÄÖÜäöüéèà.'-]*(?:\s+[A-Za-zÄÖÜäöüéèà0-9.'-]+){0,3}\s+\d{1,3}\s?[a-z]?$/u;
+// Grobe Geocoder-Treffer (Gemeinde-, Bezirks-, Kantonsumriss, Ortschaftsname,
+// Postleitzahl) sind keine genaue Verortung. Sie werden verworfen, damit ein
+// unscharfer Treffer nie einen falschen "kein Schutz"-Befund erzeugt.
+const coarseGeocoderOrigins = new Set([
+  "gg25",
+  "kantone",
+  "district",
+  "gazetteer",
+  "sn25",
+  "zipcode"
+]);
 const bgReferencePattern = /\bBG\s*20\d{2}(?:[-/.]\d+)?\b/i;
 const weekdayPatternSource =
   "(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)";
@@ -2201,6 +2244,14 @@ function extractSwissCoordinatesFromGeocoderPayload(payload, municipality) {
 
   for (const candidate of candidates) {
     const attrs = candidate?.attrs ?? candidate?.properties ?? {};
+    const origin = normalizeText(attrs.origin ?? attrs.featureId ?? "");
+
+    // Nur grobe Treffer (Gemeinde-/Bezirks-/Kantonsumriss usw.) verwerfen.
+    // Treffer ohne Origin-Angabe bleiben zugelassen (Abwaertskompatibilitaet).
+    if (origin && coarseGeocoderOrigins.has(origin)) {
+      continue;
+    }
+
     const label = normalizeText(
       [
         candidate?.label,
@@ -2245,7 +2296,9 @@ async function geocodeMunicipalityAddress(address, municipality, fetchImpl, requ
     !fetchImpl ||
     !address ||
     !municipality ||
-    (!streetLikeAddressPattern.test(address) && !parcelLikeAddressPattern.test(address))
+    (!streetLikeAddressPattern.test(address) &&
+      !parcelLikeAddressPattern.test(address) &&
+      !houseNumberAddressPattern.test(address))
   ) {
     return "";
   }
@@ -2274,6 +2327,77 @@ async function geocodeMunicipalityAddress(address, municipality, fetchImpl, requ
 
     const payload = await response.json();
     return extractSwissCoordinatesFromGeocoderPayload(payload, municipality);
+  })().catch(() => "");
+
+  cache.set(cacheKey, pending);
+  return pending;
+}
+
+function looseMunicipalityToken(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/\(ag\)/g, "")
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+// Verortet eine Parzelle ueber die amtliche Parzellensuche von geo.admin
+// (origins=parcel, Format "<Gemeinde> <Nummer>"). So bekommen die vielen rein
+// parzellenbasierten Baugesuche echte Koordinaten statt "Von Hand pruefen".
+async function geocodeMunicipalityParcel(parcelNumber, municipality, fetchImpl, requestTimeoutMs, cache) {
+  if (!fetchImpl || !parcelNumber || !municipality) {
+    return "";
+  }
+
+  const cacheKey = `parcel::${municipality}::${parcelNumber}`;
+
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  const pending = (async () => {
+    const url = new URL(defaultSwissGeocoderUrl);
+    url.searchParams.set("type", "locations");
+    url.searchParams.set("origins", "parcel");
+    url.searchParams.set("searchText", `${municipality} ${parcelNumber}`);
+    url.searchParams.set("limit", "20");
+    url.searchParams.set("sr", "2056");
+
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      url.toString(),
+      { headers: { Accept: "application/json" } },
+      requestTimeoutMs
+    );
+
+    if (!response.ok) {
+      return "";
+    }
+
+    const payload = await response.json();
+    const wantedParcel = String(parcelNumber);
+    const wantedMunicipality = looseMunicipalityToken(municipality);
+
+    for (const candidate of Array.isArray(payload?.results) ? payload.results : []) {
+      const attrs = candidate?.attrs ?? {};
+      const detail = String(attrs.detail ?? "");
+      const tokens = detail.trim().split(/\s+/);
+
+      if (tokens[0] !== wantedParcel || !looseMunicipalityToken(detail).includes(wantedMunicipality)) {
+        continue;
+      }
+
+      const x = Number(attrs.x);
+      const y = Number(attrs.y);
+
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        return `${x},${y}`;
+      }
+    }
+
+    return "";
   })().catch(() => "");
 
   cache.set(cacheKey, pending);
@@ -2496,7 +2620,7 @@ async function buildXmlFeedImportedItems(
     if (
       !coordinates &&
       geocodeFetchImpl &&
-      (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address))
+      (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
     ) {
       coordinates = await geocodeMunicipalityAddress(
         address,
@@ -2618,7 +2742,7 @@ async function buildXmlSitemapImportedItems(
     if (
       !coordinates &&
       geocodeFetchImpl &&
-      (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address))
+      (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
     ) {
       coordinates = await geocodeMunicipalityAddress(
         address,
@@ -2838,7 +2962,7 @@ async function buildTabularImportedItems(relevantHtml, source, requestTimeoutMs,
     if (
       geocodeFetchImpl &&
       address &&
-      (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address))
+      (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
     ) {
       coordinates = await geocodeMunicipalityAddress(
         address,
@@ -2988,7 +3112,7 @@ async function buildStructuredPublicationImportedItems(
     if (
       !coordinates &&
       geocodeFetchImpl &&
-      (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address))
+      (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
     ) {
       coordinates = await geocodeMunicipalityAddress(
         address,
@@ -3304,7 +3428,7 @@ async function buildHtmlImportedItems(
       geocodeFetchImpl &&
       address &&
       address !== "Adresse von Webseite prüfen" &&
-      (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address))
+      (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
     ) {
       coordinates = await geocodeMunicipalityAddress(
         address,
@@ -3402,7 +3526,7 @@ async function buildHtmlImportedItems(
         geocodeFetchImpl &&
         address &&
         address !== "Adresse von Webseite prüfen" &&
-        (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address))
+        (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
       ) {
         coordinates = await geocodeMunicipalityAddress(
           address,
@@ -3561,7 +3685,7 @@ async function buildPdfImportedItems(
   if (
     !coordinates &&
     geocodeFetchImpl &&
-    (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address))
+    (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
   ) {
     coordinates = await geocodeMunicipalityAddress(
       address,
@@ -3889,6 +4013,11 @@ async function discoverMunicipalityPublicationUrl(html, source, fetchImpl, reque
 // Textkoerper strukturierte Felder (Bauherrschaft | Bauvorhaben | Standort).
 // ---------------------------------------------------------------------------
 const amtsblattBaugesuchRubricPattern = /bau-?\s*und\s*rodungsgesuch/i;
+// Erkennt Parzellennummern in vielen Schreibweisen: "Parzelle Nr. 1376",
+// "Parzellen-Nr. 123", "Parzellen: 155", "Parz. 11", "Kat.-Nr. 7", "GB-Nr 9",
+// "Grundstueck 276".
+const amtsblattParcelPattern =
+  /\b(?:Parzellen?|Parz|Kat(?:aster)?|GB|Grundst(?:ü|ue)ck)\.?[-:\s]*(?:Nr\.?:?[-:\s]*)?(\d{1,6})/i;
 const defaultAmtsblattMaxPages = Math.max(1, Number(process.env.AMTSBLATT_MAX_PAGES ?? 30));
 const defaultAmtsblattPageBatchSize = Math.min(
   50,
@@ -3936,7 +4065,8 @@ function matchAmtsblattField(text, label, stopLabels) {
 function extractAmtsblattLabeledValue(text, labels) {
   for (const label of labels) {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const pattern = new RegExp(`(?:^|[|\\s])${escaped}\\s*[:|]\\s*([^|]+?)\\s*(?:\\||$)`, "i");
+    // Trenner sind je nach Vorlage "|" oder ";"; Label-Wert-Trenner ":" oder "|".
+    const pattern = new RegExp(`(?:^|[|;\\s])${escaped}\\s*[:|]\\s*([^|;]+?)\\s*(?:[|;]|$)`, "i");
     const match = text.match(pattern);
 
     if (match) {
@@ -3965,9 +4095,10 @@ function deriveAmtsblattMunicipality(stelle, location) {
         )
         .replace(/\s+(Bau|Bauverwaltung|Bauamt|Hochbau|Tiefbau)$/i, "")
     );
+    const official = resolveOfficialAargauMunicipality(candidate);
 
-    if (candidate && /^[A-Za-zÄÖÜäöüéèà][A-Za-zÄÖÜäöüéèà .'-]{1,40}$/.test(candidate)) {
-      return candidate;
+    if (official) {
+      return official;
     }
   }
 
@@ -3977,14 +4108,15 @@ function deriveAmtsblattMunicipality(stelle, location) {
       .split(",")
       .map((value) => normalizeWhitespace(value))
       .filter(Boolean);
-    const last = (segments.at(-1) ?? "").replace(/^\d{4}\s+/, "").trim();
 
-    if (
-      segments.length >= 2 &&
-      /^[A-Za-zÄÖÜäöüéèà][A-Za-zÄÖÜäöüéèà .'-]{1,40}$/.test(last) &&
-      !/parz|parzelle|\d/i.test(last)
-    ) {
-      return last;
+    // Von hinten nach vorne den ersten Teil suchen, der eine echte Aargauer
+    // Gemeinde ist (haeufig nachgestellt: "Strasse 5, 5000 Aarau").
+    for (let index = segments.length - 1; index >= 0; index -= 1) {
+      const official = resolveOfficialAargauMunicipality(segments[index].replace(/^\d{4}\s+/, ""));
+
+      if (official) {
+        return official;
+      }
     }
   }
 
@@ -4029,6 +4161,7 @@ export function parseAmtsblattEntries(html) {
       location: extractAmtsblattLabeledValue(text, [
         "Standort",
         "Objektadresse",
+        "Ortslage",
         "Bauobjekt",
         "Bauplatz",
         "Lage",
@@ -4036,7 +4169,7 @@ export function parseAmtsblattEntries(html) {
         "Grundstück",
         "Grundstueck"
       ]),
-      bauvorhaben: extractAmtsblattLabeledValue(text, ["Bauvorhaben"]),
+      bauvorhaben: extractAmtsblattLabeledValue(text, ["Bauvorhaben", "Bauprojekt"]),
       bodyText: text
     });
   }
@@ -4045,9 +4178,10 @@ export function parseAmtsblattEntries(html) {
 }
 
 export async function buildAmtsblattItemFromEntry(entry, origin, baseUrl, geocodeFetchImpl, requestTimeoutMs, geocodeCache) {
-  const location = entry.location;
+  const location = entry.location ?? "";
   const municipality = deriveAmtsblattMunicipality(entry.stelle, location);
-  const parcel = (location.match(/Parz(?:elle)?\.?\s*(?:Nr\.?\s*)?(\d{1,6})/i) ?? [])[1] ?? "";
+  // Parzelle aus der Ortsangabe oder – als robuster Fallback – aus dem Detailtext.
+  const parcel = (location.match(amtsblattParcelPattern) ?? [])[1] ?? entry.parcel ?? "";
   // Strasse = Bauplatz ohne Klammern/Parzellenangabe und ohne nachgestellten Ort.
   const street = (() => {
     const segments = location
@@ -4079,7 +4213,7 @@ export async function buildAmtsblattItemFromEntry(entry, origin, baseUrl, geocod
   }
 
   if (!coordinates && geocodeFetchImpl && municipality && parcel) {
-    coordinates = await geocodeMunicipalityAddress(`Parzelle ${parcel}`, municipality, geocodeFetchImpl, requestTimeoutMs, geocodeCache);
+    coordinates = await geocodeMunicipalityParcel(parcel, municipality, geocodeFetchImpl, requestTimeoutMs, geocodeCache);
   }
 
   const ambiguousAddress = !coordinates;
@@ -4105,6 +4239,79 @@ export async function buildAmtsblattItemFromEntry(entry, origin, baseUrl, geocod
       : "Baugesuch aus dem amtlichen Amtsblatt importiert und automatisch geokodiert.",
     ambiguousAddress: ambiguousAddress ? 1 : 0
   };
+}
+
+// Wenn die Ergebnisliste den Standort nicht enthaelt (Text war abgeschnitten),
+// die Detailseite des Eintrags nachladen und Standort/Stelle/Bauvorhaben dort lesen.
+async function enrichAmtsblattEntryFromDetail(entry, origin, fetchImpl, requestTimeoutMs) {
+  if (!entry.detailPath) {
+    return;
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      `${origin}${entry.detailPath}`,
+      { headers: { Accept: "text/html,application/xhtml+xml" } },
+      requestTimeoutMs
+    );
+
+    if (!response.ok) {
+      return;
+    }
+
+    const html = await response.text();
+    const articleMatch = html.match(/<article\b[^>]*publication-detail[\s\S]*?<\/article>/i);
+    const detailText = normalizeWhitespace(decodeHtmlEntities(stripHtml(articleMatch ? articleMatch[0] : html)));
+
+    entry.location =
+      extractAmtsblattLabeledValue(detailText, [
+        "Standort",
+        "Objektadresse",
+        "Ortslage",
+        "Bauobjekt",
+        "Bauplatz",
+        "Lage",
+        "Baustelle",
+        "Grundstück",
+        "Grundstueck"
+      ]) || entry.location;
+
+    if (!entry.stelle) {
+      entry.stelle = matchAmtsblattField(detailText, "Stelle", [
+        "Rubrik",
+        "Bauherrschaft",
+        "Bauvorhaben",
+        "Standort",
+        "Bauobjekt",
+        "Objektadresse"
+      ]);
+    }
+
+    if (!entry.bauvorhaben) {
+      entry.bauvorhaben = extractAmtsblattLabeledValue(detailText, ["Bauvorhaben", "Bauprojekt"]);
+    }
+
+    // Robuster Fallback: Parzellennummer und Strasse direkt aus dem ganzen
+    // Detailtext ziehen. Aargauer Baugesuche tragen fast immer eine Parzellennr.,
+    // die ueber die amtliche Parzellensuche zuverlaessig verortet werden kann.
+    const bodyParcel = (detailText.match(amtsblattParcelPattern) ?? [])[1] ?? "";
+
+    if (bodyParcel) {
+      entry.parcel = bodyParcel;
+    }
+
+    const streetMatch = detailText.match(
+      /([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-]*(?:strasse|straße|weg|gasse|platz|allee|ring|rain|halde|steig|matte|acker|feld|quai|ufer)\s*\d{0,4}\s*[a-z]?)/i
+    );
+    const bodyStreet = streetMatch ? normalizeWhitespace(streetMatch[1]) : "";
+
+    if (!entry.location || !/\d/.test(entry.location)) {
+      entry.location = [bodyStreet, bodyParcel ? `Parzelle ${bodyParcel}` : ""].filter(Boolean).join(", ") || entry.location;
+    }
+  } catch {
+    // Detailseite optional; bei Fehler bleibt der Listeneintrag wie er ist.
+  }
 }
 
 async function buildAmtsblattImportedItems(
@@ -4184,6 +4391,14 @@ async function buildAmtsblattImportedItems(
         }
 
         seenReferences.add(reference);
+
+        // Fehlt in der Liste eine geocodierbare Ortsangabe (keine Nummer = keine
+        // Parzelle/Hausnummer), Detailseite nachladen (nur im normalen Sync mit
+        // Geokodierung, nicht beim grossen geocode-freien Massen-Backfill).
+        if (geocodeFetchImpl && !(entry.location && /\d/.test(entry.location))) {
+          await enrichAmtsblattEntryFromDetail(entry, origin, fetchImpl, requestTimeoutMs);
+        }
+
         items.push(
           await buildAmtsblattItemFromEntry(entry, origin, baseUrl, geocodeFetchImpl, requestTimeoutMs, geocodeCache)
         );
@@ -4429,7 +4644,8 @@ export function createApplicationsSyncService({
   assessApplication = null,
   notifyImportChanges = null,
   requestTimeoutMs = defaultSyncRequestTimeoutMs,
-  municipalitySourceConcurrency = defaultMunicipalitySourceConcurrency
+  municipalitySourceConcurrency = defaultMunicipalitySourceConcurrency,
+  applicationRetentionDays = Number(process.env.APPLICATION_RETENTION_DAYS ?? 0)
 }) {
   const normalizedSourceUrl = String(sourceUrl ?? "").trim();
   const normalizedSourceToken = String(sourceToken ?? "").trim();
@@ -4631,20 +4847,26 @@ export function createApplicationsSyncService({
       const hasGlobalSource = Boolean(resolveSourceUrl());
       const globalSourceType = hasGlobalSource ? resolveGlobalSourceType() : "";
       const hasWebsiteScrapingSource = ["html", "xml", "pdf"].includes(globalSourceType);
+      const isAmtsblattSource = globalSourceType === "amtsblatt";
+      const globalSourceName = isAmtsblattSource
+        ? "Amtsblatt"
+        : hasWebsiteScrapingSource
+          ? "Website-Scraping"
+          : "API";
 
       if (hasMunicipalitySources && hasGlobalSource) {
-        return hasWebsiteScrapingSource ? "Gemeindequellen + Website-Scraping" : "Gemeindequellen + API";
+        return `Gemeindequellen + ${globalSourceName}`;
       }
 
       if (hasMunicipalitySources) {
         return "Gemeindequellen";
       }
 
-      if (hasGlobalSource && hasWebsiteScrapingSource) {
-        return "Website-Scraping";
+      if (hasGlobalSource) {
+        return globalSourceName;
       }
 
-      return hasGlobalSource ? "API" : "Demo";
+      return "Demo";
     },
 
     async sync() {
@@ -4687,11 +4909,19 @@ export function createApplicationsSyncService({
 
       const merged = mergeSyncResults(syncResults);
 
+      // Ablaufdatum/Aufbewahrung: abgelaufene, unberuehrte Faelle entfernen.
+      let removedExpiredCount = 0;
+
+      if (applicationRetentionDays > 0 && typeof repository.pruneExpiredApplications === "function") {
+        removedExpiredCount = repository.pruneExpiredApplications({ retentionDays: applicationRetentionDays });
+      }
+
       return {
         ...merged,
         imported: merged.importedCount > 0 || merged.updatedCount > 0,
         item: merged.items[0] ?? null,
         remainingQueue: 0,
+        removedExpiredCount,
         source: municipalitySources.length > 0 ? "mixed" : "api"
       };
     }
