@@ -111,6 +111,12 @@ const elements = {
   registerAccessKey: document.querySelector("#registerAccessKey"),
   registerButton: document.querySelector("#registerButton"),
   registerError: document.querySelector("#registerError"),
+  masterSetupForm: document.querySelector("#masterSetupForm"),
+  masterSetupKey: document.querySelector("#masterSetupKey"),
+  masterSetupPassword: document.querySelector("#masterSetupPassword"),
+  masterSetupButton: document.querySelector("#masterSetupButton"),
+  masterSetupError: document.querySelector("#masterSetupError"),
+  masterSetupSuccess: document.querySelector("#masterSetupSuccess"),
   sessionUserName: document.querySelector("#sessionUserName"),
   sessionUserRole: document.querySelector("#sessionUserRole"),
   logoutButton: document.querySelector("#logoutButton"),
@@ -262,6 +268,16 @@ function setLoginError(message = "") {
 function setRegisterError(message = "") {
   elements.registerError.textContent = message;
   elements.registerError.classList.toggle("hidden", !message);
+}
+
+function setMasterSetupError(message = "") {
+  elements.masterSetupError.textContent = message;
+  elements.masterSetupError.classList.toggle("hidden", !message);
+}
+
+function setMasterSetupSuccess(message = "") {
+  elements.masterSetupSuccess.textContent = message;
+  elements.masterSetupSuccess.classList.toggle("hidden", !message);
 }
 
 function isMasterUser(user = state.currentUser) {
@@ -2690,6 +2706,20 @@ async function loadMunicipalitySources() {
   renderMunicipalitySources(payload);
 }
 
+async function maybeRevealMasterSetup() {
+  try {
+    const payload = await requestJson("/api/auth/master-setup-status", {
+      skipSessionReset: true
+    });
+
+    if (payload?.setupRequired) {
+      elements.masterSetupForm.classList.remove("hidden");
+    }
+  } catch {
+    // Status ist optional – bei Fehlern bleibt das Formular ausgeblendet.
+  }
+}
+
 async function restoreSession() {
   const payload = await requestJson("/api/auth/session", {
     skipSessionReset: true
@@ -2804,6 +2834,34 @@ function bindEvents() {
       });
     } catch (error) {
       setRegisterError(error.message);
+    }
+  });
+
+  elements.masterSetupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setMasterSetupError("");
+    setMasterSetupSuccess("");
+
+    try {
+      await withBusyState(elements.masterSetupButton, "Wird gesetzt...", async () => {
+        const payload = await requestJson("/api/auth/master-setup", {
+          method: "POST",
+          body: JSON.stringify({
+            key: elements.masterSetupKey.value.trim(),
+            password: elements.masterSetupPassword.value
+          }),
+          skipSessionReset: true
+        });
+
+        elements.masterSetupKey.value = "";
+        elements.masterSetupPassword.value = "";
+        setMasterSetupSuccess(payload.message ?? "Master-Passwort wurde gesetzt. Sie koennen sich jetzt anmelden.");
+        elements.loginUsername.value = "master";
+        focusWithoutScroll(elements.loginPassword);
+        showToast("Master-Passwort wurde gesetzt.");
+      });
+    } catch (error) {
+      setMasterSetupError(error.message);
     }
   });
 
@@ -3276,6 +3334,7 @@ async function init() {
     if (hasSession) {
       await showAuthenticatedApp();
     } else {
+      await maybeRevealMasterSetup();
       focusWithoutScroll(elements.loginUsername);
     }
   } catch (error) {

@@ -21,8 +21,10 @@ Allgemeine News-, Event- oder Social-Media-Seiten sollen nicht als produktive Ha
 
 - Login fuer internes Team
 - Master-Konto fuer Verwaltung
+- Keine Passwoerter im Quellcode: das Master-Konto wird per Umgebungsvariable oder ueber einen per E-Mail zugestellten Einmal-Setup-Schluessel eingerichtet
 - Registrierung nur mit einmaligem Registrierungsschluessel
 - Passwort-Reset durch das Master-Konto
+- Schutz gegen Passwort-Raten (Rate-Limiting), asynchrones Passwort-Hashing (scrypt), gzip-Kompression und gehaertete Security-Header (CSP, HSTS u. a.)
 - Arbeitsliste mit Suche, Filtern und Schnellauswahl
 - Detailansicht mit Karte, AGIS-Treffer und naechstem Schritt
 - Interne Notizen und Team-Kommentare
@@ -99,7 +101,9 @@ Voraussetzung:
 PowerShell:
 
 ```powershell
+# Einfachste Variante: Master-Passwort direkt setzen (kein Passwort im Code).
 $env:MASTER_ACCOUNT_PASSWORD="LokalesMasterPasswort_2026!"
+# Optional: Startpasswort fuer die Seed-Teamkonten (sonst bleiben sie gesperrt).
 $env:DEFAULT_LOGIN_PASSWORD="LokalesTeamPasswort_2026!"
 npm install
 npm start
@@ -107,15 +111,48 @@ npm start
 
 Danach ist die Anwendung lokal unter [http://localhost:3000](http://localhost:3000) erreichbar.
 
+Alternativ ohne Passwort in der Umgebung: `MASTER_ACCOUNT_PASSWORD` weglassen. Beim
+ersten Start erzeugt die App einen Einmal-Setup-Schluessel. Ist SMTP konfiguriert,
+wird er an `MASTER_SETUP_EMAIL` gesendet; sonst erscheint er einmalig im Server-Log.
+Im Login-Bildschirm unter "Master-Konto einrichten" Schluessel und neues Passwort
+eingeben.
+
 ## Wichtige Umgebungsvariablen
 
 ```env
 DATABASE_PATH=/data/heimatschutz.sqlite
-MASTER_ACCOUNT_PASSWORD=EinSicheresMasterPasswort
-DEFAULT_LOGIN_PASSWORD=EinSicheresTeamPasswort
 NODE_ENV=production
 PORT=3000
+
+# Master-Konto: entweder direkt ein Passwort setzen ...
+MASTER_ACCOUNT_PASSWORD=EinSicheresMasterPasswort
+# ... oder MASTER_ACCOUNT_PASSWORD leer lassen und die E-Mail-Einrichtung nutzen:
+# MASTER_SETUP_EMAIL=master@example.org
+# SMTP_HOST=smtp.example.org
+# SMTP_PORT=587
+# SMTP_SECURE=false
+# SMTP_USER=postfach@example.org
+# SMTP_PASSWORD=DEIN_SMTP_PASSWORT
+# SMTP_FROM=Heimatschutz Aargau <postfach@example.org>
+
+# Optionales Startpasswort fuer die Seed-Teamkonten (sonst gesperrt):
+# DEFAULT_LOGIN_PASSWORD=EinSicheresTeamPasswort
 ```
+
+Hinweis: Es sind keine Standardpasswoerter im Code hinterlegt. In Produktion
+(`NODE_ENV=production`) bricht der Start ab, wenn weder `MASTER_ACCOUNT_PASSWORD`
+gesetzt noch die E-Mail-Einrichtung (`MASTER_SETUP_EMAIL` + `SMTP_HOST`)
+konfiguriert ist.
+
+### Master-Konto per E-Mail einrichten (Setup-Schluessel)
+
+1. `MASTER_ACCOUNT_PASSWORD` leer lassen, dafuer `MASTER_SETUP_EMAIL` und die
+   `SMTP_*`-Variablen setzen.
+2. Beim ersten Start erzeugt die App einen Einmal-Schluessel und sendet ihn an
+   `MASTER_SETUP_EMAIL` (ohne SMTP: einmalige Ausgabe im Server-Log).
+3. Im Login-Bildschirm "Master-Konto einrichten" oeffnen, Schluessel und neues
+   Passwort eingeben. Der Schluessel ist 48 Stunden gueltig und nur einmal nutzbar.
+4. Danach normal mit Benutzer `master` und dem neuen Passwort anmelden.
 
 Optional fuer einen echten automatischen Quellimport:
 
@@ -151,7 +188,7 @@ Fuer den internen Pilot ist Railway mit Volume die vorgesehene Betriebsumgebung.
 Pflicht:
 - Volume an `/data`
 - `DATABASE_PATH=/data/heimatschutz.sqlite`
-- sichere Werte fuer `MASTER_ACCOUNT_PASSWORD` und `DEFAULT_LOGIN_PASSWORD`
+- Master-Konto eingerichtet: entweder ein sicherer Wert fuer `MASTER_ACCOUNT_PASSWORD` oder die E-Mail-Einrichtung (`MASTER_SETUP_EMAIL` + `SMTP_*`)
 
 Details:
 - [docs/deployment-railway.md](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/deployment-railway.md)

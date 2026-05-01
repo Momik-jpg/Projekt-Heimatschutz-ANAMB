@@ -31,7 +31,22 @@ function createTestServer(options = {}) {
     autoSyncIntervalMs: options.autoSyncIntervalMs,
     autoSyncRunOnStart: options.autoSyncRunOnStart,
     loginRateLimit: options.loginRateLimit,
-    compression: options.compression
+    compression: options.compression,
+    // Seed-Passwörter stehen nicht mehr im Repository, daher liefert der Test-Harness
+    // sie über Optionen. Einzelne Tests können sie überschreiben (z. B. weglassen,
+    // um den Master-Setup-Key-Flow zu testen). Eine gesetzte Umgebungsvariable hat
+    // Vorrang vor dem Default (für den Server-Restart-Test).
+    masterAccountPassword:
+      "masterAccountPassword" in options
+        ? options.masterAccountPassword
+        : process.env.MASTER_ACCOUNT_PASSWORD ?? "HouseisGood1999?",
+    defaultLoginPassword:
+      "defaultLoginPassword" in options
+        ? options.defaultLoginPassword
+        : process.env.DEFAULT_LOGIN_PASSWORD ?? "Heimat2026!",
+    masterSetupEmail: options.masterSetupEmail,
+    mailService: options.mailService,
+    onMasterSetupKey: options.onMasterSetupKey
   });
 
   if (!options.keepSeededMunicipalitySourcesEnabled) {
@@ -5014,7 +5029,7 @@ test("repeated failed logins are rate-limited per client", async (context) => {
   assert.equal(blocked.status, 429);
   assert.ok(Number(blocked.headers.get("retry-after")) > 0);
 
-  // Auch eine korrekte Anmeldung bleibt während der Sperre blockiert.
+  // Auch eine korrekte Anmeldung bleibt waehrend der Sperre blockiert.
   const blockedValid = await attempt("Heimat2026!");
   assert.equal(blockedValid.status, 429);
 });
@@ -5037,4 +5052,104 @@ test("rate limiting can be disabled for trusted environments", async (context) =
 
   const cookie = await login(testServer.baseUrl);
   assert.ok(cookie);
+});
+
+test("master account is locked and bootstrapped via an emailed setup key", async (context) => {
+  const setupKeys = [];
+  const testServer = createTestServer({
+    masterAccountPassword: "",
+    masterSetupEmail: "master@example.test",
+    onMasterSetupKey: ({ key, sentTo }) => {
+      setupKeys.push({ key, sentTo });
+    }
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  await testServer.ready;
+
+  // Ein Setup-Key wurde erzeugt und an die konfigurierte Adresse zugestellt.
+  assert.equal(setupKeys.length, 1);
+  assert.equal(setupKeys[0].sentTo, "master@example.test");
+  assert.match(setupKeys[0].key, /^HSA-SETUP-/);
+
+  const statusBefore = await requestJson(testServer.baseUrl, "/api/auth/master-setup-status");
+  assert.equal(statusBefore.payload.setupRequired, true);
+
+  // Vor der Einrichtung ist kein Master-Login moeglich.
+  const lockedLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "master", password: "irgendwas-falsches" })
+  });
+  assert.equal(lockedLogin.status, 401);
+
+  // Ungueltiger Key wird abgewiesen.
+  const wrongKey = await requestJson(testServer.baseUrl, "/api/auth/master-setup", {
+    method: "POST",
+    body: JSON.stringify({ key: "HSA-SETUP-0000-0000-0000-0000", password: "NeuesMaster_2026!" })
+  });
+  assert.equal(wrongKey.status, 400);
+
+  // Zu kurzes Passwort wird abgewiesen.
+  const shortPassword = await requestJson(testServer.baseUrl, "/api/auth/master-setup", {
+    method: "POST",
+    body: JSON.stringify({ key: setupKeys[0].key, password: "kurz" })
+  });
+  assert.equal(shortPassword.status, 400);
+
+  // Gueltiger Key + Passwort schaltet das Master-Konto frei.
+  const setup = await requestJson(testServer.baseUrl, "/api/auth/master-setup", {
+    method: "POST",
+    body: JSON.stringify({ key: setupKeys[0].key, password: "NeuesMaster_2026!" })
+  });
+  assert.equal(setup.status, 200);
+  assert.equal(setup.payload.success, true);
+
+  // Danach funktioniert der Login mit dem neuen Passwort.
+  const masterLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "master", password: "NeuesMaster_2026!" })
+  });
+  assert.equal(masterLogin.status, 200);
+
+  // Der Key ist verbraucht und kann nicht erneut verwendet werden.
+  const reuse = await requestJson(testServer.baseUrl, "/api/auth/master-setup", {
+    method: "POST",
+    body: JSON.stringify({ key: setupKeys[0].key, password: "NochEinMal_2026!" })
+  });
+  assert.equal(reuse.status, 400);
+
+  const statusAfter = await requestJson(testServer.baseUrl, "/api/auth/master-setup-status");
+  assert.equal(statusAfter.payload.setupRequired, false);
+});
+
+test("a configured master password does not trigger the setup key flow", async (context) => {
+  const setupKeys = [];
+  const testServer = createTestServer({
+    masterAccountPassword: "MasterDirekt_2026!",
+    onMasterSetupKey: ({ key }) => {
+      setupKeys.push(key);
+    }
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  await testServer.ready;
+
+  assert.equal(setupKeys.length, 0);
+
+  const status = await requestJson(testServer.baseUrl, "/api/auth/master-setup-status");
+  assert.equal(status.payload.setupRequired, false);
+
+  const masterLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "master", password: "MasterDirekt_2026!" })
+  });
+  assert.equal(masterLogin.status, 200);
 });

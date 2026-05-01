@@ -20,6 +20,10 @@ import {
   municipalitySourceTypes
 } from "./repository/municipalitySourcesRepository.js";
 import { createRegistrationKeysRepository } from "./repository/registrationKeysRepository.js";
+import {
+  createMasterSetupKeysRepository,
+  hashSetupKey
+} from "./repository/masterSetupKeysRepository.js";
 import { createSessionsRepository } from "./repository/sessionsRepository.js";
 import { createSettingsRepository } from "./repository/settingsRepository.js";
 import { createSyncJobsRepository } from "./repository/syncJobsRepository.js";
@@ -29,7 +33,7 @@ import {
   protectionStatuses,
   workflowStatuses
 } from "./repository/applicationsRepository.js";
-import { defaultMasterPassword, defaultSeedPassword } from "./seed/users.js";
+import { createMailService } from "./services/mailService.js";
 
 const gzipAsync = promisify(gzip);
 
@@ -43,8 +47,6 @@ const registrationKeyLifetimeDays = 30;
 const agisBaugesucheDatendocUrl =
   "https://www.ag.ch/geoportal/geodatenshop/Datendokumentation.aspx?Datensatzelement=3018";
 const placeholderPasswordValues = new Set([
-  defaultMasterPassword,
-  defaultSeedPassword,
   "dein_sicheres_master_passwort",
   "dein_sicheres_team_passwort",
   "eigenesmasterpasswort",
@@ -170,17 +172,27 @@ export function validateProductionRuntimeConfiguration(env = process.env) {
 
   const masterPassword = normalizeEnvString(env.MASTER_ACCOUNT_PASSWORD);
   const defaultLoginPassword = normalizeEnvString(env.DEFAULT_LOGIN_PASSWORD);
+  const masterSetupEmail = normalizeEnvString(env.MASTER_SETUP_EMAIL);
+  const smtpHost = normalizeEnvString(env.SMTP_HOST);
+  const emailSetupConfigured = Boolean(masterSetupEmail && smtpHost);
   const errors = [];
 
   if (!masterPassword) {
-    errors.push("MASTER_ACCOUNT_PASSWORD fehlt.");
+    // Kein Master-Passwort ist nur zulaessig, wenn die E-Mail-Ersteinrichtung
+    // (Setup-Key per SMTP) konfiguriert ist.
+    if (!emailSetupConfigured) {
+      errors.push(
+        "Es ist weder MASTER_ACCOUNT_PASSWORD gesetzt noch die E-Mail-Ersteinrichtung (MASTER_SETUP_EMAIL + SMTP_HOST) konfiguriert."
+      );
+    }
   } else if (isPlaceholderPassword(masterPassword)) {
     errors.push("MASTER_ACCOUNT_PASSWORD verwendet noch einen Platzhalter oder das Standardpasswort.");
   }
 
-  if (!defaultLoginPassword) {
-    errors.push("DEFAULT_LOGIN_PASSWORD fehlt.");
-  } else if (isPlaceholderPassword(defaultLoginPassword)) {
+  // DEFAULT_LOGIN_PASSWORD ist optional: ohne Wert bleiben die Seed-Teamkonten
+  // gesperrt und neue Mitarbeitende registrieren sich per Schluessel. Wird ein Wert
+  // gesetzt, darf er kein Platzhalter sein.
+  if (defaultLoginPassword && isPlaceholderPassword(defaultLoginPassword)) {
     errors.push("DEFAULT_LOGIN_PASSWORD verwendet noch einen Platzhalter oder das Standardpasswort.");
   }
 
@@ -194,6 +206,18 @@ export function validateProductionRuntimeConfiguration(env = process.env) {
 function generateRegistrationKey() {
   const raw = randomBytes(6).toString("hex").toUpperCase();
   return `HSA-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+}
+
+const masterSetupKeyLifetimeHours = 48;
+
+// Hochentropischer Einmal-Key fuer die Master-Ersteinrichtung.
+function generateMasterSetupKey() {
+  const raw = randomBytes(12).toString("hex").toUpperCase();
+  return `HSA-SETUP-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
+}
+
+function buildMasterSetupExpiry(issuedAt = new Date()) {
+  return new Date(issuedAt.getTime() + masterSetupKeyLifetimeHours * 60 * 60 * 1000).toISOString();
 }
 
 function normalizeRegistrationKey(value) {
@@ -246,7 +270,7 @@ function setCommonSecurityHeaders(_request, response, next) {
   response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  // HSTS: Browser ignorieren den Header über HTTP, daher ist das unbedenklich und
+  // HSTS: Browser ignorieren den Header ueber HTTP, daher ist das unbedenklich und
   // erzwingt HTTPS, sobald die App hinter TLS (z. B. Railway) ausgeliefert wird.
   response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   response.setHeader("X-Content-Type-Options", "nosniff");
@@ -302,10 +326,10 @@ function appendVaryHeader(response, field) {
   response.setHeader("Vary", `${existing}, ${field}`);
 }
 
-// Schlanke gzip-Kompression ohne externe Abhängigkeit. Puffert den Antwort-Body
+// Schlanke gzip-Kompression ohne externe Abhaengigkeit. Puffert den Antwort-Body
 // und komprimiert ihn asynchron (blockiert die Event-Loop nicht), sofern der
 // Client gzip akzeptiert, der Inhaltstyp komprimierbar ist und die Antwort den
-// Schwellwert überschreitet.
+// Schwellwert ueberschreitet.
 function createCompressionMiddleware({ threshold = 1024 } = {}) {
   return function compressionMiddleware(request, response, next) {
     const acceptEncoding = String(request.headers["accept-encoding"] ?? "");
@@ -355,7 +379,7 @@ function createCompressionMiddleware({ threshold = 1024 } = {}) {
 
       collect(chunk, encoding);
 
-      // Originale Methoden wiederherstellen, damit das eigentliche Senden normal läuft.
+      // Originale Methoden wiederherstellen, damit das eigentliche Senden normal laeuft.
       response.write = originalWrite;
       response.end = originalEnd;
 
@@ -390,8 +414,8 @@ function createCompressionMiddleware({ threshold = 1024 } = {}) {
   };
 }
 
-// In-Memory-Bremse gegen Passwort-Raten. Sperrt einen Schlüssel (i. d. R. Client-IP)
-// nach zu vielen Fehlversuchen innerhalb des Zeitfensters für die Sperrdauer.
+// In-Memory-Bremse gegen Passwort-Raten. Sperrt einen Schluessel (i. d. R. Client-IP)
+// nach zu vielen Fehlversuchen innerhalb des Zeitfensters fuer die Sperrdauer.
 function createLoginRateLimiter({
   maxAttempts = 10,
   windowMs = 15 * 60 * 1000,
@@ -786,25 +810,130 @@ function buildImportNotificationEntries(changes, sourceLabel) {
 }
 
 export function createApp(options = {}) {
+  const logger = options.logger ?? console;
   const normalizedSyncSourceUrl = normalizeSyncSourceUrl(
     options.syncSourceUrl ?? process.env.SYNC_SOURCE_URL ?? "",
-    options.logger ?? console
+    logger
   );
   const normalizedSyncSourceToken = normalizeEnvString(
     options.syncSourceToken ?? process.env.SYNC_SOURCE_TOKEN ?? ""
   );
+  const masterAccountPassword = normalizeEnvString(
+    options.masterAccountPassword ?? process.env.MASTER_ACCOUNT_PASSWORD ?? ""
+  );
+  const defaultLoginPassword = normalizeEnvString(
+    options.defaultLoginPassword ?? process.env.DEFAULT_LOGIN_PASSWORD ?? ""
+  );
+  const masterSetupEmail = normalizeEnvString(
+    options.masterSetupEmail ?? process.env.MASTER_SETUP_EMAIL ?? ""
+  );
   const db = createDatabase(options.dbPath ?? getDefaultDbPath(), {
-    seedDemoApplications: options.seedDemoApplications
+    seedDemoApplications: options.seedDemoApplications,
+    masterAccountPassword,
+    defaultLoginPassword
   });
   const repository = createApplicationsRepository(db);
   const commentsRepository = createCommentsRepository(db);
   const importNotificationsRepository = createImportNotificationsRepository(db);
   const municipalitySourcesRepository = createMunicipalitySourcesRepository(db);
   const registrationKeysRepository = createRegistrationKeysRepository(db);
+  const masterSetupKeysRepository = createMasterSetupKeysRepository(db);
   const sessionsRepository = createSessionsRepository(db);
   const settingsRepository = createSettingsRepository(db);
   const syncJobsRepository = createSyncJobsRepository(db);
   const usersRepository = createUsersRepository(db);
+  const mailService = options.mailService ?? createMailService({ logger });
+  const masterPasswordConfiguredSettingKey = "master_password_configured";
+
+  function getMasterUserId() {
+    const row = db
+      .prepare("SELECT id FROM users WHERE username = 'master' AND role = 'Master' AND active = 1 LIMIT 1")
+      .get();
+
+    return row?.id ?? null;
+  }
+
+  async function deliverMasterSetupKey({ key, sentTo, expiresAt }) {
+    // Test-/Integrationshook: erlaubt das direkte Abfangen des Klartext-Keys.
+    if (typeof options.onMasterSetupKey === "function") {
+      await options.onMasterSetupKey({ key, sentTo, expiresAt });
+      return;
+    }
+
+    const subject = "Heimatschutz Aargau – Master-Konto einrichten";
+    const text = [
+      "Hallo,",
+      "",
+      "fuer das Master-Konto der Heimatschutz-Aargau-Anwendung wurde eine Ersteinrichtung angefordert.",
+      'Bitte oeffnen Sie die Anwendung, waehlen Sie "Master-Konto einrichten" und geben Sie den folgenden',
+      "Einmal-Schluessel zusammen mit Ihrem neuen Passwort ein:",
+      "",
+      `    ${key}`,
+      "",
+      `Der Schluessel ist gueltig bis ${expiresAt}.`,
+      "Falls Sie diese Einrichtung nicht angefordert haben, koennen Sie diese E-Mail ignorieren.",
+      "",
+      "Heimatschutz Aargau"
+    ].join("\n");
+
+    if (sentTo && mailService.isConfigured?.()) {
+      await mailService.sendMail({ to: sentTo, subject, text });
+      logger.log?.(`Master-Setup-Key per E-Mail an ${sentTo} gesendet.`);
+      return;
+    }
+
+    // Fallback ohne SMTP/Empfaenger: Key einmalig ins Server-Log schreiben, damit
+    // die Ersteinrichtung nicht blockiert. In Produktion sollte SMTP gesetzt sein.
+    logger.warn?.(
+      `SMTP oder MASTER_SETUP_EMAIL ist nicht konfiguriert. Einmaliger Master-Setup-Key ` +
+        `(nur jetzt sichtbar): ${key} – gueltig bis ${expiresAt}.`
+    );
+  }
+
+  async function ensureMasterAccountReady() {
+    if (masterAccountPassword) {
+      // Passwort stammt aus Umgebung/Option – das Konto ist eingerichtet.
+      settingsRepository.setValue(masterPasswordConfiguredSettingKey, "1");
+      return;
+    }
+
+    if (settingsRepository.getValue(masterPasswordConfiguredSettingKey) === "1") {
+      return;
+    }
+
+    const masterUserId = getMasterUserId();
+
+    if (!masterUserId) {
+      return;
+    }
+
+    const now = nowIso();
+
+    if (masterSetupKeysRepository.hasActiveForUser(masterUserId, now)) {
+      return;
+    }
+
+    masterSetupKeysRepository.deletePendingForUser(masterUserId);
+
+    const key = generateMasterSetupKey();
+    const expiresAt = buildMasterSetupExpiry(new Date(now));
+
+    masterSetupKeysRepository.create({
+      id: `MSK-${randomBytes(8).toString("hex")}`,
+      userId: masterUserId,
+      keyHash: hashSetupKey(key),
+      sentTo: masterSetupEmail,
+      createdAt: now,
+      expiresAt
+    });
+
+    await deliverMasterSetupKey({ key, sentTo: masterSetupEmail, expiresAt });
+  }
+
+  const masterSetupReadyPromise = ensureMasterAccountReady().catch((error) => {
+    logger.warn?.(`Master-Setup konnte nicht abgeschlossen werden: ${error.message}`);
+    return null;
+  });
   const loginRateLimiter =
     options.loginRateLimit === false
       ? null
@@ -1040,6 +1169,98 @@ export function createApp(options = {}) {
 
     response.setHeader("Set-Cookie", buildExpiredSessionCookie(request));
     response.json({ authenticated: false });
+  });
+
+  // Ersteinrichtung des Master-Kontos ueber den per E-Mail zugestellten Setup-Key.
+  // Erst danach hat das Master-Konto ein gueltiges Passwort.
+  app.get("/api/auth/master-setup-status", (_request, response) => {
+    const masterUserId = getMasterUserId();
+    const setupRequired =
+      !masterAccountPassword &&
+      settingsRepository.getValue(masterPasswordConfiguredSettingKey) !== "1" &&
+      Boolean(masterUserId) &&
+      masterSetupKeysRepository.hasActiveForUser(masterUserId, nowIso());
+
+    response.json({ setupRequired });
+  });
+
+  app.post("/api/auth/master-setup", async (request, response) => {
+    const rateLimitKey = request.ip || "unknown";
+
+    if (loginRateLimiter) {
+      const limitStatus = loginRateLimiter.check(rateLimitKey);
+
+      if (limitStatus.limited) {
+        response.setHeader("Retry-After", String(limitStatus.retryAfterSeconds));
+        response
+          .status(429)
+          .json({ error: "Zu viele Versuche. Bitte in einigen Minuten erneut versuchen." });
+        return;
+      }
+    }
+
+    const key = String(request.body?.key ?? "").trim();
+    const passwordValidation = validatePasswordResetPayload(request.body ?? {});
+
+    if (!key) {
+      response.status(400).json({ error: "Bitte den Setup-Schluessel eingeben." });
+      return;
+    }
+
+    if (passwordValidation.error) {
+      response.status(400).json({ error: passwordValidation.error });
+      return;
+    }
+
+    if (isPlaceholderPassword(passwordValidation.value.password)) {
+      response.status(400).json({ error: "Bitte ein eigenes, sicheres Passwort waehlen." });
+      return;
+    }
+
+    const now = nowIso();
+    const setupKey = masterSetupKeysRepository.getActiveByKey(key, now);
+
+    if (!setupKey) {
+      loginRateLimiter?.recordFailure(rateLimitKey);
+      response.status(400).json({ error: "Der Setup-Schluessel ist ungueltig oder abgelaufen." });
+      return;
+    }
+
+    // Passwort-Hash vor der Transaktion berechnen (Event-Loop nicht in der
+    // Transaktion blockieren).
+    const passwordRecord = await createUserPasswordRecordAsync(passwordValidation.value.password);
+
+    db.exec("BEGIN");
+
+    try {
+      const consumed = masterSetupKeysRepository.markUsed({ id: setupKey.id, usedAt: now, now });
+
+      if (!consumed) {
+        throw new Error("master-setup-key-not-available");
+      }
+
+      const updated = usersRepository.applyPasswordRecord(setupKey.userId, passwordRecord, now);
+
+      if (!updated) {
+        throw new Error("master-user-not-found");
+      }
+
+      settingsRepository.setValue(masterPasswordConfiguredSettingKey, "1", now);
+      masterSetupKeysRepository.deletePendingForUser(setupKey.userId);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+
+      if (error.message === "master-setup-key-not-available") {
+        response.status(400).json({ error: "Der Setup-Schluessel ist ungueltig oder abgelaufen." });
+        return;
+      }
+
+      throw error;
+    }
+
+    loginRateLimiter?.recordSuccess(rateLimitKey);
+    response.json({ success: true, message: "Master-Passwort wurde gesetzt. Sie koennen sich jetzt anmelden." });
   });
 
   app.use("/api", (request, response, next) => {
@@ -1555,7 +1776,7 @@ export function createApp(options = {}) {
   return {
     app,
     db,
-    ready: initialAgisRefreshPromise,
+    ready: Promise.all([initialAgisRefreshPromise, masterSetupReadyPromise]),
     stopBackgroundJobs() {
       weeklySyncService.stop();
     }

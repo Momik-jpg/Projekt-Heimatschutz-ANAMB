@@ -522,6 +522,16 @@ h4 {
   border: 1px solid rgba(178, 58, 54, 0.22);
 }
 
+.auth-success {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: rgba(46, 125, 50, 0.12);
+  color: #1f6b2e;
+  font-weight: 600;
+  border: 1px solid rgba(46, 125, 50, 0.24);
+}
+
 /* =====================================================================
    Formularelemente
    ===================================================================== */

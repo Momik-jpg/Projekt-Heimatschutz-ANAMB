@@ -30,7 +30,7 @@ async function verifyPasswordAsync(password, salt, expectedHash) {
   const actualBuffer = Buffer.from(actualHash, "hex");
   const expectedBuffer = Buffer.from(expectedHash, "hex");
 
-  // timingSafeEqual wirft bei unterschiedlicher Länge – defensiv vorher prüfen.
+  // timingSafeEqual wirft bei unterschiedlicher Laenge – defensiv vorher pruefen.
   if (actualBuffer.length !== expectedBuffer.length) {
     return false;
   }
@@ -48,7 +48,7 @@ export function createUserPasswordRecord(password) {
 }
 
 // Berechnet Salt + Hash ohne die Event-Loop zu blockieren. Wird im Request-Pfad
-// VOR dem Öffnen einer DB-Transaktion aufgerufen, damit der eigentliche Insert
+// VOR dem oeffnen einer DB-Transaktion aufgerufen, damit der eigentliche Insert
 // synchron (ohne await) innerhalb der Transaktion ablaufen kann.
 export async function createUserPasswordRecordAsync(password) {
   const salt = randomBytes(16).toString("hex");
@@ -113,7 +113,7 @@ export function createUsersRepository(db) {
       return Boolean(row);
     },
 
-    // Synchroner Insert. Der Aufrufer übergibt einen vorberechneten passwordRecord
+    // Synchroner Insert. Der Aufrufer uebergibt einen vorberechneten passwordRecord
     // (siehe createUserPasswordRecordAsync), damit dieser Aufruf gefahrlos innerhalb
     // einer offenen DB-Transaktion ohne await verwendet werden kann.
     create({ id, username, displayName, role, passwordRecord, createdAt }) {
@@ -208,6 +208,21 @@ export function createUsersRepository(db) {
       `).run(passwordRecord.salt, passwordRecord.hash, updatedAt, id);
 
       return this.getPublicUserById(id);
+    },
+
+    // Synchrones Setzen eines vorberechneten Passwort-Records (siehe
+    // createUserPasswordRecordAsync). Gefahrlos innerhalb einer offenen
+    // DB-Transaktion verwendbar. Gibt true zurueck, wenn ein Konto aktualisiert wurde.
+    applyPasswordRecord(id, passwordRecord, updatedAt = new Date().toISOString()) {
+      const result = db.prepare(`
+        UPDATE users
+        SET password_salt = ?,
+            password_hash = ?,
+            updated_at = ?
+        WHERE id = ? AND active = 1
+      `).run(passwordRecord.salt, passwordRecord.hash, updatedAt, id);
+
+      return result.changes > 0;
     }
   };
 }

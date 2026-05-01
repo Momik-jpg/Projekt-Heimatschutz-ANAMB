@@ -10,8 +10,9 @@ import {
   aargauPublicationSources,
   isAutoManagedMunicipalitySourceNote
 } from "./seed/municipalitySources.js";
+import { randomBytes } from "node:crypto";
 import { seedApplications } from "./seed/applications.js";
-import { defaultSeedPassword, defaultMasterPassword, seedUsers } from "./seed/users.js";
+import { seedUsers } from "./seed/users.js";
 import { createUserPasswordRecord } from "./repository/usersRepository.js";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -107,6 +108,17 @@ const schema = `
     revoked_at TEXT DEFAULT NULL,
     FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (used_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS master_setup_keys (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
+    sent_to TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT DEFAULT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS sync_jobs (
@@ -285,7 +297,14 @@ function insertSeedRecords(db, items, syncedAt) {
   }
 }
 
-function insertSeedUsers(db, items, createdAt) {
+// Sperrt ein Konto mit einem unbrauchbaren Zufallspasswort. Wird verwendet, wenn
+// fuer ein Konto kein Passwort konfiguriert ist (z. B. das Master-Konto vor der
+// Ersteinrichtung per Setup-Key).
+function lockedPasswordRecord() {
+  return createUserPasswordRecord(randomBytes(32).toString("hex"));
+}
+
+function insertSeedUsers(db, items, createdAt, { masterAccountPassword = "", defaultLoginPassword = "" } = {}) {
   const statement = db.prepare(`
     INSERT OR IGNORE INTO users (
       id,
@@ -303,11 +322,13 @@ function insertSeedUsers(db, items, createdAt) {
   for (const item of items) {
     const configuredPassword =
       seededPasswordMap[item.username] ??
-      item.password ??
-      (item.role === "Master" ? process.env.MASTER_ACCOUNT_PASSWORD ?? defaultMasterPassword : undefined) ??
-      process.env.DEFAULT_LOGIN_PASSWORD ??
-      defaultSeedPassword;
-    const passwordRecord = createUserPasswordRecord(configuredPassword);
+      (item.role === "Master" ? masterAccountPassword : defaultLoginPassword) ??
+      "";
+    // Ohne konfiguriertes Passwort wird das Konto gesperrt (kein Klartext-Default
+    // im Repository). Das Master-Konto wird dann per Setup-Key freigeschaltet.
+    const passwordRecord = configuredPassword
+      ? createUserPasswordRecord(configuredPassword)
+      : lockedPasswordRecord();
 
     statement.run(
       item.id,
@@ -592,8 +613,8 @@ function backfillSeedMunicipalitySources(db, items, updatedAt) {
   }
 }
 
-function syncConfiguredMasterPassword(db) {
-  const configuredPassword = String(process.env.MASTER_ACCOUNT_PASSWORD ?? "").trim();
+function syncConfiguredMasterPassword(db, masterAccountPassword) {
+  const configuredPassword = String(masterAccountPassword ?? process.env.MASTER_ACCOUNT_PASSWORD ?? "").trim();
 
   if (!configuredPassword) {
     return;
@@ -626,6 +647,8 @@ function syncConfiguredMasterPassword(db) {
 
 export function createDatabase(dbPath = defaultDbPath, options = {}) {
   const seedDemoApplications = options.seedDemoApplications ?? defaultSeedDemoApplications;
+  const masterAccountPassword = String(options.masterAccountPassword ?? process.env.MASTER_ACCOUNT_PASSWORD ?? "").trim();
+  const defaultLoginPassword = String(options.defaultLoginPassword ?? process.env.DEFAULT_LOGIN_PASSWORD ?? "").trim();
   mkdirSync(dirname(dbPath), { recursive: true });
 
   const db = new DatabaseSync(dbPath);
@@ -755,7 +778,10 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
   db.exec("BEGIN");
 
   try {
-    insertSeedUsers(db, seedUsers, "2026-03-20T07:00:00.000Z");
+    insertSeedUsers(db, seedUsers, "2026-03-20T07:00:00.000Z", {
+      masterAccountPassword,
+      defaultLoginPassword
+    });
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
@@ -778,7 +804,7 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
     throw error;
   }
 
-  syncConfiguredMasterPassword(db);
+  syncConfiguredMasterPassword(db, masterAccountPassword);
 
   return db;
 }

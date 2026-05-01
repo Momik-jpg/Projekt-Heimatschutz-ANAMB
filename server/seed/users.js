@@ -1,13 +1,14 @@
-export const defaultSeedPassword = "Heimat2026!";
-export const defaultMasterPassword = "HouseisGood1999?";
-
+// Bewusst KEINE Passwoerter im Repository. Master- und Team-Passwoerter werden
+// ausschliesslich ueber Umgebungsvariablen (MASTER_ACCOUNT_PASSWORD /
+// DEFAULT_LOGIN_PASSWORD) oder – falls keines gesetzt ist – ueber den per E-Mail
+// zugestellten Master-Setup-Key vergeben. Konten ohne konfiguriertes Passwort
+// werden mit einem unbrauchbaren Zufallswert gesperrt seedet.
 export const seedUsers = [
   {
     id: "USR-MASTER",
     username: "master",
     displayName: "Master Account",
-    role: "Master",
-    password: defaultMasterPassword
+    role: "Master"
   },
   {
     id: "USR-001",

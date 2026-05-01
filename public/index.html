@@ -96,6 +96,28 @@
             <p class="auth-note muted hidden">Den Registrierungsschlüssel erhalten neue Mitarbeitende vom Master-Konto.</p>
             <p id="registerError" class="auth-error hidden" role="alert"></p>
           </form>
+
+          <form id="masterSetupForm" class="auth-form auth-form-secondary hidden">
+            <div class="auth-form-header">
+              <h2>Master-Konto einrichten</h2>
+              <p class="muted">Das Master-Konto wird mit einem Einmal-Schluessel eingerichtet, der per E-Mail zugestellt wurde.</p>
+            </div>
+
+            <label>
+              <span>Setup-Schluessel</span>
+              <input id="masterSetupKey" name="setupKey" type="text" placeholder="Zum Beispiel: HSA-SETUP-1A2B-3C4D-5E6F-7A8B" autocomplete="one-time-code">
+            </label>
+
+            <label>
+              <span>Neues Master-Passwort</span>
+              <input id="masterSetupPassword" name="password" type="password" placeholder="Mindestens 8 Zeichen" autocomplete="new-password">
+            </label>
+
+            <button id="masterSetupButton" class="secondary" type="submit">Master-Passwort setzen</button>
+            <p class="auth-note muted">Den Schluessel erhalten Sie per E-Mail an die hinterlegte Master-Adresse.</p>
+            <p id="masterSetupError" class="auth-error hidden" role="alert"></p>
+            <p id="masterSetupSuccess" class="auth-success hidden" role="status"></p>
+          </form>
         </div>
       </section>
     </section>
