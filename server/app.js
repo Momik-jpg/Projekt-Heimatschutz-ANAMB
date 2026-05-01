@@ -2,6 +2,8 @@ import express from "express";
 import { randomBytes } from "node:crypto";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { gzip } from "node:zlib";
 import { createDatabase, getDefaultDbPath } from "./db.js";
 import { createAgisAssessmentService } from "./services/agisAssessmentService.js";
 import { createAgisGeometryService } from "./services/agisGeometryService.js";
@@ -21,13 +23,15 @@ import { createRegistrationKeysRepository } from "./repository/registrationKeysR
 import { createSessionsRepository } from "./repository/sessionsRepository.js";
 import { createSettingsRepository } from "./repository/settingsRepository.js";
 import { createSyncJobsRepository } from "./repository/syncJobsRepository.js";
-import { createUsersRepository } from "./repository/usersRepository.js";
+import { createUsersRepository, createUserPasswordRecordAsync } from "./repository/usersRepository.js";
 import {
   createApplicationsRepository,
   protectionStatuses,
   workflowStatuses
 } from "./repository/applicationsRepository.js";
 import { defaultMasterPassword, defaultSeedPassword } from "./seed/users.js";
+
+const gzipAsync = promisify(gzip);
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
@@ -239,8 +243,12 @@ function buildExpiredSessionCookie(request) {
 function setCommonSecurityHeaders(_request, response, next) {
   response.setHeader("Content-Security-Policy", contentSecurityPolicy);
   response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  // HSTS: Browser ignorieren den Header über HTTP, daher ist das unbedenklich und
+  // erzwingt HTTPS, sobald die App hinter TLS (z. B. Railway) ausgeliefert wird.
+  response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("X-Frame-Options", "DENY");
   next();
@@ -262,6 +270,180 @@ function setStaticAssetHeaders(response, filePath) {
   if ([".svg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico"].includes(extension)) {
     response.setHeader("Cache-Control", "public, max-age=86400");
   }
+}
+
+const compressibleContentTypePattern =
+  /^(?:text\/|application\/(?:json|javascript|xml|rss\+xml|atom\+xml|geo\+json|manifest\+json)|image\/svg\+xml)/i;
+
+function isCompressibleContentType(contentTypeHeader) {
+  if (!contentTypeHeader) {
+    return false;
+  }
+
+  return compressibleContentTypePattern.test(String(contentTypeHeader));
+}
+
+function appendVaryHeader(response, field) {
+  const existing = response.getHeader("Vary");
+
+  if (!existing) {
+    response.setHeader("Vary", field);
+    return;
+  }
+
+  const values = String(existing)
+    .split(",")
+    .map((value) => value.trim().toLowerCase());
+
+  if (values.includes("*") || values.includes(field.toLowerCase())) {
+    return;
+  }
+
+  response.setHeader("Vary", `${existing}, ${field}`);
+}
+
+// Schlanke gzip-Kompression ohne externe Abhängigkeit. Puffert den Antwort-Body
+// und komprimiert ihn asynchron (blockiert die Event-Loop nicht), sofern der
+// Client gzip akzeptiert, der Inhaltstyp komprimierbar ist und die Antwort den
+// Schwellwert überschreitet.
+function createCompressionMiddleware({ threshold = 1024 } = {}) {
+  return function compressionMiddleware(request, response, next) {
+    const acceptEncoding = String(request.headers["accept-encoding"] ?? "");
+
+    if (request.method === "HEAD" || !/\bgzip\b/i.test(acceptEncoding)) {
+      next();
+      return;
+    }
+
+    const originalWrite = response.write.bind(response);
+    const originalEnd = response.end.bind(response);
+    const chunks = [];
+
+    function collect(chunk, encoding) {
+      if (!chunk) {
+        return;
+      }
+
+      chunks.push(
+        Buffer.isBuffer(chunk)
+          ? chunk
+          : Buffer.from(chunk, typeof encoding === "string" ? encoding : "utf8")
+      );
+    }
+
+    response.write = function patchedWrite(chunk, encoding, callback) {
+      collect(chunk, encoding);
+
+      if (typeof encoding === "function") {
+        encoding(null);
+      } else if (typeof callback === "function") {
+        callback(null);
+      }
+
+      return true;
+    };
+
+    response.end = function patchedEnd(chunk, encoding, callback) {
+      if (typeof chunk === "function") {
+        callback = chunk;
+        chunk = undefined;
+        encoding = undefined;
+      } else if (typeof encoding === "function") {
+        callback = encoding;
+        encoding = undefined;
+      }
+
+      collect(chunk, encoding);
+
+      // Originale Methoden wiederherstellen, damit das eigentliche Senden normal läuft.
+      response.write = originalWrite;
+      response.end = originalEnd;
+
+      const body = Buffer.concat(chunks);
+      const shouldCompress =
+        response.statusCode === 200 &&
+        body.length >= threshold &&
+        !response.getHeader("Content-Encoding") &&
+        !response.getHeader("Content-Range") &&
+        isCompressibleContentType(response.getHeader("Content-Type"));
+
+      if (!shouldCompress) {
+        return originalEnd(body, callback);
+      }
+
+      gzipAsync(body)
+        .then((compressed) => {
+          response.setHeader("Content-Encoding", "gzip");
+          response.removeHeader("Content-Length");
+          response.setHeader("Content-Length", compressed.length);
+          appendVaryHeader(response, "Accept-Encoding");
+          originalEnd(compressed, callback);
+        })
+        .catch(() => {
+          originalEnd(body, callback);
+        });
+
+      return response;
+    };
+
+    next();
+  };
+}
+
+// In-Memory-Bremse gegen Passwort-Raten. Sperrt einen Schlüssel (i. d. R. Client-IP)
+// nach zu vielen Fehlversuchen innerhalb des Zeitfensters für die Sperrdauer.
+function createLoginRateLimiter({
+  maxAttempts = 10,
+  windowMs = 15 * 60 * 1000,
+  lockoutMs = 15 * 60 * 1000
+} = {}) {
+  const entries = new Map();
+
+  function prune(now) {
+    for (const [key, entry] of entries) {
+      const expiry = Math.max(entry.lockedUntil ?? 0, entry.firstAttempt + windowMs);
+
+      if (expiry <= now) {
+        entries.delete(key);
+      }
+    }
+  }
+
+  return {
+    check(key) {
+      const now = Date.now();
+      const entry = entries.get(key);
+
+      if (entry?.lockedUntil && entry.lockedUntil > now) {
+        return { limited: true, retryAfterSeconds: Math.ceil((entry.lockedUntil - now) / 1000) };
+      }
+
+      return { limited: false };
+    },
+
+    recordFailure(key) {
+      const now = Date.now();
+      prune(now);
+
+      let entry = entries.get(key);
+
+      if (!entry || now - entry.firstAttempt > windowMs) {
+        entry = { firstAttempt: now, count: 0, lockedUntil: 0 };
+      }
+
+      entry.count += 1;
+
+      if (entry.count >= maxAttempts) {
+        entry.lockedUntil = now + lockoutMs;
+      }
+
+      entries.set(key, entry);
+    },
+
+    recordSuccess(key) {
+      entries.delete(key);
+    }
+  };
 }
 
 function validateLoginPayload(payload) {
@@ -623,6 +805,14 @@ export function createApp(options = {}) {
   const settingsRepository = createSettingsRepository(db);
   const syncJobsRepository = createSyncJobsRepository(db);
   const usersRepository = createUsersRepository(db);
+  const loginRateLimiter =
+    options.loginRateLimit === false
+      ? null
+      : createLoginRateLimiter(
+          typeof options.loginRateLimit === "object" && options.loginRateLimit !== null
+            ? options.loginRateLimit
+            : {}
+        );
   const agisGeometryService = createAgisGeometryService({
     fetchImpl: options.agisFetchImpl
   });
@@ -684,6 +874,9 @@ export function createApp(options = {}) {
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
   app.use(setCommonSecurityHeaders);
+  if (options.compression !== false) {
+    app.use(createCompressionMiddleware(typeof options.compression === "object" ? options.compression : {}));
+  }
   app.use(express.json({ limit: "2mb" }));
   app.use("/api", (_request, response, next) => {
     response.setHeader("Cache-Control", "no-store");
@@ -713,7 +906,21 @@ export function createApp(options = {}) {
     });
   });
 
-  app.post("/api/auth/login", (request, response) => {
+  app.post("/api/auth/login", async (request, response) => {
+    const rateLimitKey = request.ip || "unknown";
+
+    if (loginRateLimiter) {
+      const limitStatus = loginRateLimiter.check(rateLimitKey);
+
+      if (limitStatus.limited) {
+        response.setHeader("Retry-After", String(limitStatus.retryAfterSeconds));
+        response
+          .status(429)
+          .json({ error: "Zu viele Anmeldeversuche. Bitte in einigen Minuten erneut versuchen." });
+        return;
+      }
+    }
+
     const validation = validateLoginPayload(request.body ?? {});
 
     if (validation.error) {
@@ -721,12 +928,15 @@ export function createApp(options = {}) {
       return;
     }
 
-    const user = usersRepository.authenticate(validation.value);
+    const user = await usersRepository.authenticate(validation.value);
 
     if (!user) {
+      loginRateLimiter?.recordFailure(rateLimitKey);
       response.status(401).json({ error: "Benutzer oder Passwort stimmen nicht." });
       return;
     }
+
+    loginRateLimiter?.recordSuccess(rateLimitKey);
 
     const sessionId = randomBytes(24).toString("hex");
     const createdAt = nowIso();
@@ -744,7 +954,7 @@ export function createApp(options = {}) {
     });
   });
 
-  app.post("/api/auth/register", (request, response) => {
+  app.post("/api/auth/register", async (request, response) => {
     const validation = validateRegistrationPayload(request.body ?? {});
 
     if (validation.error) {
@@ -765,6 +975,10 @@ export function createApp(options = {}) {
       return;
     }
 
+    // Passwort-Hash vor der Transaktion berechnen, damit die DB-Transaktion
+    // selbst synchron (ohne await) bleibt.
+    const passwordRecord = await createUserPasswordRecordAsync(validation.value.password);
+
     let user = null;
 
     db.exec("BEGIN");
@@ -774,7 +988,7 @@ export function createApp(options = {}) {
         id: `USR-${randomBytes(6).toString("hex")}`,
         displayName: validation.value.displayName,
         username: validation.value.username,
-        password: validation.value.password,
+        passwordRecord,
         role: validation.value.role,
         createdAt: currentTimestamp
       });
@@ -922,7 +1136,7 @@ export function createApp(options = {}) {
     });
   });
 
-  app.patch("/api/admin/users/:id/password", (request, response) => {
+  app.patch("/api/admin/users/:id/password", async (request, response) => {
     if (!isMasterUser(request.currentUser)) {
       response.status(403).json({ error: "Nur das Master-Konto darf Passwörter zurücksetzen." });
       return;
@@ -935,7 +1149,7 @@ export function createApp(options = {}) {
       return;
     }
 
-    const updatedUser = usersRepository.resetPassword(request.params.id, validation.value.password);
+    const updatedUser = await usersRepository.resetPassword(request.params.id, validation.value.password);
 
     if (!updatedUser) {
       response.status(404).json({ error: "Benutzer nicht gefunden." });

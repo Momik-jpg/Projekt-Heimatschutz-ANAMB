@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { request as httpRequest } from "node:http";
+import { gunzipSync } from "node:zlib";
 import {
   createApp,
   normalizeSyncSourceUrl,
@@ -27,7 +29,9 @@ function createTestServer(options = {}) {
     syncSourceUrl: options.syncSourceUrl,
     autoSyncEnabled: options.autoSyncEnabled ?? false,
     autoSyncIntervalMs: options.autoSyncIntervalMs,
-    autoSyncRunOnStart: options.autoSyncRunOnStart
+    autoSyncRunOnStart: options.autoSyncRunOnStart,
+    loginRateLimit: options.loginRateLimit,
+    compression: options.compression
   });
 
   if (!options.keepSeededMunicipalitySourcesEnabled) {
@@ -131,6 +135,37 @@ async function requestText(baseUrl, path, options = {}) {
     body,
     headers: response.headers
   };
+}
+
+// Roher HTTP-Client, der – anders als fetch – die Antwort nicht automatisch
+// dekomprimiert. Nötig, um Content-Encoding und den gzip-Body direkt zu prüfen.
+function rawRequest(baseUrl, path, { method = "GET", headers = {} } = {}) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(`${baseUrl}${path}`);
+    const requestObject = httpRequest(
+      {
+        hostname: url.hostname,
+        port: url.port,
+        path: `${url.pathname}${url.search}`,
+        method,
+        headers
+      },
+      (response) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => {
+          resolve({
+            status: response.statusCode,
+            headers: response.headers,
+            body: Buffer.concat(chunks)
+          });
+        });
+      }
+    );
+
+    requestObject.on("error", reject);
+    requestObject.end();
+  });
 }
 
 async function login(baseUrl, credentials = {}) {
@@ -4897,4 +4932,109 @@ test("agis endpoint falls back to official perimeter layers with alternate field
   assert.equal(response.payload.areaFeatures[0].properties.title, "Rupperswil, Fabrikanlage");
   assert.equal(response.payload.areaFeatures[0].properties.category, "Spezialfall");
   assert.equal(response.payload.areaFeatures[0].properties.inventorySheet, "https://example.test/isos.pdf");
+});
+
+test("responses carry hardened security headers including HSTS", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const response = await requestText(testServer.baseUrl, "/api/health");
+
+  assert.equal(response.headers.get("strict-transport-security"), "max-age=31536000; includeSubDomains");
+  assert.equal(response.headers.get("cross-origin-resource-policy"), "same-origin");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("x-frame-options"), "DENY");
+  assert.equal(response.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+});
+
+test("large responses are gzip-compressed when the client accepts it", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const compressed = await rawRequest(testServer.baseUrl, "/", {
+    headers: { "Accept-Encoding": "gzip" }
+  });
+
+  assert.equal(compressed.status, 200);
+  assert.equal(compressed.headers["content-encoding"], "gzip");
+  assert.match(String(compressed.headers.vary ?? ""), /accept-encoding/i);
+
+  const decoded = gunzipSync(compressed.body).toString("utf8");
+  assert.match(decoded, /<html/i);
+});
+
+test("responses are not compressed when the client does not accept gzip", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const response = await rawRequest(testServer.baseUrl, "/", {
+    headers: { "Accept-Encoding": "identity" }
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers["content-encoding"], undefined);
+  assert.match(response.body.toString("utf8"), /<html/i);
+});
+
+test("repeated failed logins are rate-limited per client", async (context) => {
+  const testServer = createTestServer({
+    loginRateLimit: { maxAttempts: 3, windowMs: 60_000, lockoutMs: 60_000 }
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  async function attempt(password) {
+    return requestJson(testServer.baseUrl, "/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username: "lucia.vettori", password })
+    });
+  }
+
+  for (let index = 0; index < 3; index += 1) {
+    const failed = await attempt("falsches-passwort");
+    assert.equal(failed.status, 401);
+  }
+
+  const blocked = await attempt("falsches-passwort");
+  assert.equal(blocked.status, 429);
+  assert.ok(Number(blocked.headers.get("retry-after")) > 0);
+
+  // Auch eine korrekte Anmeldung bleibt während der Sperre blockiert.
+  const blockedValid = await attempt("Heimat2026!");
+  assert.equal(blockedValid.status, 429);
+});
+
+test("rate limiting can be disabled for trusted environments", async (context) => {
+  const testServer = createTestServer({ loginRateLimit: false });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  for (let index = 0; index < 6; index += 1) {
+    const failed = await requestJson(testServer.baseUrl, "/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username: "lucia.vettori", password: "falsch" })
+    });
+    assert.equal(failed.status, 401);
+  }
+
+  const cookie = await login(testServer.baseUrl);
+  assert.ok(cookie);
 });

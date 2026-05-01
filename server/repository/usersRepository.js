@@ -1,4 +1,7 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scrypt, scryptSync, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
+
+const scryptAsync = promisify(scrypt);
 
 function mapUser(row) {
   if (!row) {
@@ -17,16 +20,41 @@ function hashPassword(password, salt) {
   return scryptSync(password, salt, 64).toString("hex");
 }
 
-function verifyPassword(password, salt, expectedHash) {
-  const actualHash = hashPassword(password, salt);
-  return timingSafeEqual(Buffer.from(actualHash, "hex"), Buffer.from(expectedHash, "hex"));
+async function hashPasswordAsync(password, salt) {
+  const derivedKey = await scryptAsync(password, salt, 64);
+  return derivedKey.toString("hex");
 }
 
+async function verifyPasswordAsync(password, salt, expectedHash) {
+  const actualHash = await hashPasswordAsync(password, salt);
+  const actualBuffer = Buffer.from(actualHash, "hex");
+  const expectedBuffer = Buffer.from(expectedHash, "hex");
+
+  // timingSafeEqual wirft bei unterschiedlicher Länge – defensiv vorher prüfen.
+  if (actualBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+// Synchron, wird nur beim einmaligen Seeding/Boot (server/db.js) verwendet.
 export function createUserPasswordRecord(password) {
   const salt = randomBytes(16).toString("hex");
   return {
     salt,
     hash: hashPassword(password, salt)
+  };
+}
+
+// Berechnet Salt + Hash ohne die Event-Loop zu blockieren. Wird im Request-Pfad
+// VOR dem Öffnen einer DB-Transaktion aufgerufen, damit der eigentliche Insert
+// synchron (ohne await) innerhalb der Transaktion ablaufen kann.
+export async function createUserPasswordRecordAsync(password) {
+  const salt = randomBytes(16).toString("hex");
+  return {
+    salt,
+    hash: await hashPasswordAsync(password, salt)
   };
 }
 
@@ -85,9 +113,11 @@ export function createUsersRepository(db) {
       return Boolean(row);
     },
 
-    create({ id, username, displayName, role, password, createdAt }) {
+    // Synchroner Insert. Der Aufrufer übergibt einen vorberechneten passwordRecord
+    // (siehe createUserPasswordRecordAsync), damit dieser Aufruf gefahrlos innerhalb
+    // einer offenen DB-Transaktion ohne await verwendet werden kann.
+    create({ id, username, displayName, role, passwordRecord, createdAt }) {
       const normalizedUsername = String(username).trim().toLowerCase();
-      const passwordRecord = createUserPasswordRecord(password);
 
       db.prepare(`
         INSERT INTO users (
@@ -116,7 +146,7 @@ export function createUsersRepository(db) {
       return this.getPublicUserById(id);
     },
 
-    authenticate({ userId, username, password }) {
+    async authenticate({ userId, username, password }) {
       let row = null;
 
       if (typeof userId === "string" && userId.trim()) {
@@ -155,18 +185,18 @@ export function createUsersRepository(db) {
         return null;
       }
 
-      const passwordMatches = verifyPassword(password, row.password_salt, row.password_hash);
+      const passwordMatches = await verifyPasswordAsync(password, row.password_salt, row.password_hash);
       return passwordMatches ? mapUser(row) : null;
     },
 
-    resetPassword(id, password) {
+    async resetPassword(id, password) {
       const current = this.getPublicUserById(id);
 
       if (!current) {
         return null;
       }
 
-      const passwordRecord = createUserPasswordRecord(password);
+      const passwordRecord = await createUserPasswordRecordAsync(password);
       const updatedAt = new Date().toISOString();
 
       db.prepare(`
