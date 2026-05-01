@@ -374,11 +374,14 @@ h4 {
 
 .auth-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
-  place-items: center;
+  align-items: start;
+  justify-items: center;
   padding: clamp(18px, 4vw, 48px);
   position: relative;
   isolation: isolate;
+  overflow: auto;
 }
 
 .auth-backdrop {
@@ -414,7 +417,15 @@ h4 {
   position: relative;
   z-index: 1;
   overflow: hidden;
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
   animation: card-in 600ms var(--ease) both;
+}
+
+@media (min-height: 980px) {
+  .auth-shell {
+    align-items: center;
+  }
 }
 
 @keyframes card-in {
@@ -1016,13 +1027,14 @@ button.ghost:hover {
 
 .filters-panel {
   display: grid;
-  grid-template-columns: minmax(170px, 0.36fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    "heading controls controls"
-    "quick quick status";
+    "heading heading"
+    "controls controls"
+    "quick status";
   align-items: center;
-  gap: 10px 14px;
-  padding: 14px 16px;
+  gap: 12px 16px;
+  padding: 16px 18px;
   border-radius: var(--r-lg);
   background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(14px) saturate(140%);
@@ -1036,6 +1048,8 @@ button.ghost:hover {
 
 .filters-panel .panel-heading {
   grid-area: heading;
+  justify-content: flex-start;
+  gap: 12px;
 }
 
 .filters-panel .filter-grid {
@@ -1073,14 +1087,12 @@ button.ghost:hover {
 
 .quick-filter-section {
   grid-area: quick;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 10px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--panel-border);
-  background: var(--surface-quiet);
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 .quick-filter-row {
@@ -1179,7 +1191,7 @@ button.ghost:hover {
 .table-shell {
   overflow: auto;
   min-height: 0;
-  padding: 6px 8px 8px;
+  padding: 0 8px 8px;
 }
 
 table {
@@ -1197,38 +1209,56 @@ table {
 
 .list-panel th:nth-child(2),
 .list-panel td:nth-child(2) {
-  width: 50%;
+  width: 39%;
 }
 
 .list-panel th:nth-child(3),
 .list-panel td:nth-child(3) {
-  width: 13%;
+  width: 15%;
 }
 
 .list-panel th:nth-child(4),
 .list-panel td:nth-child(4) {
-  width: 11%;
+  width: 16%;
 }
 
 .list-panel th:nth-child(5),
 .list-panel td:nth-child(5) {
-  width: 11%;
+  width: 15%;
 }
 
 th,
 td {
-  padding: 10px 12px;
+  padding: 10px 10px;
   text-align: left;
   vertical-align: middle;
   overflow: hidden;
+}
+
+/* Datum und Status-Spalte nie abschneiden */
+.list-panel td:nth-child(4),
+.list-panel td:nth-child(5) {
+  overflow: visible;
+}
+
+/* Sticky muss auf <thead> liegen, sonst loest sich der Kopf in
+   Chromium/Edge/Chrome beim Scrollen der Liste und scrollt mit weg. */
+.list-panel thead {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--panel-strong);
 }
 
 th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: linear-gradient(180deg, #ffffff 70%, rgba(255, 255, 255, 0.85));
-  backdrop-filter: blur(6px);
+  /* Deckend, damit beim Scrollen keine Zeile durch den Kopf scheint. Der
+     box-shadow deckt die Zeilenluecke unter dem Kopf und (nach oben) den
+     schmalen Streifen ueber dem fixierten Kopf. */
+  background: var(--panel-strong);
+  box-shadow: 0 6px 0 var(--panel-strong), 0 -10px 0 var(--panel-strong);
   color: var(--ink-500);
   font-weight: 700;
   font-size: 0.74rem;
@@ -1409,14 +1439,14 @@ tbody tr:focus-visible td {
 
 .detail-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin: 0;
   padding: 0;
 }
 
 .detail-facts {
-  align-self: start;
+  align-self: stretch;
   align-content: start;
   padding: 12px;
   border-radius: var(--r-md);
@@ -1427,7 +1457,9 @@ tbody tr:focus-visible td {
 .detail-facts > div {
   display: grid;
   gap: 3px;
-  padding: 10px 12px;
+  align-content: center;
+  min-height: 58px;
+  padding: 9px 12px;
   border-radius: var(--r-sm);
   background: #fff;
   border: 1px solid var(--panel-border);
@@ -2244,17 +2276,11 @@ tbody tr:focus-visible td {
    ===================================================================== */
 
 @media (max-width: 1160px) {
-  .auth-card,
   .top-shell-main,
   .main-grid,
   .detail-top-grid,
   .detail-summary-grid {
     grid-template-columns: 1fr;
-  }
-
-  .auth-copy {
-    border-right: none;
-    border-bottom: 1px solid rgba(27, 50, 43, 0.08);
   }
 
   .filters-panel {
@@ -2299,16 +2325,8 @@ tbody tr:focus-visible td {
 }
 
 @media (min-width: 1161px) and (max-width: 1540px) {
-  .filters-panel {
-    grid-template-columns: minmax(150px, 0.32fr) minmax(0, 1fr);
-    grid-template-areas:
-      "heading controls"
-      "quick quick"
-      "status status";
-  }
-
   .workspace-toolbar {
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 }
 
@@ -2331,6 +2349,15 @@ tbody tr:focus-visible td {
 }
 
 @media (max-width: 900px) {
+  .auth-card {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-copy {
+    border-right: none;
+    border-bottom: 1px solid rgba(27, 50, 43, 0.08);
+  }
+
   .auth-form,
   .filter-grid,
   .workspace-toolbar,
@@ -2346,7 +2373,8 @@ tbody tr:focus-visible td {
   }
 
   .quick-filter-section {
-    grid-template-columns: 1fr;
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .map-heading {
@@ -2402,6 +2430,10 @@ tbody tr:focus-visible td {
 }
 
 @media (max-width: 720px) {
+  body {
+    background-attachment: scroll;
+  }
+
   .top-shell h1 {
     font-size: 1.5rem;
   }
@@ -2428,6 +2460,7 @@ tbody tr:focus-visible td {
   th,
   td {
     display: block;
+    width: 100%;
   }
 
   thead {
@@ -2443,15 +2476,36 @@ tbody tr:focus-visible td {
   }
 
   tbody td {
+    width: 100% !important;
     padding: 6px 12px;
     border: none !important;
     border-radius: 0 !important;
     background: transparent;
+    overflow: visible;
   }
 
   .list-panel th,
   .list-panel td {
-    width: auto;
+    width: 100%;
+  }
+
+  .table-shell {
+    overflow: visible;
+  }
+
+  .list-cell-stack {
+    width: 100%;
+  }
+
+  .cell-location,
+  .cell-address,
+  .cell-secondary {
+    display: block;
+    max-width: none;
+    overflow: visible;
+    text-overflow: unset;
+    white-space: normal;
+    -webkit-line-clamp: unset;
   }
 
   td::before {
@@ -2520,3 +2574,490 @@ tbody tr:focus-visible td {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* =====================================================================
+   Feinschliff – edlere Karten, Akzente und Mikro-Interaktionen
+   ===================================================================== */
+
+/* Sanftes Anheben der Karten beim Hover */
+.mini-stat,
+.report-card,
+.registration-key-card,
+.notification-card,
+.municipality-source-insight-card,
+.subpanel {
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease);
+}
+
+.mini-stat:hover,
+.report-card:hover,
+.registration-key-card:hover,
+.municipality-source-insight-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+  border-color: rgba(31, 120, 101, 0.22);
+}
+
+/* Detail-Faktenkarten: feiner Verlauf + Marken-Akzent oben */
+.detail-facts > div {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #ffffff, #f7faf8);
+}
+
+.detail-facts > div::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--brand-400), var(--brand-600));
+  opacity: 0.55;
+}
+
+.detail-facts > .detail-fact-project::before {
+  background: linear-gradient(180deg, var(--copper-400), var(--copper-600));
+  opacity: 0.6;
+}
+
+.detail-facts > div > dt {
+  padding-left: 8px;
+}
+
+.detail-facts > div > dd {
+  padding-left: 8px;
+}
+
+/* Einschätzungskarte etwas edler */
+.summary-block-focus {
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(31, 120, 101, 0.08), transparent 55%),
+    linear-gradient(180deg, #ffffff, #f4faf7);
+}
+
+/* Schutzstatus-Badges mit feinem Punkt */
+.badge.ok::before,
+.badge.alert::before,
+.badge.danger::before,
+.badge.neutral::before,
+.tag.ok::before,
+.tag.alert::before,
+.tag.danger::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: none;
+  background: currentColor;
+  opacity: 0.85;
+}
+
+/* Markenzeichen mit dezentem Glanz */
+.brand-mark {
+  position: relative;
+  overflow: hidden;
+}
+
+.brand-mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35), transparent 45%);
+  pointer-events: none;
+}
+
+/* Top-Shell dezenter Lichtschein */
+.top-shell::after {
+  content: "";
+  position: absolute;
+  top: -40%;
+  right: -10%;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(31, 120, 101, 0.10), transparent 70%);
+  pointer-events: none;
+}
+
+/* Tabellenzeilen: zarter Hover-Lift */
+tbody tr:hover td {
+  background: var(--brand-50);
+  box-shadow: inset 0 0 0 1px rgba(31, 120, 101, 0.10);
+}
+
+.selected-row td {
+  background: var(--success-soft);
+  box-shadow: inset 0 0 0 1px rgba(31, 120, 101, 0.18);
+}
+
+.selected-row td:first-child {
+  box-shadow: inset 4px 0 0 var(--brand-500), inset 0 0 0 1px rgba(31, 120, 101, 0.18);
+}
+
+/* Karten-Detailpanel etwas weicher */
+.detail-summary-card,
+.map-card,
+.detail-form-panel,
+.team-panel {
+  border-radius: var(--r-md);
+}
+
+/* =====================================================================
+   Feinschliff II – edle CTAs, Akzente, sanfte Einblendung
+   ===================================================================== */
+
+/* Glanz-Sweep auf der Haupt-Aktion (Inventar-Karte/Daten) */
+.data-link-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.data-link-button::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  transform: skewX(-18deg);
+  transition: left 600ms var(--ease);
+}
+
+.data-link-button:hover::after {
+  left: 140%;
+}
+
+/* Panels blenden beim ersten Laden weich ein */
+.top-shell,
+.filters-panel,
+.list-panel,
+.detail-panel,
+.notifications-panel,
+.master-panel {
+  animation: panel-in 460ms var(--ease) both;
+}
+
+.filters-panel { animation-delay: 40ms; }
+.main-grid .list-panel { animation-delay: 80ms; }
+.main-grid .detail-panel { animation-delay: 120ms; }
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Schutztreffer-Badge dezent hervorgehoben */
+.tag.danger,
+.tag.alert,
+.tag.ok {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Detail-Überschriften mit feinem Akzent */
+.detail-panel .panel-heading h3,
+.list-panel .panel-heading h3 {
+  position: relative;
+  padding-left: 12px;
+}
+
+.detail-panel .panel-heading h3::before,
+.list-panel .panel-heading h3::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 1.05em;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--brand-400), var(--brand-700));
+}
+
+/* Einschätzungs-Titel etwas markanter */
+.recommendation-title {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* Quick-Filter aktiv: feiner Glanz */
+.quick-filter-button.active {
+  box-shadow: var(--shadow-brand), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top-shell,
+  .filters-panel,
+  .list-panel,
+  .detail-panel,
+  .notifications-panel,
+  .master-panel {
+    animation: none;
+  }
+
+  .data-link-button::after {
+    display: none;
+  }
+}
+
+/* Schutztreffer-Zeilen in der Arbeitsliste deutlich hervorheben */
+.protected-row td:first-child {
+  box-shadow: inset 3px 0 0 var(--copper-500);
+}
+
+.protected-row td {
+  background: linear-gradient(180deg, #fffdf9, #fdf6ec);
+}
+
+.protected-row:hover td {
+  background: #fcf2e2;
+}
+
+.protected-row.selected-row td {
+  background: var(--success-soft);
+}
+
+.protected-row.selected-row td:first-child {
+  box-shadow: inset 4px 0 0 var(--brand-500), inset 0 0 0 1px rgba(31, 120, 101, 0.18);
+}
+
+/* =====================================================================
+   Kopf-Werkzeuge oben rechts – kompakt, einheitlich, edel
+   ===================================================================== */
+
+.top-shell-tools {
+  align-items: center;
+  gap: 10px;
+}
+
+.session-card {
+  position: relative;
+  gap: 14px;
+  min-height: 46px;
+  padding: 7px 9px 7px 16px;
+  background: linear-gradient(180deg, #ffffff, #f5f1ea);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-xs);
+}
+
+.session-card::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--brand-400), var(--brand-700));
+}
+
+.session-card .eyebrow {
+  font-size: 0.56rem;
+  letter-spacing: 0.14em;
+  color: var(--ink-400);
+}
+
+.session-user-name {
+  font-size: 0.98rem;
+  line-height: 1.12;
+}
+
+.session-user-role {
+  margin-top: 1px;
+  font-size: 0.74rem;
+}
+
+.session-card .compact-button {
+  align-self: center;
+  min-height: 36px;
+}
+
+/* Die Aktions-Buttons auf gleiche Höhe wie die Session-Karte und einheitlich */
+.top-shell-tools > .hero-action-button {
+  min-height: 46px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--shadow-xs);
+  color: var(--ink-700);
+  font-weight: 600;
+}
+
+.top-shell-tools > .hero-action-button:hover {
+  background: #fff;
+  border-color: rgba(31, 120, 101, 0.34);
+  color: var(--brand-700);
+  transform: translateY(-1px);
+}
+
+/* =====================================================================
+   Dunkelmodus – ruhig & sachlich (neutrales Anthrazit, Grün als Akzent)
+   ===================================================================== */
+
+body.dark {
+  color-scheme: dark;
+
+  --card:      #1b1e1d;
+  --card-soft: #232624;
+
+  --stone-50:  #101312;
+  --stone-100: #161918;
+  --stone-150: #242726;
+  --stone-200: #2b2f2d;
+  --stone-300: #353a37;
+
+  --ink-900: #eef2f0;
+  --ink-800: #dde3e0;
+  --ink-700: #c6cdc9;
+  --ink-600: #aab2ad;
+  --ink-500: #909892;
+  --ink-400: #767d78;
+
+  --brand-50:     rgba(70, 150, 132, 0.16);
+  --success-soft: rgba(70, 150, 132, 0.22);
+  --warning-soft: rgba(196, 150, 60, 0.18);
+  --danger-soft:  rgba(200, 96, 84, 0.20);
+
+  --bg:           #101312;
+  --bg-deep:      #0b0e0d;
+  --panel:        rgba(27, 30, 29, 0.92);
+  --panel-strong: #1b1e1d;
+  --panel-muted:  #232624;
+  --panel-border: rgba(228, 234, 231, 0.10);
+  --text:         #eef2f0;
+  --muted:        #9aa39d;
+  --neutral:      #2b2f2d;
+  --surface-quiet:#161918;
+  --line-strong:  rgba(228, 234, 231, 0.16);
+
+  --shadow-xs:   0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow:      0 14px 36px -18px rgba(0, 0, 0, 0.6);
+  --shadow-lg:   0 32px 70px -30px rgba(0, 0, 0, 0.7);
+  --ring:        0 0 0 3px rgba(70, 150, 132, 0.28);
+}
+
+body.dark {
+  background-color: #101312;
+  background-image: linear-gradient(180deg, #141716 0%, #101312 55%, #0c0f0e 100%);
+}
+
+body.dark a,
+body.dark .map-status,
+body.dark .brand-word strong,
+body.dark .eyebrow,
+body.dark .shared-source-item a { color: var(--brand-300); }
+
+body.dark .brand-word { color: var(--ink-700); }
+body.dark .panel-title { color: var(--ink-500); }
+
+/* Helle Flächen -> ruhige dunkle Karten */
+body.dark .panel,
+body.dark .top-shell,
+body.dark .list-panel,
+body.dark .detail-panel,
+body.dark input,
+body.dark select,
+body.dark textarea,
+body.dark tbody td,
+body.dark .summary-chip,
+body.dark .quick-filter-button,
+body.dark .subpanel,
+body.dark .detail-facts > div,
+body.dark .summary-block,
+body.dark .comment-card,
+body.dark .registration-key-card,
+body.dark .municipality-source-row,
+body.dark .municipality-source-insight-card,
+body.dark .shared-source-item,
+body.dark .map-legend-item,
+body.dark .source-link-button,
+body.dark button.ghost,
+body.dark .session-card,
+body.dark .mini-stat,
+body.dark .report-card,
+body.dark .notification-card,
+body.dark .detail-summary-card,
+body.dark .summary-block-focus,
+body.dark .detail-form-panel,
+body.dark .team-panel,
+body.dark .auth-form,
+body.dark .auth-form-secondary,
+body.dark .list-panel .panel-heading,
+body.dark .detail-panel .panel-heading,
+body.dark .top-shell-tools > .hero-action-button {
+  background: var(--card);
+  color: var(--ink-800);
+  border-color: var(--panel-border);
+}
+
+body.dark .list-panel thead,
+body.dark th { background: #181b1a; }
+body.dark th { box-shadow: 0 6px 0 #181b1a, 0 -10px 0 #181b1a; }
+
+body.dark .auth-card,
+body.dark .auth-form-stack,
+body.dark .auth-copy,
+body.dark .filters-panel,
+body.dark .confirm-dialog,
+body.dark .master-panel,
+body.dark .notifications-panel {
+  background: var(--panel-strong);
+  border-color: var(--panel-border);
+}
+
+body.dark .top-shell-tools > .hero-action-button:hover,
+body.dark button.ghost:hover,
+body.dark .source-link-button:hover { background: var(--card-soft); color: var(--brand-300); }
+
+body.dark .quick-filter-button:hover,
+body.dark tbody tr:hover td,
+body.dark .municipality-source-row:hover { background: rgba(70, 150, 132, 0.12); }
+
+/* Aktiver Schnellfilter muss auch im Dunkeln klar erkennbar bleiben
+   (Dark-Override ueberschreibt sonst die .active-Hervorhebung). */
+body.dark .quick-filter-button.active {
+  background: var(--brand-500);
+  color: #fff;
+  border-color: transparent;
+}
+
+body.dark .quick-filter-button.active:hover {
+  background: var(--brand-400);
+  color: #fff;
+}
+
+body.dark .badge.danger,
+body.dark .tag.danger { color: #f0b3ad; }
+body.dark .badge.alert,
+body.dark .tag.alert { color: #e8c583; }
+body.dark .badge.ok,
+body.dark .tag.ok,
+body.dark .status-chip,
+body.dark .tag { color: var(--brand-200); }
+body.dark .badge.neutral,
+body.dark .tag.neutral,
+body.dark .muted-chip { color: var(--ink-600); }
+
+body.dark .selected-row td { background: var(--success-soft); }
+body.dark .protected-row td { background: rgba(196, 112, 58, 0.10); }
+body.dark .protected-row:hover td { background: rgba(196, 112, 58, 0.16); }
+
+body.dark .empty-list-state,
+body.dark .map-fallback {
+  background: var(--card);
+  border-color: var(--panel-border);
+}
+
+body.dark .detail-map { border-color: var(--panel-border); }
+body.dark .registration-key-code { background: var(--brand-50); color: var(--brand-200); }
+body.dark .comment-card.own-comment,
+body.dark .registration-key-card.available { background: var(--brand-50); }
+body.dark .confirm-overlay { background: rgba(0, 0, 0, 0.6); }
+body.dark ::selection { background: rgba(70, 150, 132, 0.4); }
+
+body.dark * { scrollbar-color: rgba(70, 150, 132, 0.4) transparent; }
+body.dark *::-webkit-scrollbar-thumb { background: rgba(70, 150, 132, 0.32); }

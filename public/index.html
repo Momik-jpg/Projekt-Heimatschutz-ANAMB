@@ -3,13 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
     <title>Heimatschutz Aargau</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;450;500;600;700;800&display=swap">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles.css?v=6">
   </head>
   <body>
     <section id="authShell" class="auth-shell">
@@ -125,6 +126,7 @@
               </div>
               <button id="logoutButton" class="ghost compact-button" type="button">Abmelden</button>
             </div>
+            <button id="themeToggleButton" class="ghost hero-action-button" type="button" aria-pressed="false">Dunkelmodus</button>
             <button id="fontSizeToggleButton" class="ghost hero-action-button" type="button">Grössere Schrift</button>
             <button id="toggleAdminPanelButton" class="ghost hero-action-button hidden" type="button">Verwaltung einblenden</button>
           </div>
@@ -523,6 +525,7 @@
                 <button class="quick-filter-button" data-quick-filter="manual" type="button">Von Hand prüfen</button>
                 <button class="quick-filter-button" data-quick-filter="open" type="button">Nur offen</button>
                 <button class="quick-filter-button" data-quick-filter="due-soon" type="button">Frist bald</button>
+                <button class="quick-filter-button" data-quick-filter="archive" type="button">Alle / Archiv</button>
               </div>
               <p id="activeFilterText" class="active-filter-text">Aktuell: Arbeitsliste.</p>
             </div>
@@ -551,7 +554,7 @@
                       <th>Baugesuch</th>
                       <th>Treffer</th>
                       <th>Frist</th>
-                      <th>Bearbeitung</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
                   <tbody id="applicationsTableBody"></tbody>
@@ -586,13 +589,25 @@
                       <dt>Adresse</dt>
                       <dd id="detailAddress">-</dd>
                     </div>
-                    <div class="detail-fact detail-fact-project detail-fact-wide">
-                      <dt>Bauvorhaben</dt>
-                      <dd id="detailProjectType">-</dd>
+                    <div class="detail-fact detail-fact-parcel">
+                      <dt>Parzelle</dt>
+                      <dd id="detailParcelFact">-</dd>
+                    </div>
+                    <div class="detail-fact detail-fact-published">
+                      <dt>Publiziert</dt>
+                      <dd id="detailPublishedFact">-</dd>
                     </div>
                     <div class="detail-fact detail-fact-deadline">
                       <dt>Fristende</dt>
                       <dd id="detailDeadlineDate">-</dd>
+                    </div>
+                    <div class="detail-fact detail-fact-agis">
+                      <dt>AGIS-Treffer</dt>
+                      <dd id="detailAgisFact">-</dd>
+                    </div>
+                    <div class="detail-fact detail-fact-project detail-fact-wide">
+                      <dt>Bauvorhaben</dt>
+                      <dd id="detailProjectType">-</dd>
                     </div>
                   </dl>
                   <p id="detailAgisMatch" class="hidden" aria-hidden="true">-</p>

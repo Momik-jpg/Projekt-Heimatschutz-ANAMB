@@ -35,7 +35,8 @@ const quickFilterLabels = {
     important: "Aktuell: Schutztreffer.",
     manual: "Aktuell: Fälle mit offener Klärung.",
     open: "Aktuell: offene Fälle.",
-    "due-soon": "Aktuell: nahe Fristen."
+    "due-soon": "Aktuell: nahe Fristen.",
+    archive: "Aktuell: alle erfassten Baugesuche (inkl. Archiv)."
   };
 
 const quickFilterNames = {
@@ -43,7 +44,8 @@ const quickFilterNames = {
   important: "Schutztreffer",
   manual: "Von Hand prüfen",
   open: "Nur offen",
-  "due-soon": "Frist bald"
+  "due-soon": "Frist bald",
+  archive: "Alle / Archiv"
 };
 
 const DEFAULT_STALE_DEADLINE_DAYS = 30;
@@ -61,6 +63,7 @@ const ONLINEKARTEN_LAYERS = {
 };
 const ONLINEKARTEN_IDENTIFY_TOLERANCE = 50;
 const rememberedUsernameStorageKey = "heimatschutz-remembered-username";
+const defaultRequestTimeoutMs = 60000;
 
 const state = {
   currentUser: null,
@@ -86,6 +89,7 @@ const state = {
   },
   quickFilters: ["all"],
   largeTextEnabled: false,
+  darkModeEnabled: false,
   commentsRequestToken: 0,
   syncSettings: null,
   adminPanelExpanded: false
@@ -105,6 +109,7 @@ const elements = {
   registerUsername: document.querySelector("#registerUsername"),
   registerPassword: document.querySelector("#registerPassword"),
   registerAccessKey: document.querySelector("#registerAccessKey"),
+  registerButton: document.querySelector("#registerButton"),
   registerError: document.querySelector("#registerError"),
   sessionUserName: document.querySelector("#sessionUserName"),
   sessionUserRole: document.querySelector("#sessionUserRole"),
@@ -176,6 +181,7 @@ const elements = {
   workflowStatusSelect: document.querySelector("#workflowStatusSelect"),
   searchInput: document.querySelector("#searchInput"),
   fontSizeToggleButton: document.querySelector("#fontSizeToggleButton"),
+  themeToggleButton: document.querySelector("#themeToggleButton"),
   toggleAdminPanelButton: document.querySelector("#toggleAdminPanelButton"),
   filtersForm: document.querySelector("#filtersForm"),
   quickFilterButtons: [...document.querySelectorAll("[data-quick-filter]")],
@@ -188,6 +194,9 @@ const elements = {
   detailHelperText: document.querySelector("#detailHelperText"),
   detailMunicipality: document.querySelector("#detailMunicipality"),
   detailAddress: document.querySelector("#detailAddress"),
+  detailParcelFact: document.querySelector("#detailParcelFact"),
+  detailPublishedFact: document.querySelector("#detailPublishedFact"),
+  detailAgisFact: document.querySelector("#detailAgisFact"),
   detailProjectType: document.querySelector("#detailProjectType"),
   detailPublicationDate: document.querySelector("#detailPublicationDate"),
   detailLastSyncAt: document.querySelector("#detailLastSyncAt"),
@@ -221,8 +230,10 @@ const elements = {
   commentsSection: document.querySelector("#commentsSection"),
   commentForm: document.querySelector("#commentForm"),
   commentInput: document.querySelector("#commentInput"),
+  commentSubmitButton: document.querySelector("#commentSubmitButton"),
   resetFiltersButton: document.querySelector("#resetFiltersButton"),
   nextOpenButton: document.querySelector("#nextOpenButton"),
+  saveButton: document.querySelector("#saveButton"),
   clearButton: document.querySelector("#clearButton"),
   toast: document.querySelector("#toast"),
   confirmOverlay: document.querySelector("#confirmOverlay"),
@@ -339,6 +350,35 @@ function showToast(message) {
   showToast.timeoutId = setTimeout(() => {
     elements.toast.classList.add("hidden");
   }, 3200);
+}
+
+function focusWithoutScroll(element) {
+  try {
+    element?.focus({ preventScroll: true });
+  } catch {
+    element?.focus();
+  }
+}
+
+async function withBusyState(button, busyLabel, task) {
+  if (!button) {
+    return task();
+  }
+
+  const originalText = button.textContent;
+  const wasDisabled = button.disabled;
+  button.disabled = true;
+
+  if (busyLabel) {
+    button.textContent = busyLabel;
+  }
+
+  try {
+    return await task();
+  } finally {
+    button.disabled = wasDisabled;
+    button.textContent = originalText;
+  }
 }
 
 function closeConfirmDialog(accepted) {
@@ -527,6 +567,8 @@ function buildReadableProjectType(item, { forList = false } = {}) {
     .replace(/\S+\.pdf\b/gi, "")
     .replace(/\s+Auflagefrist.+$/i, "")
     .replace(/\(\s*\)/g, "")
+    .replace(/["“”']/g, "")
+    .replace(/\s*[(),;:\-]+\s*$/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 
@@ -564,6 +606,29 @@ function buildReadableProjectType(item, { forList = false } = {}) {
 
   if (/Baugesuch, /i.test(value) && address) {
     value = value.replace(/^Baugesuch,\s*/i, "");
+  }
+
+  // Kein echtes Bauvorhaben, sondern ein Behoerden-/Seitentitel aus dem Scrape
+  // (z. B. "Gemeinderat Birmenstorf", "Amtliche Publikationen") -> verwerfen.
+  const headingNoisePattern =
+    /^(?:gemeinderat|gemeinde(?:rat|kanzlei|verwaltung)?|stadt(?:rat|kanzlei|verwaltung)?|einwohnergemeinde|ortsb[üu]rgergemeinde|amtliche publikation(?:en)?|publikation(?:en)?|aktuelles|news|baugesuche?|baupublikation(?:en)?)\b/i;
+  const municipalityName = normalizeWhitespace(item.municipality ?? "");
+
+  if (
+    headingNoisePattern.test(value) ||
+    (municipalityName && value.toLowerCase().includes(municipalityName.toLowerCase()) && value.length <= municipalityName.length + 14)
+  ) {
+    value = extractProjectFromDescription(item.description) || "";
+  }
+
+  // Einzelnes kurzes Wortfragment ohne Projektbezug (z. B. ein Name aus URL/Titel
+  // wie "Testuz") ist kein Bauvorhaben -> verwerfen.
+  if (
+    /^[^\s]{1,14}$/.test(value) &&
+    !/\d/.test(value) &&
+    !/(bau|umbau|neubau|anbau|sanierung|umnutzung|abbruch|ersatz|garage|carport|pool|dach|fenster|fassade|wärmepumpe|waermepumpe|photovoltaik|\bpv\b|gestaltungsplan|reklame|installation|terrasse|balkon|zaun|mauer|heizung)/i.test(value)
+  ) {
+    value = extractProjectFromDescription(item.description) || "";
   }
 
   if (!value || value.toLowerCase() === addressLower) {
@@ -973,6 +1038,12 @@ function isWorklistEligibleCase(item) {
 }
 
 function buildVisibleItems(items) {
+  // "Alle / Archiv" zeigt jeden erfassten Fall, auch ueberfaellige und aeltere,
+  // ohne die Arbeitslisten-Eingrenzung.
+  if (getActiveQuickFilters().includes("archive")) {
+    return applyQuickFilter(items);
+  }
+
   const activeItems = items.filter((item) => isWorklistEligibleCase(item));
   const baseItems = shouldUseDefaultWorklistScope()
     ? activeItems.filter((item) => isCurrentWorklistCase(item))
@@ -1648,14 +1719,31 @@ async function updateMap(item) {
 }
 
 async function requestJson(url, options = {}) {
-  const { skipSessionReset = false, headers, ...fetchOptions } = options;
-  const response = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...headers
-    },
-    ...fetchOptions
-  });
+  const { skipSessionReset = false, headers, timeoutMs = defaultRequestTimeoutMs, ...fetchOptions } = options;
+  const timeoutController = timeoutMs > 0 && !fetchOptions.signal ? new AbortController() : null;
+  const timeoutId = timeoutController
+    ? setTimeout(() => timeoutController.abort(), timeoutMs)
+    : null;
+  let response;
+
+  try {
+    response = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+        ...headers
+      },
+      signal: timeoutController?.signal ?? fetchOptions.signal,
+      ...fetchOptions
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Die Anfrage dauert zu lange. Bitte Verbindung prüfen und erneut versuchen.");
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     let message = "Request failed";
@@ -1670,7 +1758,7 @@ async function requestJson(url, options = {}) {
     if (response.status === 401 && !skipSessionReset) {
       setAuthenticatedUser(null);
       setLoginError("Ihre Sitzung ist abgelaufen. Bitte erneut anmelden.");
-      elements.loginUsername.focus();
+      focusWithoutScroll(elements.loginUsername);
     }
 
     throw new Error(message);
@@ -1722,6 +1810,17 @@ function updateFontSizeUi() {
   document.body.classList.toggle("large-text", state.largeTextEnabled);
   elements.fontSizeToggleButton.textContent = state.largeTextEnabled ? "Normale Schrift" : "Grössere Schrift";
   elements.fontSizeToggleButton.setAttribute("aria-pressed", String(state.largeTextEnabled));
+}
+
+function updateThemeUi() {
+  document.body.classList.toggle("dark", state.darkModeEnabled);
+  if (elements.themeToggleButton) {
+    elements.themeToggleButton.textContent = state.darkModeEnabled ? "Hellmodus" : "Dunkelmodus";
+    elements.themeToggleButton.setAttribute("aria-pressed", String(state.darkModeEnabled));
+  }
+  document
+    .querySelector('meta[name="color-scheme"]')
+    ?.setAttribute("content", state.darkModeEnabled ? "dark" : "light");
 }
 
 function findNextOpenItem() {
@@ -1919,7 +2018,12 @@ function renderApplications() {
 
       return `
         <tr
-          class="${item.id === state.selectedId ? "selected-row" : ""}"
+          class="${[
+            item.id === state.selectedId ? "selected-row" : "",
+            ["protected-point", "protected-zone", "combined-hit"].includes(item.protectionStatus) ? "protected-row" : ""
+          ]
+            .filter(Boolean)
+            .join(" ")}"
           data-id="${escapeHtml(item.id)}"
           tabindex="0"
           aria-label="${escapeHtml(`${item.municipality}, ${addressLabel}`)}"
@@ -1995,11 +2099,14 @@ function renderDetail(item) {
   elements.detailHelperText.textContent = "Hier stehen die wichtigsten Angaben und Ihre Bearbeitung.";
   elements.detailMunicipality.textContent = item.municipality;
   elements.detailAddress.textContent = buildReadableAddress(item);
+  elements.detailParcelFact.textContent = item.parcel ? item.parcel : "–";
+  elements.detailPublishedFact.textContent = item.publicationDate ? formatDate(item.publicationDate) : "–";
   elements.detailProjectType.textContent = buildReadableProjectType(item) || "Nicht näher beschrieben";
   elements.detailPublicationDate.textContent = formatDate(item.publicationDate);
   elements.detailLastSyncAt.textContent = item.lastSyncAt ? formatDateTime(item.lastSyncAt) : "-";
   elements.detailDeadlineDate.textContent = formatDate(item.deadlineDate);
   elements.detailAgisMatch.textContent = buildProtectionBadgeLabel(item);
+  elements.detailAgisFact.textContent = buildProtectionBadgeLabel(item);
   elements.detailDescription.textContent = item.description;
   elements.detailAutomatedAssessment.textContent = item.automatedAssessment;
   elements.detailWorkflowStatus.value = item.workflowStatus;
@@ -2651,20 +2758,22 @@ function bindEvents() {
     setLoginError("");
 
     try {
-      const payload = await requestJson("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({
-          username: elements.loginUsername.value.trim().toLowerCase(),
-          password: elements.loginPassword.value
-        }),
-        skipSessionReset: true
-      });
+      await withBusyState(elements.loginButton, "Anmelden...", async () => {
+        const payload = await requestJson("/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify({
+            username: elements.loginUsername.value.trim().toLowerCase(),
+            password: elements.loginPassword.value
+          }),
+          skipSessionReset: true
+        });
 
-      persistRememberedUsername();
-      setAuthenticatedUser(payload.user);
-      await showAuthenticatedApp();
-      elements.loginPassword.value = "";
-      showToast(`Angemeldet als ${payload.user.displayName}.`);
+        persistRememberedUsername();
+        setAuthenticatedUser(payload.user);
+        await showAuthenticatedApp();
+        elements.loginPassword.value = "";
+        showToast(`Angemeldet als ${payload.user.displayName}.`);
+      });
     } catch (error) {
       setLoginError(error.message);
     }
@@ -2675,36 +2784,38 @@ function bindEvents() {
     setRegisterError("");
 
     try {
-      const payload = await requestJson("/api/auth/register", {
-        method: "POST",
-        body: JSON.stringify({
-          displayName: elements.registerDisplayName.value,
-          username: elements.registerUsername.value,
-          password: elements.registerPassword.value,
-          accessKey: elements.registerAccessKey.value
-        }),
+      await withBusyState(elements.registerButton, "Konto wird erstellt...", async () => {
+        const payload = await requestJson("/api/auth/register", {
+          method: "POST",
+          body: JSON.stringify({
+            displayName: elements.registerDisplayName.value,
+            username: elements.registerUsername.value,
+            password: elements.registerPassword.value,
+            accessKey: elements.registerAccessKey.value
+          }),
           skipSessionReset: true
         });
 
         setAuthenticatedUser(payload.user);
         clearRegisterForm();
         elements.loginPassword.value = "";
-      await showAuthenticatedApp();
-      showToast(`Konto erstellt und angemeldet als ${payload.user.displayName}.`);
+        await showAuthenticatedApp();
+        showToast(`Konto erstellt und angemeldet als ${payload.user.displayName}.`);
+      });
     } catch (error) {
       setRegisterError(error.message);
-      }
-    });
+    }
+  });
 
-    elements.rememberUsernameCheckbox.addEventListener("change", () => {
+  elements.rememberUsernameCheckbox.addEventListener("change", () => {
+    persistRememberedUsername();
+  });
+
+  elements.loginUsername.addEventListener("input", () => {
+    if (elements.rememberUsernameCheckbox.checked) {
       persistRememberedUsername();
-    });
-
-    elements.loginUsername.addEventListener("input", () => {
-      if (elements.rememberUsernameCheckbox.checked) {
-        persistRememberedUsername();
-      }
-    });
+    }
+  });
 
   elements.logoutButton.addEventListener("click", async () => {
     try {
@@ -2718,26 +2829,28 @@ function bindEvents() {
 
     setAuthenticatedUser(null);
     setLoginError("");
-      elements.loginUsername.focus();
-      showToast("Sie wurden abgemeldet.");
-    });
+    focusWithoutScroll(elements.loginUsername);
+    showToast("Sie wurden abgemeldet.");
+  });
 
-    elements.createRegistrationKeyButton.addEventListener("click", async () => {
+  elements.createRegistrationKeyButton.addEventListener("click", async () => {
     try {
-      const payload = await requestJson("/api/admin/registration-keys", {
-        method: "POST",
-        body: JSON.stringify({
-          note: elements.registrationKeyNote.value
-        })
-      });
+      await withBusyState(elements.createRegistrationKeyButton, "Wird erstellt...", async () => {
+        const payload = await requestJson("/api/admin/registration-keys", {
+          method: "POST",
+          body: JSON.stringify({
+            note: elements.registrationKeyNote.value
+          })
+        });
 
-      elements.registrationKeyNote.value = "";
-      await loadRegistrationKeys();
-      showToast(`Neuer Registrierungsschlüssel erstellt: ${payload.keyCode}`);
+        elements.registrationKeyNote.value = "";
+        await loadRegistrationKeys();
+        showToast(`Neuer Registrierungsschlüssel erstellt: ${payload.keyCode}`);
+      });
     } catch (error) {
       showToast(error.message);
-      }
-    });
+    }
+  });
 
     elements.adminPasswordResetButton.addEventListener("click", async () => {
       const userId = elements.adminUserSelect.value;
@@ -2765,15 +2878,17 @@ function bindEvents() {
       }
 
       try {
-        const payload = await requestJson(`/api/admin/users/${userId}/password`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            password: elements.adminPasswordResetInput.value
-          })
-        });
+        await withBusyState(elements.adminPasswordResetButton, "Wird gesetzt...", async () => {
+          const payload = await requestJson(`/api/admin/users/${userId}/password`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              password: elements.adminPasswordResetInput.value
+            })
+          });
 
-        clearAdminPasswordResetForm();
-        showToast(payload.message ?? `Passwort für ${selectedUser.displayName} gesetzt.`);
+          clearAdminPasswordResetForm();
+          showToast(payload.message ?? `Passwort für ${selectedUser.displayName} gesetzt.`);
+        });
       } catch (error) {
         showToast(error.message);
       }
@@ -2788,16 +2903,19 @@ function bindEvents() {
       }
 
       try {
-        const payload = await requestJson("/api/admin/import-json", {
-          method: "POST",
-          body: JSON.stringify({
-            jsonText
-          })
-        });
+        await withBusyState(elements.manualImportButton, "Import läuft...", async () => {
+          const payload = await requestJson("/api/admin/import-json", {
+            method: "POST",
+            body: JSON.stringify({
+              jsonText
+            }),
+            timeoutMs: 120000
+          });
 
-        elements.manualImportJsonInput.value = "";
-        await refreshAll();
-        showToast(payload.message ?? "JSON-Export importiert.");
+          elements.manualImportJsonInput.value = "";
+          await refreshAll();
+          showToast(payload.message ?? "JSON-Export importiert.");
+        });
       } catch (error) {
         showToast(error.message);
       }
@@ -2815,18 +2933,20 @@ function bindEvents() {
       }
 
       try {
-        const payload = await requestJson("/api/admin/sync-settings", {
-          method: "PATCH",
-          body: JSON.stringify({
-            sourceType,
-            sourceMunicipality,
-            sourceUrl,
-            sourceToken: elements.syncSourceTokenInput.value
-          })
-        });
+        await withBusyState(elements.saveSyncSettingsButton, "Speichern...", async () => {
+          const payload = await requestJson("/api/admin/sync-settings", {
+            method: "PATCH",
+            body: JSON.stringify({
+              sourceType,
+              sourceMunicipality,
+              sourceUrl,
+              sourceToken: elements.syncSourceTokenInput.value
+            })
+          });
 
-        renderSyncSettings(payload);
-        showToast(payload.message ?? "Automatische Import-Quelle gespeichert.");
+          renderSyncSettings(payload);
+          showToast(payload.message ?? "Automatische Import-Quelle gespeichert.");
+        });
       } catch (error) {
         showToast(error.message);
       }
@@ -2836,14 +2956,17 @@ function bindEvents() {
 
     elements.runSyncNowButton.addEventListener("click", async () => {
       try {
-        const payload = await requestJson("/api/sync", {
-          method: "POST"
-        });
+        await withBusyState(elements.runSyncNowButton, "Synchronisiert...", async () => {
+          const payload = await requestJson("/api/sync", {
+            method: "POST",
+            timeoutMs: 300000
+          });
 
-        await refreshAll();
-        await loadMunicipalitySources();
-        await loadSyncSettings();
-        showToast(payload.message ?? "Synchronisation abgeschlossen.");
+          await refreshAll();
+          await loadMunicipalitySources();
+          await loadSyncSettings();
+          showToast(payload.message ?? "Synchronisation abgeschlossen.");
+        });
       } catch (error) {
         showToast(error.message);
       }
@@ -2874,36 +2997,38 @@ function bindEvents() {
       }
 
       try {
-        const payload = await requestJson(`/api/admin/municipality-sources/${state.selectedMunicipalitySourceId}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            sourceType: elements.municipalitySourceTypeSelect.value,
-            digitalStatus: elements.municipalitySourceDigitalStatusSelect.value,
-            enabled: elements.municipalitySourceEnabledCheckbox.checked,
-            sourceUrl: elements.municipalitySourceUrlInput.value,
-            sourceToken: elements.municipalitySourceTokenInput.value,
-            includePattern: elements.municipalitySourceIncludePatternInput.value,
-            excludePattern: elements.municipalitySourceExcludePatternInput.value,
-            notes: elements.municipalitySourceNotesInput.value
-          })
-        });
+        await withBusyState(elements.saveMunicipalitySourceButton, "Speichern...", async () => {
+          const payload = await requestJson(`/api/admin/municipality-sources/${state.selectedMunicipalitySourceId}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              sourceType: elements.municipalitySourceTypeSelect.value,
+              digitalStatus: elements.municipalitySourceDigitalStatusSelect.value,
+              enabled: elements.municipalitySourceEnabledCheckbox.checked,
+              sourceUrl: elements.municipalitySourceUrlInput.value,
+              sourceToken: elements.municipalitySourceTokenInput.value,
+              includePattern: elements.municipalitySourceIncludePatternInput.value,
+              excludePattern: elements.municipalitySourceExcludePatternInput.value,
+              notes: elements.municipalitySourceNotesInput.value
+            })
+          });
 
-        const updatedItems = state.municipalitySources.map((source) =>
-          source.id === payload.item.id ? payload.item : source
-        );
-        renderMunicipalitySources({
-          items: updatedItems,
-          summary: payload.summary ?? state.municipalitySourceSummary,
-          catalogItems: payload.catalogItems ?? state.municipalitySourceCatalog,
-          sharedSources: payload.sharedSources ?? state.sharedPublicationSources,
-          report: payload.report ?? state.municipalitySourceReport
+          const updatedItems = state.municipalitySources.map((source) =>
+            source.id === payload.item.id ? payload.item : source
+          );
+          renderMunicipalitySources({
+            items: updatedItems,
+            summary: payload.summary ?? state.municipalitySourceSummary,
+            catalogItems: payload.catalogItems ?? state.municipalitySourceCatalog,
+            sharedSources: payload.sharedSources ?? state.sharedPublicationSources,
+            report: payload.report ?? state.municipalitySourceReport
+          });
+          renderSyncSettings({
+            ...(state.syncSettings ?? {}),
+            municipalitySourcesSummary: payload.summary ?? state.municipalitySourceSummary,
+            syncStatus: state.dashboard?.syncStatus ?? state.syncSettings?.syncStatus ?? null
+          });
+          showToast(payload.message ?? "Gemeindequelle gespeichert.");
         });
-        renderSyncSettings({
-          ...(state.syncSettings ?? {}),
-          municipalitySourcesSummary: payload.summary ?? state.municipalitySourceSummary,
-          syncStatus: state.dashboard?.syncStatus ?? state.syncSettings?.syncStatus ?? null
-        });
-        showToast(payload.message ?? "Gemeindequelle gespeichert.");
       } catch (error) {
         showToast(error.message);
       }
@@ -2946,12 +3071,14 @@ function bindEvents() {
       }
 
       try {
-        await requestJson(`/api/admin/registration-keys/${keyId}`, {
-          method: "DELETE"
-        });
+        await withBusyState(button, "Löschen...", async () => {
+          await requestJson(`/api/admin/registration-keys/${keyId}`, {
+            method: "DELETE"
+          });
 
-        await loadRegistrationKeys();
-        showToast("Registrierungsschlüssel gelöscht.");
+          await loadRegistrationKeys();
+          showToast("Registrierungsschlüssel gelöscht.");
+        });
       } catch (error) {
         showToast(error.message);
       }
@@ -2985,16 +3112,18 @@ function bindEvents() {
     }
 
     try {
-      await requestJson(`/api/applications/${state.selectedId}/comments`, {
-        method: "POST",
-        body: JSON.stringify({
-          message: elements.commentInput.value
-        })
-      });
+      await withBusyState(elements.commentSubmitButton, "Speichern...", async () => {
+        await requestJson(`/api/applications/${state.selectedId}/comments`, {
+          method: "POST",
+          body: JSON.stringify({
+            message: elements.commentInput.value
+          })
+        });
 
-      elements.commentInput.value = "";
-      await loadComments(state.selectedId);
-      showToast("Team-Kommentar gespeichert.");
+        elements.commentInput.value = "";
+        await loadComments(state.selectedId);
+        showToast("Team-Kommentar gespeichert.");
+      });
     } catch (error) {
       showToast(error.message);
     }
@@ -3036,6 +3165,12 @@ function bindEvents() {
     state.largeTextEnabled = !state.largeTextEnabled;
     localStorage.setItem("heimatschutz-large-text", state.largeTextEnabled ? "1" : "0");
     updateFontSizeUi();
+  });
+
+  elements.themeToggleButton?.addEventListener("click", () => {
+    state.darkModeEnabled = !state.darkModeEnabled;
+    localStorage.setItem("heimatschutz-dark-mode", state.darkModeEnabled ? "1" : "0");
+    updateThemeUi();
   });
 
   elements.toggleAdminPanelButton.addEventListener("click", () => {
@@ -3090,13 +3225,15 @@ function bindEvents() {
     event.preventDefault();
 
     try {
-      await patchSelectedApplication(
-        {
-          workflowStatus: elements.detailWorkflowStatus.value,
-          assignee: getAssigneeValue(),
-          note: elements.detailNote.value
-        },
-        "Änderungen gespeichert."
+      await withBusyState(elements.saveButton, "Speichern...", () =>
+        patchSelectedApplication(
+          {
+            workflowStatus: elements.detailWorkflowStatus.value,
+            assignee: getAssigneeValue(),
+            note: elements.detailNote.value
+          },
+          "Änderungen gespeichert."
+        )
       );
     } catch (error) {
       showToast(error.message);
@@ -3105,13 +3242,15 @@ function bindEvents() {
 
   elements.clearButton.addEventListener("click", async () => {
     try {
-      await patchSelectedApplication(
-        {
-          workflowStatus: "cleared",
-          assignee: getAssigneeValue(),
-          note: elements.detailNote.value
-        },
-        "Gesuch als erledigt markiert."
+      await withBusyState(elements.clearButton, "Markieren...", () =>
+        patchSelectedApplication(
+          {
+            workflowStatus: "cleared",
+            assignee: getAssigneeValue(),
+            note: elements.detailNote.value
+          },
+          "Gesuch als erledigt markiert."
+        )
       );
     } catch (error) {
       showToast(error.message);
@@ -3123,6 +3262,11 @@ function bindEvents() {
 async function init() {
   state.largeTextEnabled = localStorage.getItem("heimatschutz-large-text") === "1";
   updateFontSizeUi();
+  const storedDarkMode = localStorage.getItem("heimatschutz-dark-mode");
+  state.darkModeEnabled =
+    storedDarkMode === "1" ||
+    (storedDarkMode === null && window.matchMedia?.("(prefers-color-scheme: dark)").matches === true);
+  updateThemeUi();
   loadRememberedUsername();
   bindEvents();
 
@@ -3132,7 +3276,7 @@ async function init() {
     if (hasSession) {
       await showAuthenticatedApp();
     } else {
-      elements.loginUsername.focus();
+      focusWithoutScroll(elements.loginUsername);
     }
   } catch (error) {
     setLoginError(error.message);
