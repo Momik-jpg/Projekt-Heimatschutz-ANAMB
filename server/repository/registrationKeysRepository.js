@@ -138,6 +138,18 @@ export function createRegistrationKeysRepository(db) {
       `).run(id);
 
       return result.changes > 0;
+    },
+
+    // Raeumt tote Schluessel auf: abgelaufene, nie genutzte sowie widerrufene
+    // Schluessel. Bereits verbrauchte Schluessel bleiben als Verlauf erhalten.
+    deleteStale(now) {
+      const result = db.prepare(`
+        DELETE FROM registration_keys
+        WHERE (used_at IS NULL AND revoked_at IS NULL AND expires_at <= ?)
+           OR revoked_at IS NOT NULL
+      `).run(now);
+
+      return result.changes;
     }
   };
 }

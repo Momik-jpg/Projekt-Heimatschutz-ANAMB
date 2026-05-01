@@ -121,6 +121,19 @@ const schema = `
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY,
+    occurred_at TEXT NOT NULL,
+    action TEXT NOT NULL,
+    actor_user_id TEXT NOT NULL DEFAULT '',
+    actor_name TEXT NOT NULL DEFAULT '',
+    target TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT '',
+    ip TEXT NOT NULL DEFAULT ''
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_audit_log_occurred_at ON audit_log (occurred_at DESC);
+
   CREATE TABLE IF NOT EXISTS sync_jobs (
     name TEXT PRIMARY KEY,
     status TEXT NOT NULL DEFAULT 'idle',

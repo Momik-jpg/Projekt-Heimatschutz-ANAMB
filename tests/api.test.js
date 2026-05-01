@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { request as httpRequest } from "node:http";
@@ -16,7 +16,7 @@ import { createApplicationsRepository } from "../server/repository/applicationsR
 function createTestServer(options = {}) {
   const directory = options.directory ?? mkdtempSync(join(tmpdir(), "heimatschutz-aargau-"));
   const dbPath = options.dbPath ?? join(directory, "test.sqlite");
-  const { app, db, stopBackgroundJobs, ready } = createApp({
+  const { app, db, maintenanceService, stopBackgroundJobs, ready } = createApp({
     dbPath,
     agisFetchImpl: options.agisFetchImpl,
     agisAssessmentEnabled: options.agisAssessmentEnabled ?? false,
@@ -32,6 +32,11 @@ function createTestServer(options = {}) {
     autoSyncRunOnStart: options.autoSyncRunOnStart,
     loginRateLimit: options.loginRateLimit,
     compression: options.compression,
+    maintenanceEnabled: options.maintenanceEnabled ?? false,
+    maintenanceRunOnStart: options.maintenanceRunOnStart ?? false,
+    backupEnabled: options.backupEnabled,
+    backupDir: options.backupDir,
+    backupRetention: options.backupRetention,
     // Seed-Passwörter stehen nicht mehr im Repository, daher liefert der Test-Harness
     // sie über Optionen. Einzelne Tests können sie überschreiben (z. B. weglassen,
     // um den Master-Setup-Key-Flow zu testen). Eine gesetzte Umgebungsvariable hat
@@ -58,6 +63,7 @@ function createTestServer(options = {}) {
   return {
     server,
     db,
+    maintenanceService,
     stopBackgroundJobs,
     ready,
     directory,
@@ -5152,4 +5158,84 @@ test("a configured master password does not trigger the setup key flow", async (
     body: JSON.stringify({ username: "master", password: "MasterDirekt_2026!" })
   });
   assert.equal(masterLogin.status, 200);
+});
+
+test("audit log records master actions and is only readable by the master", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  // createRegistrationKey loggt das Master-Konto ein und erstellt einen Schluessel.
+  const { cookie } = await createRegistrationKey(testServer.baseUrl);
+
+  const auditResponse = await requestJson(testServer.baseUrl, "/api/admin/audit-log", {
+    headers: { Cookie: cookie }
+  });
+  assert.equal(auditResponse.status, 200);
+
+  const actions = auditResponse.payload.items.map((entry) => entry.action);
+  assert.ok(actions.includes("auth.login"));
+  assert.ok(actions.includes("admin.registration_key.create"));
+
+  // Ein Team-Konto (nicht Master) darf das Protokoll nicht einsehen.
+  const teamCookie = await login(testServer.baseUrl);
+  const forbidden = await requestJson(testServer.baseUrl, "/api/admin/audit-log", {
+    headers: { Cookie: teamCookie }
+  });
+  assert.equal(forbidden.status, 403);
+});
+
+test("maintenance cleanup removes expired sessions and stale registration keys", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  testServer.db
+    .prepare(`
+      INSERT INTO user_sessions (id, user_id, created_at, last_seen_at, expires_at)
+      VALUES ('SESS-EXPIRED', 'USR-MASTER', ?, ?, ?)
+    `)
+    .run(past, past, past);
+
+  testServer.db
+    .prepare(`
+      INSERT INTO registration_keys (id, key_code, note, created_by_user_id, created_at, expires_at)
+      VALUES ('KEY-STALE', 'HSA-DEAD-DEAD-DEAD', '', 'USR-MASTER', ?, ?)
+    `)
+    .run(past, past);
+
+  const removed = testServer.maintenanceService.runCleanup();
+  assert.ok(removed >= 1);
+
+  const session = testServer.db.prepare("SELECT id FROM user_sessions WHERE id = 'SESS-EXPIRED'").get();
+  assert.equal(session, undefined);
+
+  const key = testServer.db.prepare("SELECT id FROM registration_keys WHERE id = 'KEY-STALE'").get();
+  assert.equal(key, undefined);
+});
+
+test("maintenance creates a SQLite backup file when enabled", async (context) => {
+  const backupDir = mkdtempSync(join(tmpdir(), "heimatschutz-backup-"));
+  const testServer = createTestServer({ backupEnabled: true, backupDir });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+    rmSync(backupDir, { recursive: true, force: true });
+  });
+
+  const target = testServer.maintenanceService.runBackup();
+  assert.ok(target);
+  assert.ok(existsSync(target));
+
+  const backups = readdirSync(backupDir).filter((name) => name.endsWith(".bak"));
+  assert.ok(backups.length >= 1);
 });

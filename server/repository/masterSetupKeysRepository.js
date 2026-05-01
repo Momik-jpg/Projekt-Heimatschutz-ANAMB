@@ -94,6 +94,17 @@ export function createMasterSetupKeysRepository(db) {
         WHERE user_id = ?
           AND used_at IS NULL
       `).run(userId);
+    },
+
+    // Raeumt abgelaufene oder bereits verbrauchte Setup-Keys auf.
+    deleteStale(now) {
+      const result = db.prepare(`
+        DELETE FROM master_setup_keys
+        WHERE used_at IS NOT NULL
+           OR expires_at <= ?
+      `).run(now);
+
+      return result.changes;
     }
   };
 }

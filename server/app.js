@@ -27,6 +27,7 @@ import {
 import { createSessionsRepository } from "./repository/sessionsRepository.js";
 import { createSettingsRepository } from "./repository/settingsRepository.js";
 import { createSyncJobsRepository } from "./repository/syncJobsRepository.js";
+import { createAuditLogRepository } from "./repository/auditLogRepository.js";
 import { createUsersRepository, createUserPasswordRecordAsync } from "./repository/usersRepository.js";
 import {
   createApplicationsRepository,
@@ -34,6 +35,7 @@ import {
   workflowStatuses
 } from "./repository/applicationsRepository.js";
 import { createMailService } from "./services/mailService.js";
+import { createMaintenanceService } from "./services/maintenanceService.js";
 
 const gzipAsync = promisify(gzip);
 
@@ -841,8 +843,21 @@ export function createApp(options = {}) {
   const sessionsRepository = createSessionsRepository(db);
   const settingsRepository = createSettingsRepository(db);
   const syncJobsRepository = createSyncJobsRepository(db);
+  const auditLogRepository = createAuditLogRepository(db);
   const usersRepository = createUsersRepository(db);
   const mailService = options.mailService ?? createMailService({ logger });
+
+  function recordAudit(action, request, fields = {}) {
+    const actor = request?.currentUser;
+    auditLogRepository.record({
+      action,
+      actorUserId: fields.actorUserId ?? actor?.id ?? "",
+      actorName: fields.actorName ?? actor?.displayName ?? "",
+      target: fields.target ?? "",
+      detail: fields.detail ?? "",
+      ip: request?.ip ?? ""
+    });
+  }
   const masterPasswordConfiguredSettingKey = "master_password_configured";
 
   function getMasterUserId() {
@@ -998,6 +1013,24 @@ export function createApp(options = {}) {
         return null;
       })
     : Promise.resolve(null);
+  const maintenanceService = createMaintenanceService({
+    db,
+    dbPath: options.dbPath ?? getDefaultDbPath(),
+    sessionsRepository,
+    registrationKeysRepository,
+    masterSetupKeysRepository,
+    auditLogRepository,
+    enabled: options.maintenanceEnabled ?? process.env.MAINTENANCE_ENABLED !== "false",
+    intervalMs:
+      options.maintenanceIntervalMs ??
+      Number(process.env.MAINTENANCE_INTERVAL_HOURS ?? 24) * 60 * 60 * 1000,
+    runOnStart: options.maintenanceRunOnStart ?? false,
+    backupEnabled: options.backupEnabled ?? process.env.BACKUP_ENABLED === "true",
+    backupDir: normalizeEnvString(options.backupDir ?? process.env.BACKUP_DIR ?? ""),
+    backupRetention: Number(options.backupRetention ?? process.env.BACKUP_RETENTION ?? 7),
+    auditRetentionDays: Number(options.auditRetentionDays ?? process.env.AUDIT_RETENTION_DAYS ?? 365),
+    logger
+  });
   const app = express();
 
   app.disable("x-powered-by");
@@ -1061,6 +1094,9 @@ export function createApp(options = {}) {
 
     if (!user) {
       loginRateLimiter?.recordFailure(rateLimitKey);
+      recordAudit("auth.login_failed", request, {
+        target: validation.value.username || validation.value.userId || ""
+      });
       response.status(401).json({ error: "Benutzer oder Passwort stimmen nicht." });
       return;
     }
@@ -1076,6 +1112,7 @@ export function createApp(options = {}) {
       expiresAt: buildSessionExpiry(new Date(createdAt))
     });
 
+    recordAudit("auth.login", request, { actorUserId: user.id, actorName: user.displayName });
     response.setHeader("Set-Cookie", buildSessionCookie(sessionId, request));
     response.json({
       authenticated: true,
@@ -1153,6 +1190,11 @@ export function createApp(options = {}) {
       expiresAt: buildSessionExpiry(new Date(currentTimestamp))
     });
 
+    recordAudit("auth.register", request, {
+      actorUserId: user.id,
+      actorName: user.displayName,
+      target: user.username
+    });
     response.setHeader("Set-Cookie", buildSessionCookie(sessionId, request));
     response.status(201).json({
       authenticated: true,
@@ -1260,6 +1302,7 @@ export function createApp(options = {}) {
     }
 
     loginRateLimiter?.recordSuccess(rateLimitKey);
+    recordAudit("auth.master_setup", request, { target: "master" });
     response.json({ success: true, message: "Master-Passwort wurde gesetzt. Sie koennen sich jetzt anmelden." });
   });
 
@@ -1315,6 +1358,7 @@ export function createApp(options = {}) {
       expiresAt: buildRegistrationKeyExpiry(new Date(createdAt))
     });
 
+    recordAudit("admin.registration_key.create", request, { target: createdKey.keyCode });
     response.status(201).json(createdKey);
   });
 
@@ -1343,6 +1387,7 @@ export function createApp(options = {}) {
       return;
     }
 
+    recordAudit("admin.registration_key.delete", request, { target: existingKey.keyCode });
     response.json({ deleted: true });
   });
 
@@ -1377,9 +1422,23 @@ export function createApp(options = {}) {
       return;
     }
 
+    recordAudit("admin.password_reset", request, {
+      target: updatedUser.username ?? updatedUser.displayName
+    });
     response.json({
       user: updatedUser,
       message: `Passwort für ${updatedUser.displayName} wurde aktualisiert.`
+    });
+  });
+
+  app.get("/api/admin/audit-log", (request, response) => {
+    if (!isMasterUser(request.currentUser)) {
+      response.status(403).json({ error: "Nur das Master-Konto darf das Protokoll einsehen." });
+      return;
+    }
+
+    response.json({
+      items: auditLogRepository.listRecent(200)
     });
   });
 
@@ -1772,13 +1831,16 @@ export function createApp(options = {}) {
   });
 
   weeklySyncService.start();
+  maintenanceService.start();
 
   return {
     app,
     db,
+    maintenanceService,
     ready: Promise.all([initialAgisRefreshPromise, masterSetupReadyPromise]),
     stopBackgroundJobs() {
       weeklySyncService.stop();
+      maintenanceService.stop();
     }
   };
 }
