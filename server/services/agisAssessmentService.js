@@ -116,7 +116,7 @@ export function createAgisAssessmentService({ repository, agisGeometryService, l
         const officialFeatures = await agisGeometryService.getOfficialFeatures(coordinates);
         return buildAssessmentFromOfficialFeatures(officialFeatures);
       } catch (error) {
-        logger.warn?.(`AGIS-Neubewertung fehlgeschlagen fuer ${item.id}: ${error.message}`);
+        logger.warn?.(`AGIS-Neubewertung fehlgeschlagen für ${item.id}: ${error.message}`);
         return null;
       }
     },

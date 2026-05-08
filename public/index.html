@@ -64,7 +64,7 @@
             <button id="loginButton" type="submit">Anmelden</button>
             <p class="auth-note muted">
               Passwort vergessen?
-              <button id="showForgotPasswordButton" type="button" class="link-button">Per E-Mail zuruecksetzen</button>
+              <button id="showForgotPasswordButton" type="button" class="link-button">Per E-Mail zurücksetzen</button>
               oder das Master-Konto setzt ein neues.
             </p>
             <p id="loginError" class="auth-error hidden" role="alert"></p>
@@ -87,7 +87,7 @@
             </label>
 
             <label>
-              <span>E-Mail (optional, fuer Passwort-Reset)</span>
+              <span>E-Mail (optional, für Passwort-Reset)</span>
               <input id="registerEmail" name="email" type="email" placeholder="z. B. name@example.org" autocomplete="email">
             </label>
 
@@ -109,11 +109,11 @@
           <form id="masterSetupForm" class="auth-form auth-form-secondary hidden">
             <div class="auth-form-header">
               <h2>Master-Konto einrichten</h2>
-              <p class="muted">Das Master-Konto wird mit einem Einmal-Schluessel eingerichtet, der per E-Mail zugestellt wurde.</p>
+              <p class="muted">Das Master-Konto wird mit einem Einmal-Schlüssel eingerichtet, der per E-Mail zugestellt wurde.</p>
             </div>
 
             <label>
-              <span>Setup-Schluessel</span>
+              <span>Setup-Schlüssel</span>
               <input id="masterSetupKey" name="setupKey" type="text" placeholder="Zum Beispiel: HSA-SETUP-1A2B-3C4D-5E6F-7A8B" autocomplete="one-time-code">
             </label>
 
@@ -123,15 +123,15 @@
             </label>
 
             <button id="masterSetupButton" class="secondary" type="submit">Master-Passwort setzen</button>
-            <p class="auth-note muted">Den Schluessel erhalten Sie per E-Mail an die hinterlegte Master-Adresse.</p>
+            <p class="auth-note muted">Den Schlüssel erhalten Sie per E-Mail an die hinterlegte Master-Adresse.</p>
             <p id="masterSetupError" class="auth-error hidden" role="alert"></p>
             <p id="masterSetupSuccess" class="auth-success hidden" role="status"></p>
           </form>
 
           <form id="forgotPasswordForm" class="auth-form auth-form-secondary hidden">
             <div class="auth-form-header">
-              <h2>Passwort zuruecksetzen</h2>
-              <p class="muted">Wir senden einen Einmal-Schluessel an die fuer das Konto hinterlegte E-Mail-Adresse.</p>
+              <h2>Passwort zurücksetzen</h2>
+              <p class="muted">Wir senden einen Einmal-Schlüssel an die für das Konto hinterlegte E-Mail-Adresse.</p>
             </div>
 
             <label>
@@ -139,7 +139,7 @@
               <input id="forgotPasswordUsername" name="username" type="text" placeholder="z. B. lucia.vettori" autocomplete="username">
             </label>
 
-            <button id="forgotPasswordButton" class="secondary" type="submit">Schluessel anfordern</button>
+            <button id="forgotPasswordButton" class="secondary" type="submit">Schlüssel anfordern</button>
             <p id="forgotPasswordError" class="auth-error hidden" role="alert"></p>
             <p id="forgotPasswordSuccess" class="auth-success hidden" role="status"></p>
           </form>
@@ -147,11 +147,11 @@
           <form id="resetPasswordForm" class="auth-form auth-form-secondary hidden">
             <div class="auth-form-header">
               <h2>Neues Passwort setzen</h2>
-              <p class="muted">Schluessel aus der E-Mail eingeben und neues Passwort vergeben.</p>
+              <p class="muted">Schlüssel aus der E-Mail eingeben und neues Passwort vergeben.</p>
             </div>
 
             <label>
-              <span>Reset-Schluessel</span>
+              <span>Reset-Schlüssel</span>
               <input id="resetPasswordKey" name="resetKey" type="text" placeholder="z. B. HSA-RESET-1A2B-3C4D-5E6F-7A8B" autocomplete="one-time-code">
             </label>
 

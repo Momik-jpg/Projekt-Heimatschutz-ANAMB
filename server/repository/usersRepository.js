@@ -30,7 +30,7 @@ async function verifyPasswordAsync(password, salt, expectedHash) {
   const actualBuffer = Buffer.from(actualHash, "hex");
   const expectedBuffer = Buffer.from(expectedHash, "hex");
 
-  // timingSafeEqual wirft bei unterschiedlicher Laenge – defensiv vorher pruefen.
+  // timingSafeEqual wirft bei unterschiedlicher Länge – defensiv vorher prüfen.
   if (actualBuffer.length !== expectedBuffer.length) {
     return false;
   }
@@ -48,7 +48,7 @@ export function createUserPasswordRecord(password) {
 }
 
 // Berechnet Salt + Hash ohne die Event-Loop zu blockieren. Wird im Request-Pfad
-// VOR dem oeffnen einer DB-Transaktion aufgerufen, damit der eigentliche Insert
+// VOR dem öffnen einer DB-Transaktion aufgerufen, damit der eigentliche Insert
 // synchron (ohne await) innerhalb der Transaktion ablaufen kann.
 export async function createUserPasswordRecordAsync(password) {
   const salt = randomBytes(16).toString("hex");
@@ -113,7 +113,7 @@ export function createUsersRepository(db) {
       return Boolean(row);
     },
 
-    // Synchroner Insert. Der Aufrufer uebergibt einen vorberechneten passwordRecord
+    // Synchroner Insert. Der Aufrufer übergibt einen vorberechneten passwordRecord
     // (siehe createUserPasswordRecordAsync), damit dieser Aufruf gefahrlos innerhalb
     // einer offenen DB-Transaktion ohne await verwendet werden kann.
     create({ id, username, displayName, role, email = "", passwordRecord, createdAt }) {
@@ -148,8 +148,8 @@ export function createUsersRepository(db) {
       return this.getPublicUserById(id);
     },
 
-    // Kontaktdaten fuer den Passwort-Reset. Liefert auch die E-Mail (bewusst NICHT
-    // Teil der oeffentlichen mapUser-Ausgabe, damit die Login-Liste keine Adressen leakt).
+    // Kontaktdaten für den Passwort-Reset. Liefert auch die E-Mail (bewusst NICHT
+    // Teil der öffentlichen mapUser-Ausgabe, damit die Login-Liste keine Adressen leakt).
     getContactByUsername(username) {
       const row = db
         .prepare(`
@@ -236,7 +236,7 @@ export function createUsersRepository(db) {
 
     // Synchrones Setzen eines vorberechneten Passwort-Records (siehe
     // createUserPasswordRecordAsync). Gefahrlos innerhalb einer offenen
-    // DB-Transaktion verwendbar. Gibt true zurueck, wenn ein Konto aktualisiert wurde.
+    // DB-Transaktion verwendbar. Gibt true zurück, wenn ein Konto aktualisiert wurde.
     applyPasswordRecord(id, passwordRecord, updatedAt = new Date().toISOString()) {
       const result = db.prepare(`
         UPDATE users

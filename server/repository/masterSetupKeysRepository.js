@@ -96,7 +96,7 @@ export function createMasterSetupKeysRepository(db) {
       `).run(userId);
     },
 
-    // Raeumt abgelaufene oder bereits verbrauchte Setup-Keys auf.
+    // Räumt abgelaufene oder bereits verbrauchte Setup-Keys auf.
     deleteStale(now) {
       const result = db.prepare(`
         DELETE FROM master_setup_keys

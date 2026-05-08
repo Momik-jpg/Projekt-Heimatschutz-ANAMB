@@ -2,33 +2,33 @@
 
 ## Zielbild
 
-Das System bildet einen internen Arbeitsprozess fuer Baugesuche ab:
+Das System bildet einen internen Arbeitsprozess für Baugesuche ab:
 
 1. Offizielle Quellen werden importiert.
-2. Das Gesuch wird moeglichst genau geokodiert oder ueber Parzelle angenaehert.
-3. Der Standort wird gegen amtliche AGIS-Layer geprueft.
+2. Das Gesuch wird möglichst genau geokodiert oder über Parzelle angenaehert.
+3. Der Standort wird gegen amtliche AGIS-Layer geprüft.
 4. Das Team bearbeitet den Fall mit Status, Notiz und Kommentar.
 
-Die Anwendung ist fuer ein kleines internes Team und eine einzelne produktive Instanz ausgelegt.
+Die Anwendung ist für ein kleines internes Team und eine einzelne produktive Instanz ausgelegt.
 
 ## Fachliche Quellenstrategie
 
 Die Quellen werden bewusst priorisiert.
 
-### Primaer
+### Primär
 
 - offizielle Publikationsseiten der Gemeinden
 - offizielle Baugesuchsseiten und Publikations-PDFs
 
 ### Sekundaer
 
-- amtliche AGIS-/ArcGIS-Layer fuer die Schutzpruefung
-- optionale geschuetzte AGIS-/eBau-/ArcGIS-Quellen mit Token
+- amtliche AGIS-/ArcGIS-Layer für die Schutzprüfung
+- optionale geschützte AGIS-/eBau-/ArcGIS-Quellen mit Token
 
 ### Fallback
 
 - manueller JSON-Import offizieller Exportdateien
-- manuelle Klaerung fuer unvollstaendige Publikationen
+- manuelle Klärung für unvollständige Publikationen
 
 Allgemeine News-, Event- oder Social-Media-Seiten gelten nicht als produktive Hauptquelle.
 
@@ -56,10 +56,10 @@ Pfad:
 Aufgaben:
 - Express-Server
 - API-Endpunkte
-- Authentifizierung und Sitzungspruefung
+- Authentifizierung und Sitzungsprüfung
 - Admin-Aktionen
 - Sync-Steuerung
-- AGIS-Proxy fuer Geometriedaten
+- AGIS-Proxy für Geometriedaten
 
 ### Datenhaltung
 
@@ -67,11 +67,11 @@ Pfad:
 - `server/db.js`
 
 Technik:
-- SQLite ueber `node:sqlite`
+- SQLite über `node:sqlite`
 
 Wichtig:
 - Sitzungen bleiben persistent gespeichert.
-- Seed-Demo-Baugesuche werden nicht standardmaessig wieder eingefuellt.
+- Seed-Demo-Baugesuche werden nicht standardmässig wieder eingefüllt.
 - Gemeindequellen und Benutzer werden initial angelegt.
 
 ## Wichtige Datenfluesse
@@ -79,20 +79,20 @@ Wichtig:
 ### 1. Login
 
 1. Frontend sendet Benutzername und Passwort an `POST /api/auth/login`.
-2. Backend prueft Hash und legt eine Sitzung in SQLite an.
-3. Die Sitzung wird bei weiteren API-Aufrufen serverseitig geprueft.
+2. Backend prüft Hash und legt eine Sitzung in SQLite an.
+3. Die Sitzung wird bei weiteren API-Aufrufen serverseitig geprüft.
 
 ### 2. Arbeitsliste
 
-1. Frontend laedt `GET /api/dashboard`.
-2. Frontend laedt `GET /api/applications`.
+1. Frontend lädt `GET /api/dashboard`.
+2. Frontend lädt `GET /api/applications`.
 3. Die Liste wird clientseitig mit Standardansicht und Schnellfiltern reduziert.
 
 ### 3. Detailansicht
 
-1. Ein Fall wird in der Liste ausgewaehlt.
+1. Ein Fall wird in der Liste ausgewählt.
 2. Gespeicherte Falldaten werden aus der API angezeigt.
-3. Fuer die Karte wird zusaetzlich `GET /api/agis/features` geladen.
+3. Für die Karte wird zusätzlich `GET /api/agis/features` geladen.
 4. Die Karte zeigt Standort, Inventarpunkte und Kontextzonen.
 
 ### 4. Gemeindeimport
@@ -100,26 +100,26 @@ Wichtig:
 1. Aktivierte Gemeindequelle wird geladen.
 2. HTML-, XML-/RSS-/Sitemap-, JSON-, PDF- oder ArcGIS-Inhalt wird geparst.
    XML-/RSS-/Sitemap-, PDF- und ArcGIS-/JSON-Quellen werden bei klarer URL-Struktur auch dann erkannt, wenn sie in der Verwaltung versehentlich noch als HTML gespeichert sind.
-   Bei HTML-Quellen koennen zusaetzlich offizielle `iframe`-Einbettungen sowie strukturierte `JSON-LD`-/`itemprop`-Metadaten ausgewertet werden.
-   Verweisen HTML- oder XML-Eintraege nur auf eine amtliche Publikations-PDF, wird die PDF nachgeladen und inhaltlich ausgewertet.
-3. Relevante Baugesuchseintraege werden extrahiert.
+   Bei HTML-Quellen können zusätzlich offizielle `iframe`-Einbettungen sowie strukturierte `JSON-LD`-/`itemprop`-Metadaten ausgewertet werden.
+   Verweisen HTML- oder XML-Einträge nur auf eine amtliche Publikations-PDF, wird die PDF nachgeladen und inhaltlich ausgewertet.
+3. Relevante Baugesuchseinträge werden extrahiert.
 4. Adresse oder Parzelle wird normalisiert.
-5. Wenn moeglich wird ueber den offiziellen Schweizer Geocoder geokodiert.
-6. AGIS-Pruefung setzt Schutzstatus und Bewertung.
+5. Wenn möglich wird über den offiziellen Schweizer Geocoder geokodiert.
+6. AGIS-Prüfung setzt Schutzstatus und Bewertung.
 7. Ergebnis wird in `applications` gespeichert oder aktualisiert.
 
 ### 5. Wochen-Sync
 
-1. `weeklySyncService` prueft geplante Laeufe.
+1. `weeklySyncService` prüft geplante Läufe.
 2. Aktivierte Gemeindequellen oder eine feste `SYNC_SOURCE_URL` werden importiert.
-   Fuer eine einzelne Website-/RSS-/PDF-Quelle kann zusaetzlich `SYNC_SOURCE_TYPE` und `SYNC_SOURCE_MUNICIPALITY` gesetzt werden, damit der Scraper den Gemeinde-Kontext kennt.
-3. Neue oder geaenderte Schutztreffer erzeugen Import-Hinweise.
+   Für eine einzelne Website-/RSS-/PDF-Quelle kann zusätzlich `SYNC_SOURCE_TYPE` und `SYNC_SOURCE_MUNICIPALITY` gesetzt werden, damit der Scraper den Gemeinde-Kontext kennt.
+3. Neue oder geänderte Schutztreffer erzeugen Import-Hinweise.
 
-## Parser-Erweiterungen fuer offizielle Quellen
+## Parser-Erweiterungen für offizielle Quellen
 
-Der bestehende Importer wurde so erweitert, dass mehr vertrauenswuerdige Quellmuster ausgewertet werden koennen, ohne auf allgemeine News- oder Eventseiten auszuweichen.
+Der bestehende Importer wurde so erweitert, dass mehr vertrauenswürdige Quellmuster ausgewertet werden können, ohne auf allgemeine News- oder Eventseiten auszuweichen.
 
-- HTML-Publikationsseiten mit direkten Eintraegen
+- HTML-Publikationsseiten mit direkten Einträgen
 - offizielle Detailseiten hinter Linklisten
 - XML-/RSS-/Atom-Feeds
 - Sitemaps mit verlinkten Publikationsseiten
@@ -150,7 +150,7 @@ Verwendete Layer:
 
 ### Schweizer Geocoder
 
-Fuer die automatische Adress- oder Parzellenzuordnung wird standardmaessig verwendet:
+Für die automatische Adress- oder Parzellenzuordnung wird standardmässig verwendet:
 
 - `https://api3.geo.admin.ch/rest/services/api/SearchServer`
 
@@ -215,7 +215,7 @@ Speichert:
 - AGIS-Match
 - Layer-Information
 - Team-Status
-- Zustaendigkeit
+- Zuständigkeit
 - Notiz
 
 ### `users`
@@ -244,7 +244,7 @@ Speichert:
 ### `registration_keys`
 
 Speichert:
-- Schluesselcode
+- Schlüsselcode
 - Ersteller
 - Verwendungsstatus
 - Ablauf
@@ -265,7 +265,7 @@ Speichert pro Gemeinde:
 Speichert:
 - Gemeindename
 - offizielle Website
-- technische Referenz fuer den Katalog
+- technische Referenz für den Katalog
 
 ### `publication_sources`
 
@@ -290,32 +290,32 @@ Speichert:
 ### `municipality_quality_assessments`
 
 Speichert pro Gemeinde:
-- Primaerquelle
-- Qualitaetsrating `A/B/C/D`
-- Begruendung
-- Marker fuer unsichere Faelle
+- Primärquelle
+- Qualitätsrating `A/B/C/D`
+- Begründung
+- Marker für unsichere Fälle
 
 ## Gemeinden-/Quellenkatalog
 
-Der bestehende operative Sync verwendet weiterhin `municipality_sources`. Darueber liegt jetzt ein normalisierter Katalog fuer Analyse, Deduplizierung und Export.
+Der bestehende operative Sync verwendet weiterhin `municipality_sources`. Darüber liegt jetzt ein normalisierter Katalog für Analyse, Deduplizierung und Export.
 
 ### Ziel
 
 - eine Gemeinde kann auf mehrere Quellen verweisen
 - eine Quelle kann mehreren Gemeinden zugeordnet sein
-- Primaerquelle und Zusatzquellen werden getrennt sichtbar
-- die Qualitaetsbewertung ist pro Gemeinde dokumentiert
+- Primärquelle und Zusatzquellen werden getrennt sichtbar
+- die Qualitätsbewertung ist pro Gemeinde dokumentiert
 
 ### Reportlogik
 
-Der Katalog liefert ueber die Repository-Schicht:
+Der Katalog liefert über die Repository-Schicht:
 
 - Gesamtzahl der Gemeinden
 - Zahl eindeutiger Quellen
-- Zahl geteilter Primaerquellen
+- Zahl geteilter Primärquellen
 - Zahl unsicherer Bewertungen
 - Verteilung der Ratings `A/B/C/D`
-- haeufig gemeinsam genutzte Quellen
+- häufig gemeinsam genutzte Quellen
 
 ### Exportlogik
 
@@ -334,32 +334,32 @@ Speichert:
 
 ## Schutzlogik
 
-Die Bewertung trennt klar zwischen Datenquelle und Schutzpruefung.
+Die Bewertung trennt klar zwischen Datenquelle und Schutzprüfung.
 
 ### Gespeicherter Status in der Liste
 
 Die Liste zeigt den aktuell gespeicherten AGIS-Status des Falls:
-- `Gebaeude geschuetzt`
-- `Gebiet geschuetzt`
-- `Gebaeude + Gebiet`
+- `Gebäude geschützt`
+- `Gebiet geschützt`
+- `Gebäude + Gebiet`
 - `Kein Schutz gefunden`
-- `Manuell pruefen`
+- `Manuell prüfen`
 
-Wenn eine genaue Adresse vorhanden ist, aber keine automatische Zuordnung gelang, zeigt das Frontend bewusst `Adresse pruefen`.
+Wenn eine genaue Adresse vorhanden ist, aber keine automatische Zuordnung gelang, zeigt das Frontend bewusst `Adresse prüfen`.
 
 ### Detailkarte
 
-Die Detailkarte laedt die offiziellen AGIS-Kontextdaten live nach:
-- rote Punkte fuer Inventarobjekte
-- verschiedene Zonentypen fuer Ortsbild- und Hinweisbereiche
+Die Detailkarte lädt die offiziellen AGIS-Kontextdaten live nach:
+- rote Punkte für Inventarobjekte
+- verschiedene Zonentypen für Ortsbild- und Hinweisbereiche
 
 Damit ist die Detailkarte fachlich aussagekraeftiger als eine reine Textliste.
 
 ## Sicherheits- und Betriebsregeln
 
-- Produktion startet nicht mit Platzhalter-Passwoertern.
-- `MASTER_ACCOUNT_PASSWORD` und `DEFAULT_LOGIN_PASSWORD` muessen in Produktion echt gesetzt sein.
-- Geschuetzte Quellen koennen ueber Token eingebunden werden.
+- Produktion startet nicht mit Platzhalter-Passwörtern.
+- `MASTER_ACCOUNT_PASSWORD` und `DEFAULT_LOGIN_PASSWORD` müssen in Produktion echt gesetzt sein.
+- Geschützte Quellen können über Token eingebunden werden.
 - Railway mit Volume ist die vorgesehene produktive Pilotumgebung.
 
 ## Testabdeckung
@@ -367,9 +367,9 @@ Damit ist die Detailkarte fachlich aussagekraeftiger als eine reine Textliste.
 Die automatisierten Tests decken unter anderem ab:
 
 - Login-Schutz
-- Registrierung mit Schluessel
+- Registrierung mit Schlüssel
 - Passwort-Reset
-- Sitzungen ueber Neustarts hinweg
+- Sitzungen über Neustarts hinweg
 - Import offizieller Gemeindequellen
 - JSON-Import
 - sichere Behandlung von Platzhalter-Quellen
@@ -377,11 +377,11 @@ Die automatisierten Tests decken unter anderem ab:
 - AGIS-Layer und Kontextzonen
 - automatische Synchronisation
 
-Der aktuelle Stand des Pruefprotokolls steht in [pruefprotokoll.md](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/pruefprotokoll.md).
+Der aktuelle Stand des Prüfprotokolls steht in [prüfprotokoll.md](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/prüfprotokoll.md).
 
 ## Bekannte Grenzen
 
 - Nicht jede Gemeinde publiziert ausreichend strukturierte Standortdaten.
-- Einige Faelle bleiben deshalb korrekt in `Adresse pruefen` oder `Manuell pruefen`.
+- Einige Fälle bleiben deshalb korrekt in `Adresse prüfen` oder `Manuell prüfen`.
 - Eine wirklich vollautomatische kantonale Gesamtquelle braucht einen echten Zugang oder Token.
-- Die Anwendung ist nicht fuer Mehrserver-Betrieb oder grosse horizontale Skalierung ausgelegt.
+- Die Anwendung ist nicht für Mehrserver-Betrieb oder grosse horizontale Skalierung ausgelegt.

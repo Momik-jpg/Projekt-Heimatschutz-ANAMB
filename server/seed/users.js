@@ -1,6 +1,6 @@
-// Bewusst KEINE Passwoerter im Repository. Master- und Team-Passwoerter werden
-// ausschliesslich ueber Umgebungsvariablen (MASTER_ACCOUNT_PASSWORD /
-// DEFAULT_LOGIN_PASSWORD) oder – falls keines gesetzt ist – ueber den per E-Mail
+// Bewusst KEINE Passwörter im Repository. Master- und Team-Passwörter werden
+// ausschliesslich über Umgebungsvariablen (MASTER_ACCOUNT_PASSWORD /
+// DEFAULT_LOGIN_PASSWORD) oder – falls keines gesetzt ist – über den per E-Mail
 // zugestellten Master-Setup-Key vergeben. Konten ohne konfiguriertes Passwort
 // werden mit einem unbrauchbaren Zufallswert gesperrt seedet.
 export const seedUsers = [

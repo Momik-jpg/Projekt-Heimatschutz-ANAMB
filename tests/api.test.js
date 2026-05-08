@@ -286,7 +286,7 @@ test("production startup validation rejects placeholder passwords", () => {
       validateProductionRuntimeConfiguration({
         NODE_ENV: "production",
         MASTER_ACCOUNT_PASSWORD: "HouseisGood1999?",
-        DEFAULT_LOGIN_PASSWORD: "BitteVorDemReleaseAendern123"
+        DEFAULT_LOGIN_PASSWORD: "BitteVorDemReleaseÄndern123"
       }),
     /Produktionsstart abgebrochen/i
   );
@@ -986,12 +986,12 @@ test("municipality website sources can be configured and imported automatically"
             <nav>
               <ul>
                 <li>
-                  <a href="/aktuelles/amtliche-publikationen/einbuergerungen">
+                  <a href="/aktuelles/amtliche-publikationen/einbürgerungen">
                     Einbürgerungen 95
                   </a>
                 </li>
                 <li>
-                  <a href="/baugesuche/maerz-2026">
+                  <a href="/baugesuche/märz-2026">
                     März 2026
                   </a>
                 </li>
@@ -4256,7 +4256,7 @@ test("dashboard calculates due-soon cases from the current date", async (context
       publicationDate: dateOnlyDaysFromNow(-1),
       deadlineDate: dateOnlyDaysFromNow(8),
       projectType: "Testfall",
-      description: "Aktueller Testfall mit spaeterer Frist",
+      description: "Aktueller Testfall mit späterer Frist",
       protectionStatus: "no-hit",
       agisMatch: "Kein Schutz gefunden",
       agisLayers: [],
@@ -5037,7 +5037,7 @@ test("repeated failed logins are rate-limited per client", async (context) => {
   assert.equal(blocked.status, 429);
   assert.ok(Number(blocked.headers.get("retry-after")) > 0);
 
-  // Auch eine korrekte Anmeldung bleibt waehrend der Sperre blockiert.
+  // Auch eine korrekte Anmeldung bleibt während der Sperre blockiert.
   const blockedValid = await attempt("Heimat2026!");
   assert.equal(blockedValid.status, 429);
 });
@@ -5087,14 +5087,14 @@ test("master account is locked and bootstrapped via an emailed setup key", async
   const statusBefore = await requestJson(testServer.baseUrl, "/api/auth/master-setup-status");
   assert.equal(statusBefore.payload.setupRequired, true);
 
-  // Vor der Einrichtung ist kein Master-Login moeglich.
+  // Vor der Einrichtung ist kein Master-Login möglich.
   const lockedLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username: "master", password: "irgendwas-falsches" })
   });
   assert.equal(lockedLogin.status, 401);
 
-  // Ungueltiger Key wird abgewiesen.
+  // Ungültiger Key wird abgewiesen.
   const wrongKey = await requestJson(testServer.baseUrl, "/api/auth/master-setup", {
     method: "POST",
     body: JSON.stringify({ key: "HSA-SETUP-0000-0000-0000-0000", password: "NeuesMaster_2026!" })
@@ -5108,7 +5108,7 @@ test("master account is locked and bootstrapped via an emailed setup key", async
   });
   assert.equal(shortPassword.status, 400);
 
-  // Gueltiger Key + Passwort schaltet das Master-Konto frei.
+  // Gültiger Key + Passwort schaltet das Master-Konto frei.
   const setup = await requestJson(testServer.baseUrl, "/api/auth/master-setup", {
     method: "POST",
     body: JSON.stringify({ key: setupKeys[0].key, password: "NeuesMaster_2026!" })
@@ -5175,7 +5175,7 @@ test("self-service password reset by email works for accounts with an email", as
     rmSync(testServer.directory, { recursive: true, force: true });
   });
 
-  // Seed-Konten haben keine E-Mail; fuer den Test eine hinterlegen.
+  // Seed-Konten haben keine E-Mail; für den Test eine hinterlegen.
   testServer.db
     .prepare("UPDATE users SET email = 'lucia@example.test' WHERE username = 'lucia.vettori'")
     .run();
@@ -5268,10 +5268,10 @@ test("cross-origin state-changing requests are blocked by the CSRF guard", async
     rmSync(testServer.directory, { recursive: true, force: true });
   });
 
-  // Fremder Origin auf einem aendernden Request -> blockiert.
+  // Fremder Origin auf einem ändernden Request -> blockiert.
   const blocked = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",
-    headers: { Origin: "https://boeswillig.example" },
+    headers: { Origin: "https://böswillig.example" },
     body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
   });
   assert.equal(blocked.status, 403);
@@ -5300,7 +5300,7 @@ test("audit log records master actions and is only readable by the master", asyn
     rmSync(testServer.directory, { recursive: true, force: true });
   });
 
-  // createRegistrationKey loggt das Master-Konto ein und erstellt einen Schluessel.
+  // createRegistrationKey loggt das Master-Konto ein und erstellt einen Schlüssel.
   const { cookie } = await createRegistrationKey(testServer.baseUrl);
 
   const auditResponse = await requestJson(testServer.baseUrl, "/api/admin/audit-log", {

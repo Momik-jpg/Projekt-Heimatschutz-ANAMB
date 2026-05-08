@@ -57,8 +57,8 @@ const placeholderPasswordValues = new Set([
   "dein_sicheres_team_passwort",
   "eigenesmasterpasswort",
   "eigenessicherespasswort",
-  "bittemasterpasswortvordemreleaseaendern123",
-  "bittevordemreleaseaendern123"
+  "bittemasterpasswortvordemreleaseändern123",
+  "bittevordemreleaseändern123"
 ]);
 const placeholderSyncSourceMarkers = ["example.test", "beispiel", "placeholder"];
 const contentSecurityPolicy = [
@@ -184,7 +184,7 @@ export function validateProductionRuntimeConfiguration(env = process.env) {
   const errors = [];
 
   if (!masterPassword) {
-    // Kein Master-Passwort ist nur zulaessig, wenn die E-Mail-Ersteinrichtung
+    // Kein Master-Passwort ist nur zulässig, wenn die E-Mail-Ersteinrichtung
     // (Setup-Key per SMTP) konfiguriert ist.
     if (!emailSetupConfigured) {
       errors.push(
@@ -196,7 +196,7 @@ export function validateProductionRuntimeConfiguration(env = process.env) {
   }
 
   // DEFAULT_LOGIN_PASSWORD ist optional: ohne Wert bleiben die Seed-Teamkonten
-  // gesperrt und neue Mitarbeitende registrieren sich per Schluessel. Wird ein Wert
+  // gesperrt und neue Mitarbeitende registrieren sich per Schlüssel. Wird ein Wert
   // gesetzt, darf er kein Platzhalter sein.
   if (defaultLoginPassword && isPlaceholderPassword(defaultLoginPassword)) {
     errors.push("DEFAULT_LOGIN_PASSWORD verwendet noch einen Platzhalter oder das Standardpasswort.");
@@ -216,7 +216,7 @@ function generateRegistrationKey() {
 
 const masterSetupKeyLifetimeHours = 48;
 
-// Hochentropischer Einmal-Key fuer die Master-Ersteinrichtung.
+// Hochentropischer Einmal-Key für die Master-Ersteinrichtung.
 function generateMasterSetupKey() {
   const raw = randomBytes(12).toString("hex").toUpperCase();
   return `HSA-SETUP-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
@@ -228,7 +228,7 @@ function buildMasterSetupExpiry(issuedAt = new Date()) {
 
 const passwordResetKeyLifetimeHours = 2;
 
-// Hochentropischer Einmal-Key fuer den Passwort-Reset.
+// Hochentropischer Einmal-Key für den Passwort-Reset.
 function generatePasswordResetKey() {
   const raw = randomBytes(12).toString("hex").toUpperCase();
   return `HSA-RESET-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
@@ -302,7 +302,7 @@ function getRequestHosts(request) {
   return hosts;
 }
 
-// CSRF-Schutz: Zusammen mit dem SameSite=Lax-Session-Cookie wird jede aendernde
+// CSRF-Schutz: Zusammen mit dem SameSite=Lax-Session-Cookie wird jede ändernde
 // Anfrage abgewiesen, deren Origin/Referer nicht zum eigenen Host gehoert. Fehlt
 // Origin UND Referer (Nicht-Browser-Clients, Server-zu-Server), wird durchgelassen.
 function createCsrfOriginGuard({ enabled = true } = {}) {
@@ -324,7 +324,7 @@ function createCsrfOriginGuard({ enabled = true } = {}) {
     try {
       sourceHost = new URL(source).host.toLowerCase();
     } catch {
-      response.status(403).json({ error: "Ungueltige Anfrage-Herkunft." });
+      response.status(403).json({ error: "Ungültige Anfrage-Herkunft." });
       return;
     }
 
@@ -343,7 +343,7 @@ function setCommonSecurityHeaders(_request, response, next) {
   response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  // HSTS: Browser ignorieren den Header ueber HTTP, daher ist das unbedenklich und
+  // HSTS: Browser ignorieren den Header über HTTP, daher ist das unbedenklich und
   // erzwingt HTTPS, sobald die App hinter TLS (z. B. Railway) ausgeliefert wird.
   response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   response.setHeader("X-Content-Type-Options", "nosniff");
@@ -399,10 +399,10 @@ function appendVaryHeader(response, field) {
   response.setHeader("Vary", `${existing}, ${field}`);
 }
 
-// Schlanke gzip-Kompression ohne externe Abhaengigkeit. Puffert den Antwort-Body
+// Schlanke gzip-Kompression ohne externe Abhängigkeit. Puffert den Antwort-Body
 // und komprimiert ihn asynchron (blockiert die Event-Loop nicht), sofern der
 // Client gzip akzeptiert, der Inhaltstyp komprimierbar ist und die Antwort den
-// Schwellwert ueberschreitet.
+// Schwellwert überschreitet.
 function createCompressionMiddleware({ threshold = 1024 } = {}) {
   return function compressionMiddleware(request, response, next) {
     const acceptEncoding = String(request.headers["accept-encoding"] ?? "");
@@ -452,7 +452,7 @@ function createCompressionMiddleware({ threshold = 1024 } = {}) {
 
       collect(chunk, encoding);
 
-      // Originale Methoden wiederherstellen, damit das eigentliche Senden normal laeuft.
+      // Originale Methoden wiederherstellen, damit das eigentliche Senden normal läuft.
       response.write = originalWrite;
       response.end = originalEnd;
 
@@ -487,8 +487,8 @@ function createCompressionMiddleware({ threshold = 1024 } = {}) {
   };
 }
 
-// In-Memory-Bremse gegen Passwort-Raten. Sperrt einen Schluessel (i. d. R. Client-IP)
-// nach zu vielen Fehlversuchen innerhalb des Zeitfensters fuer die Sperrdauer.
+// In-Memory-Bremse gegen Passwort-Raten. Sperrt einen Schlüssel (i. d. R. Client-IP)
+// nach zu vielen Fehlversuchen innerhalb des Zeitfensters für die Sperrdauer.
 function createLoginRateLimiter({
   maxAttempts = 10,
   windowMs = 15 * 60 * 1000,
@@ -584,7 +584,7 @@ function validateRegistrationPayload(payload) {
     return { error: "Das Passwort muss mindestens 8 Zeichen lang sein." };
   }
 
-  // E-Mail ist optional, wird aber fuer den Self-Service-Passwort-Reset benoetigt.
+  // E-Mail ist optional, wird aber für den Self-Service-Passwort-Reset benötigt.
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "Bitte eine gültige E-Mail-Adresse eingeben oder das Feld leer lassen." };
   }
@@ -958,14 +958,14 @@ export function createApp(options = {}) {
     const text = [
       "Hallo,",
       "",
-      "fuer das Master-Konto der Heimatschutz-Aargau-Anwendung wurde eine Ersteinrichtung angefordert.",
-      'Bitte oeffnen Sie die Anwendung, waehlen Sie "Master-Konto einrichten" und geben Sie den folgenden',
-      "Einmal-Schluessel zusammen mit Ihrem neuen Passwort ein:",
+      "für das Master-Konto der Heimatschutz-Aargau-Anwendung wurde eine Ersteinrichtung angefordert.",
+      'Bitte öffnen Sie die Anwendung, wählen Sie "Master-Konto einrichten" und geben Sie den folgenden',
+      "Einmal-Schlüssel zusammen mit Ihrem neuen Passwort ein:",
       "",
       `    ${key}`,
       "",
-      `Der Schluessel ist gueltig bis ${expiresAt}.`,
-      "Falls Sie diese Einrichtung nicht angefordert haben, koennen Sie diese E-Mail ignorieren.",
+      `Der Schlüssel ist gültig bis ${expiresAt}.`,
+      "Falls Sie diese Einrichtung nicht angefordert haben, können Sie diese E-Mail ignorieren.",
       "",
       "Heimatschutz Aargau"
     ].join("\n");
@@ -976,11 +976,11 @@ export function createApp(options = {}) {
       return;
     }
 
-    // Fallback ohne SMTP/Empfaenger: Key einmalig ins Server-Log schreiben, damit
+    // Fallback ohne SMTP/Empfänger: Key einmalig ins Server-Log schreiben, damit
     // die Ersteinrichtung nicht blockiert. In Produktion sollte SMTP gesetzt sein.
     logger.warn?.(
       `SMTP oder MASTER_SETUP_EMAIL ist nicht konfiguriert. Einmaliger Master-Setup-Key ` +
-        `(nur jetzt sichtbar): ${key} – gueltig bis ${expiresAt}.`
+        `(nur jetzt sichtbar): ${key} – gültig bis ${expiresAt}.`
     );
   }
 
@@ -991,18 +991,18 @@ export function createApp(options = {}) {
       return;
     }
 
-    const subject = "Heimatschutz Aargau – Passwort zuruecksetzen";
+    const subject = "Heimatschutz Aargau – Passwort zurücksetzen";
     const text = [
       `Hallo ${displayName || ""}`.trim() + ",",
       "",
-      "fuer Ihr Konto wurde ein Passwort-Reset angefordert. Bitte oeffnen Sie die Anwendung,",
-      'waehlen Sie "Passwort vergessen" und geben Sie den folgenden Einmal-Schluessel zusammen',
+      "für Ihr Konto wurde ein Passwort-Reset angefordert. Bitte öffnen Sie die Anwendung,",
+      'wählen Sie "Passwort vergessen" und geben Sie den folgenden Einmal-Schlüssel zusammen',
       "mit Ihrem neuen Passwort ein:",
       "",
       `    ${key}`,
       "",
-      `Der Schluessel ist gueltig bis ${expiresAt}.`,
-      "Falls Sie keinen Reset angefordert haben, koennen Sie diese E-Mail ignorieren.",
+      `Der Schlüssel ist gültig bis ${expiresAt}.`,
+      "Falls Sie keinen Reset angefordert haben, können Sie diese E-Mail ignorieren.",
       "",
       "Heimatschutz Aargau"
     ].join("\n");
@@ -1014,8 +1014,8 @@ export function createApp(options = {}) {
     }
 
     logger.warn?.(
-      `SMTP ist nicht konfiguriert. Einmaliger Passwort-Reset-Key fuer ${sentTo} ` +
-        `(nur jetzt sichtbar): ${key} – gueltig bis ${expiresAt}.`
+      `SMTP ist nicht konfiguriert. Einmaliger Passwort-Reset-Key für ${sentTo} ` +
+        `(nur jetzt sichtbar): ${key} – gültig bis ${expiresAt}.`
     );
   }
 
@@ -1330,8 +1330,8 @@ export function createApp(options = {}) {
     response.json({ authenticated: false });
   });
 
-  // Ersteinrichtung des Master-Kontos ueber den per E-Mail zugestellten Setup-Key.
-  // Erst danach hat das Master-Konto ein gueltiges Passwort.
+  // Ersteinrichtung des Master-Kontos über den per E-Mail zugestellten Setup-Key.
+  // Erst danach hat das Master-Konto ein gültiges Passwort.
   app.get("/api/auth/master-setup-status", (_request, response) => {
     const masterUserId = getMasterUserId();
     const setupRequired =
@@ -1362,7 +1362,7 @@ export function createApp(options = {}) {
     const passwordValidation = validatePasswordResetPayload(request.body ?? {});
 
     if (!key) {
-      response.status(400).json({ error: "Bitte den Setup-Schluessel eingeben." });
+      response.status(400).json({ error: "Bitte den Setup-Schlüssel eingeben." });
       return;
     }
 
@@ -1372,7 +1372,7 @@ export function createApp(options = {}) {
     }
 
     if (isPlaceholderPassword(passwordValidation.value.password)) {
-      response.status(400).json({ error: "Bitte ein eigenes, sicheres Passwort waehlen." });
+      response.status(400).json({ error: "Bitte ein eigenes, sicheres Passwort wählen." });
       return;
     }
 
@@ -1381,7 +1381,7 @@ export function createApp(options = {}) {
 
     if (!setupKey) {
       loginRateLimiter?.recordFailure(rateLimitKey);
-      response.status(400).json({ error: "Der Setup-Schluessel ist ungueltig oder abgelaufen." });
+      response.status(400).json({ error: "Der Setup-Schlüssel ist ungültig oder abgelaufen." });
       return;
     }
 
@@ -1411,7 +1411,7 @@ export function createApp(options = {}) {
       db.exec("ROLLBACK");
 
       if (error.message === "master-setup-key-not-available") {
-        response.status(400).json({ error: "Der Setup-Schluessel ist ungueltig oder abgelaufen." });
+        response.status(400).json({ error: "Der Setup-Schlüssel ist ungültig oder abgelaufen." });
         return;
       }
 
@@ -1420,7 +1420,7 @@ export function createApp(options = {}) {
 
     loginRateLimiter?.recordSuccess(rateLimitKey);
     recordAudit("auth.master_setup", request, { target: "master" });
-    response.json({ success: true, message: "Master-Passwort wurde gesetzt. Sie koennen sich jetzt anmelden." });
+    response.json({ success: true, message: "Master-Passwort wurde gesetzt. Sie können sich jetzt anmelden." });
   });
 
   // Self-Service Passwort vergessen: schickt einen Einmal-Key an die hinterlegte
@@ -1428,7 +1428,7 @@ export function createApp(options = {}) {
   app.post("/api/auth/forgot-password", async (request, response) => {
     const genericResponse = {
       success: true,
-      message: "Falls fuer dieses Konto eine E-Mail hinterlegt ist, wurde ein Reset-Schluessel versendet."
+      message: "Falls für dieses Konto eine E-Mail hinterlegt ist, wurde ein Reset-Schlüssel versendet."
     };
 
     const username = String(request.body?.username ?? "").trim().toLowerCase();
@@ -1495,7 +1495,7 @@ export function createApp(options = {}) {
     const passwordValidation = validatePasswordResetPayload(request.body ?? {});
 
     if (!key) {
-      response.status(400).json({ error: "Bitte den Reset-Schluessel eingeben." });
+      response.status(400).json({ error: "Bitte den Reset-Schlüssel eingeben." });
       return;
     }
 
@@ -1509,7 +1509,7 @@ export function createApp(options = {}) {
 
     if (!resetKey) {
       loginRateLimiter?.recordFailure(rateLimitKey);
-      response.status(400).json({ error: "Der Reset-Schluessel ist ungueltig oder abgelaufen." });
+      response.status(400).json({ error: "Der Reset-Schlüssel ist ungültig oder abgelaufen." });
       return;
     }
 
@@ -1536,7 +1536,7 @@ export function createApp(options = {}) {
       db.exec("ROLLBACK");
 
       if (error.message === "reset-key-not-available") {
-        response.status(400).json({ error: "Der Reset-Schluessel ist ungueltig oder abgelaufen." });
+        response.status(400).json({ error: "Der Reset-Schlüssel ist ungültig oder abgelaufen." });
         return;
       }
 
@@ -1545,7 +1545,7 @@ export function createApp(options = {}) {
 
     loginRateLimiter?.recordSuccess(rateLimitKey);
     recordAudit("auth.password_reset", request, { actorUserId: resetKey.userId, target: resetKey.userId });
-    response.json({ success: true, message: "Passwort wurde gesetzt. Sie koennen sich jetzt anmelden." });
+    response.json({ success: true, message: "Passwort wurde gesetzt. Sie können sich jetzt anmelden." });
   });
 
   app.use("/api", (request, response, next) => {
@@ -2092,7 +2092,7 @@ const isDirectRun = process.argv[1] && resolve(process.argv[1]) === currentFile;
 // Kantonsweite Standardquelle: Das offizielle Amtsblatt (amtsblatt.ag.ch) listet
 // alle "Bau- und Rodungsgesuche" des ganzen Kantons zentral. Es wird beim
 // produktiven Start automatisch als Quelle genutzt, damit die Datenbank ohne
-// weitere Konfiguration moeglichst vollstaendig alle wichtigen Baugesuche erfasst.
+// weitere Konfiguration möglichst vollständig alle wichtigen Baugesuche erfasst.
 const defaultCantonSyncSourceUrl = "https://amtsblatt.ag.ch/publikationen/";
 
 if (isDirectRun) {

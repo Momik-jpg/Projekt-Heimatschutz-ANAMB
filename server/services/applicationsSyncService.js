@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { PDFParse } from "pdf-parse";
 import { aargauMunicipalityNames } from "../seed/municipalitySources.js";
 
-// Normalisierter Suchschluessel fuer Gemeindenamen: ohne Diakritika, ohne
+// Normalisierter Suchschlüssel für Gemeindenamen: ohne Diakritika, ohne
 // Kantonszusatz "AG"/"(AG)", damit "Hausen AG" -> "Hausen" und "Arni" -> "Arni (AG)".
 function normalizeMunicipalityKey(name) {
   return String(name ?? "")
@@ -19,7 +19,7 @@ const officialAargauMunicipalityByKey = new Map(
   aargauMunicipalityNames.map((name) => [normalizeMunicipalityKey(name), name])
 );
 
-// Gibt den offiziellen Aargauer Gemeindenamen zurueck oder "" wenn der Wert
+// Gibt den offiziellen Aargauer Gemeindenamen zurück oder "" wenn der Wert
 // keine echte Aargauer Gemeinde ist (z. B. Projekttext oder Fremdkantons-Ort).
 function resolveOfficialAargauMunicipality(name) {
   const key = normalizeMunicipalityKey(name);
@@ -76,11 +76,11 @@ const genericDownloadPattern = /\b(herunterladen|download)\b/i;
 const genericMunicipalityAnchorPattern =
   /^(?:zu den dokumenten|mehr lesen|öffnen|herunterladen|download|weiter|details?|artikel lesen)$/i;
 const monthYearListingPattern =
-  /^(?:januar|februar|märz|maerz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+20\d{2}$/i;
+  /^(?:januar|februar|märz|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+20\d{2}$/i;
 const genericLocationTermPattern =
-  /\b(baugesuch(?:e)?|baubewilligung(?:en)?|baupublikation(?:en)?|publikation(?:en)?|öffentliche auflage|oeffentliche auflage|amtliche publikation(?:en)?|gemeindequelle|gemeinde-webseite|wohnraumstrategie|einbürgerungen|einbuergerungen|gemeinderatsnachrichten|facebook)\b/i;
+  /\b(baugesuch(?:e)?|baubewilligung(?:en)?|baupublikation(?:en)?|publikation(?:en)?|öffentliche auflage|öffentliche auflage|amtliche publikation(?:en)?|gemeindequelle|gemeinde-webseite|wohnraumstrategie|einbürgerungen|einbürgerungen|gemeinderatsnachrichten|facebook)\b/i;
 const clearlyNonAddressPattern =
-  /\b(einwohnergemeinde|ortsbürgergemeinde|projektänderung|projektaenderung|bauausschreibung|kanzlei|baupublikationen|auflagebaugesuche|amtliche publikationen?)\b/i;
+  /\b(einwohnergemeinde|ortsbürgergemeinde|projektänderung|projektänderung|bauausschreibung|kanzlei|baupublikationen|auflagebaugesuche|amtliche publikationen?)\b/i;
 const projectLikeAddressPattern =
   /\b(sanierung|umbau|umnutzung|anbau|neubau|ersatzneubau|erweiterung|ausbau|rückbau|rueckbau|renovation|aufwertungsmassnahmen?|baugesuch|publikation)\b/i;
 const garbledProjectTypePattern = /^(?:[._-]*\d{2,}[._-]*)+$/;
@@ -88,13 +88,13 @@ const garbledStructuredTextPattern =
   /\b(name-sort|datum-sort|data-page-length|_kategorieid|_thumbnail|customerid=|readspeaker|sind sie sicher, dass sie diesen eintrag löschen möchten|cms cms)\b/i;
 const unreliableProxyUrlPattern = /readspeaker\.com\/cgi-bin\/rsent/i;
 const streetLikeAddressPattern =
-  /(?:strasse|straße|weg|gasse|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)\b/i;
+  /(?:strasse|strasse|weg|gasse|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)\b/i;
 const parcelLikeAddressPattern = /^Parzelle\s+\d{1,6}$/i;
 // Generische "Strassenname + Hausnummer"-Adresse ohne bekanntes Strassen-Suffix
 // (z. B. "Oberdorf 12", "Im Grund 4", "Vorstadt 3a"). Hausnummern auf 1-3 Stellen
-// begrenzt, damit Jahreszahlen (2024) oder Postleitzahlen (5000) nicht faelschlich
+// begrenzt, damit Jahreszahlen (2024) oder Postleitzahlen (5000) nicht fälschlich
 // als Adresse geokodiert werden. So bekommen mehr echte Adressen automatisch
-// Koordinaten statt "Von Hand pruefen".
+// Koordinaten statt "Von Hand prüfen".
 const houseNumberAddressPattern =
   /^[A-Za-zÄÖÜäöü][A-Za-zÄÖÜäöüéèà.'-]*(?:\s+[A-Za-zÄÖÜäöüéèà0-9.'-]+){0,3}\s+\d{1,3}\s?[a-z]?$/u;
 // Grobe Geocoder-Treffer (Gemeinde-, Bezirks-, Kantonsumriss, Ortschaftsname,
@@ -112,7 +112,7 @@ const bgReferencePattern = /\bBG\s*20\d{2}(?:[-/.]\d+)?\b/i;
 const weekdayPatternSource =
   "(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)";
 const germanMonthPatternSource =
-  "(?:januar|februar|märz|maerz|april|mai|juni|juli|august|september|oktober|november|dezember)";
+  "(?:januar|februar|märz|märz|april|mai|juni|juli|august|september|oktober|november|dezember)";
 const swissNumericDatePatternSource = "\\d{1,2}\\.\\d{1,2}\\.20\\d{2}";
 const swissTextualDatePatternSource = `(?:${weekdayPatternSource},?\\s*)?\\d{1,2}\\.\\s*${germanMonthPatternSource}\\s*20\\d{2}`;
 const swissDateLikePatternSource = `(?:${swissNumericDatePatternSource}|${swissTextualDatePatternSource})`;
@@ -130,7 +130,7 @@ const germanMonthNumberMap = new Map([
   ["februar", "02"],
   ["märz", "03"],
   ["marz", "03"],
-  ["maerz", "03"],
+  ["märz", "03"],
   ["april", "04"],
   ["mai", "05"],
   ["juni", "06"],
@@ -1387,8 +1387,8 @@ function extractAddressFromText(value) {
   }
 
   const patterns = [
-    /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]*(?:strasse|straße|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)\s+\d+[A-Za-z]?)\b/ui,
-    /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]+)+(?:strasse|straße|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)?\s+\d+[A-Za-z]?)\b/u
+    /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]*(?:strasse|strasse|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)\s+\d+[A-Za-z]?)\b/ui,
+    /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]+)+(?:strasse|strasse|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)?\s+\d+[A-Za-z]?)\b/u
   ];
 
   for (const pattern of patterns) {
@@ -2247,7 +2247,7 @@ function extractSwissCoordinatesFromGeocoderPayload(payload, municipality) {
     const origin = normalizeText(attrs.origin ?? attrs.featureId ?? "");
 
     // Nur grobe Treffer (Gemeinde-/Bezirks-/Kantonsumriss usw.) verwerfen.
-    // Treffer ohne Origin-Angabe bleiben zugelassen (Abwaertskompatibilitaet).
+    // Treffer ohne Origin-Angabe bleiben zugelassen (Abwärtskompatibilität).
     if (origin && coarseGeocoderOrigins.has(origin)) {
       continue;
     }
@@ -2343,9 +2343,9 @@ function looseMunicipalityToken(value) {
     .replace(/[^a-z0-9]/g, "");
 }
 
-// Verortet eine Parzelle ueber die amtliche Parzellensuche von geo.admin
+// Verortet eine Parzelle über die amtliche Parzellensuche von geo.admin
 // (origins=parcel, Format "<Gemeinde> <Nummer>"). So bekommen die vielen rein
-// parzellenbasierten Baugesuche echte Koordinaten statt "Von Hand pruefen".
+// parzellenbasierten Baugesuche echte Koordinaten statt "Von Hand prüfen".
 async function geocodeMunicipalityParcel(parcelNumber, municipality, fetchImpl, requestTimeoutMs, cache) {
   if (!fetchImpl || !parcelNumber || !municipality) {
     return "";
@@ -3754,15 +3754,15 @@ async function buildPdfImportedItems(
 }
 
 const discoveryWrongTopicPattern =
-  /(einbürger|einbuerger|fahrplan|verkehrsverbund|\bzvv\b|gemeindeversammlung|abstimmung|\bwahlen\b|newsletter|veranstaltung|\bagenda\b|kontakt|impressum|datenschutz|\blogin\b|\bjobs\b|stellen|bibliothek|kindergarten)/i;
+  /(einbürger|einbürger|fahrplan|verkehrsverbund|\bzvv\b|gemeindeversammlung|abstimmung|\bwahlen\b|newsletter|veranstaltung|\bagenda\b|kontakt|impressum|datenschutz|\blogin\b|\bjobs\b|stellen|bibliothek|kindergarten)/i;
 const discoveryPublicationTextPattern =
-  /(baugesuch|baupublikation|baugesuchspublikation|öffentliche auflage|oeffentliche auflage|amtliche publikation|amtliches publikationsorgan|baubewilligung)/i;
+  /(baugesuch|baupublikation|baugesuchspublikation|öffentliche auflage|öffentliche auflage|amtliche publikation|amtliches publikationsorgan|baubewilligung)/i;
 const discoveryCommonPaths = [
   "/baugesuche",
   "/baupublikationen",
   "/amtliche-publikationen",
   "/publikationen",
-  "/oeffentliche-auflage",
+  "/öffentliche-auflage",
   "/baugesuchspublikationen"
 ];
 
@@ -3828,7 +3828,7 @@ function slugifyForAggregator(value) {
   return String(value ?? "")
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
-    .replace(/ß/g, "ss")
+    .replace(/ss/g, "ss")
     .toLowerCase()
     .replace(/\([^)]*\)/g, "")
     .replace(/[^a-z0-9]+/g, "-")
@@ -3890,7 +3890,7 @@ function collectDiscoveryCandidatesFromHtml(html, baseUrl) {
 
     if (/baugesuch|baupublikation|baugesuchspublikation|auflage-baugesuch|auflagebaugesuche/.test(pathText)) {
       score += 6;
-    } else if (/oeffentliche-auflage|öffentliche-auflage|amtliche-publikation/.test(pathText)) {
+    } else if (/öffentliche-auflage|öffentliche-auflage|amtliche-publikation/.test(pathText)) {
       score += 4;
     } else if (/publikation/.test(pathText)) {
       score += 2;
@@ -3898,7 +3898,7 @@ function collectDiscoveryCandidatesFromHtml(html, baseUrl) {
 
     if (/baugesuch|baupublikation|baugesuchspublikation/i.test(anchorText)) {
       score += 5;
-    } else if (/öffentliche auflage|oeffentliche auflage/i.test(anchorText)) {
+    } else if (/öffentliche auflage|öffentliche auflage/i.test(anchorText)) {
       score += 4;
     } else if (/amtliche publikation|amtliches publikationsorgan/i.test(anchorText)) {
       score += 3;
@@ -4006,16 +4006,16 @@ async function discoverMunicipalityPublicationUrl(html, source, fetchImpl, reque
 
 // ---------------------------------------------------------------------------
 // Amtsblatt des Kantons Aargau (amtsblatt.ag.ch) — kantonsweite Quelle
-// Die offizielle, oeffentliche Publikationsplattform listet alle Baugesuche
+// Die offizielle, öffentliche Publikationsplattform listet alle Baugesuche
 // ("Gemeinden / Bau- und Rodungsgesuche") des Kantons. Die Ergebnisliste wird
-// ueber den AJAX-Endpunkt "resultAjax" seitenweise geladen (ohne cHash) und
-// enthaelt pro Eintrag bereits Stelle (Gemeinde), Rubrik, Titel, Datum und im
+// über den AJAX-Endpunkt "resultAjax" seitenweise geladen (ohne cHash) und
+// enthält pro Eintrag bereits Stelle (Gemeinde), Rubrik, Titel, Datum und im
 // Textkoerper strukturierte Felder (Bauherrschaft | Bauvorhaben | Standort).
 // ---------------------------------------------------------------------------
 const amtsblattBaugesuchRubricPattern = /bau-?\s*und\s*rodungsgesuch/i;
 // Erkennt Parzellennummern in vielen Schreibweisen: "Parzelle Nr. 1376",
 // "Parzellen-Nr. 123", "Parzellen: 155", "Parz. 11", "Kat.-Nr. 7", "GB-Nr 9",
-// "Grundstueck 276".
+// "Grundstück 276".
 const amtsblattParcelPattern =
   /\b(?:Parzellen?|Parz|Kat(?:aster)?|GB|Grundst(?:ü|ue)ck)\.?[-:\s]*(?:Nr\.?:?[-:\s]*)?(\d{1,6})/i;
 const defaultAmtsblattMaxPages = Math.max(1, Number(process.env.AMTSBLATT_MAX_PAGES ?? 30));
@@ -4024,8 +4024,8 @@ const defaultAmtsblattPageBatchSize = Math.min(
   Math.max(1, Number(process.env.AMTSBLATT_PAGE_BATCH_SIZE ?? 6))
 );
 // Beim grossen Archiv-Backfill kann die Live-Geokodierung abgeschaltet werden, damit
-// tausende Baugesuche schnell und ohne Last-Spitze auf die Behoerden-Dienste geladen
-// werden. Die Schutzpruefung erfolgt dann spaeter pro Fall.
+// tausende Baugesuche schnell und ohne Last-Spitze auf die Behörden-Dienste geladen
+// werden. Die Schutzprüfung erfolgt dann später pro Fall.
 const amtsblattGeocodeEnabled = String(process.env.AMTSBLATT_GEOCODE ?? "").toLowerCase() !== "false";
 
 function isAmtsblattSourceUrl(sourceUrl) {
@@ -4040,8 +4040,8 @@ export function buildAmtsblattResultUrl(baseUrl, page) {
   const origin = new URL(baseUrl).origin;
   const params = new URLSearchParams();
   params.set("filter[type][0]", "tx_ekab_publication_domain_model_publication");
-  // Kategorie 190 = "Gemeinden" (enthaelt die Bau- und Rodungsgesuche). Verdichtet
-  // die Ergebnisliste deutlich gegenueber dem ungefilterten Strom aller Publikationen.
+  // Kategorie 190 = "Gemeinden" (enthält die Bau- und Rodungsgesuche). Verdichtet
+  // die Ergebnisliste deutlich gegenüber dem ungefilterten Strom aller Publikationen.
   params.set("filter[category][]", "190");
   params.set("page", String(page));
   params.set("timerange[type]", "1");
@@ -4050,8 +4050,8 @@ export function buildAmtsblattResultUrl(baseUrl, page) {
   return `${origin}/publikationen/?${params.toString()}`;
 }
 
-// Definitionslisten-Felder (Stelle/Rubrik) sind im Text durch das naechste
-// Label begrenzt (kein "|"). Lazy bis zum naechsten bekannten Label.
+// Definitionslisten-Felder (Stelle/Rubrik) sind im Text durch das nächste
+// Label begrenzt (kein "|"). Lazy bis zum nächsten bekannten Label.
 function matchAmtsblattField(text, label, stopLabels) {
   const stop = stopLabels.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
   const pattern = new RegExp(`${label}\\s*:?\\s*([\\s\\S]*?)\\s*(?:\\||${stop}|$)`, "i");
@@ -4090,7 +4090,7 @@ function deriveAmtsblattMunicipality(stelle, location) {
       stelle
         .split(",")[0]
         .replace(
-          /^(Stadt|Einwohnergemeinde|Ortsbürgergemeinde|Ortsbuergergemeinde|Gemeindekanzlei|Gemeindeverwaltung|Gemeinde|Stadtkanzlei|Stadtbauamt|Bauverwaltung|Bauamt|Abteilung\s+Bau|Regionales?\s+Bauamt)\s+/i,
+          /^(Stadt|Einwohnergemeinde|Ortsbürgergemeinde|Ortsbürgergemeinde|Gemeindekanzlei|Gemeindeverwaltung|Gemeinde|Stadtkanzlei|Stadtbauamt|Bauverwaltung|Bauamt|Abteilung\s+Bau|Regionales?\s+Bauamt)\s+/i,
           ""
         )
         .replace(/\s+(Bau|Bauverwaltung|Bauamt|Hochbau|Tiefbau)$/i, "")
@@ -4110,7 +4110,7 @@ function deriveAmtsblattMunicipality(stelle, location) {
       .filter(Boolean);
 
     // Von hinten nach vorne den ersten Teil suchen, der eine echte Aargauer
-    // Gemeinde ist (haeufig nachgestellt: "Strasse 5, 5000 Aarau").
+    // Gemeinde ist (häufig nachgestellt: "Strasse 5, 5000 Aarau").
     for (let index = segments.length - 1; index >= 0; index -= 1) {
       const official = resolveOfficialAargauMunicipality(segments[index].replace(/^\d{4}\s+/, ""));
 
@@ -4167,7 +4167,7 @@ export function parseAmtsblattEntries(html) {
         "Lage",
         "Baustelle",
         "Grundstück",
-        "Grundstueck"
+        "Grundstück"
       ]),
       bauvorhaben: extractAmtsblattLabeledValue(text, ["Bauvorhaben", "Bauprojekt"]),
       bodyText: text
@@ -4241,7 +4241,7 @@ export async function buildAmtsblattItemFromEntry(entry, origin, baseUrl, geocod
   };
 }
 
-// Wenn die Ergebnisliste den Standort nicht enthaelt (Text war abgeschnitten),
+// Wenn die Ergebnisliste den Standort nicht enthält (Text war abgeschnitten),
 // die Detailseite des Eintrags nachladen und Standort/Stelle/Bauvorhaben dort lesen.
 async function enrichAmtsblattEntryFromDetail(entry, origin, fetchImpl, requestTimeoutMs) {
   if (!entry.detailPath) {
@@ -4274,7 +4274,7 @@ async function enrichAmtsblattEntryFromDetail(entry, origin, fetchImpl, requestT
         "Lage",
         "Baustelle",
         "Grundstück",
-        "Grundstueck"
+        "Grundstück"
       ]) || entry.location;
 
     if (!entry.stelle) {
@@ -4294,7 +4294,7 @@ async function enrichAmtsblattEntryFromDetail(entry, origin, fetchImpl, requestT
 
     // Robuster Fallback: Parzellennummer und Strasse direkt aus dem ganzen
     // Detailtext ziehen. Aargauer Baugesuche tragen fast immer eine Parzellennr.,
-    // die ueber die amtliche Parzellensuche zuverlaessig verortet werden kann.
+    // die über die amtliche Parzellensuche zuverlässig verortet werden kann.
     const bodyParcel = (detailText.match(amtsblattParcelPattern) ?? [])[1] ?? "";
 
     if (bodyParcel) {
@@ -4302,7 +4302,7 @@ async function enrichAmtsblattEntryFromDetail(entry, origin, fetchImpl, requestT
     }
 
     const streetMatch = detailText.match(
-      /([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-]*(?:strasse|straße|weg|gasse|platz|allee|ring|rain|halde|steig|matte|acker|feld|quai|ufer)\s*\d{0,4}\s*[a-z]?)/i
+      /([A-ZÄÖÜ][A-Za-zÄÖÜäöüss.\-]*(?:strasse|strasse|weg|gasse|platz|allee|ring|rain|halde|steig|matte|acker|feld|quai|ufer)\s*\d{0,4}\s*[a-z]?)/i
     );
     const bodyStreet = streetMatch ? normalizeWhitespace(streetMatch[1]) : "";
 
@@ -4909,7 +4909,7 @@ export function createApplicationsSyncService({
 
       const merged = mergeSyncResults(syncResults);
 
-      // Ablaufdatum/Aufbewahrung: abgelaufene, unberuehrte Faelle entfernen.
+      // Ablaufdatum/Aufbewahrung: abgelaufene, unberührte Fälle entfernen.
       let removedExpiredCount = 0;
 
       if (applicationRetentionDays > 0 && typeof repository.pruneExpiredApplications === "function") {

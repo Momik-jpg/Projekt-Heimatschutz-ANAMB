@@ -1,8 +1,8 @@
 import { copyFileSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-// Hintergrund-Wartung: raeumt abgelaufene Sessions/Schluessel und alte
-// Audit-Eintraege auf und legt (optional) regelmaessige SQLite-Backups an.
+// Hintergrund-Wartung: räumt abgelaufene Sessions/Schlüssel und alte
+// Audit-Einträge auf und legt (optional) regelmässige SQLite-Backups an.
 export function createMaintenanceService({
   db,
   dbPath,
@@ -50,7 +50,7 @@ export function createMaintenanceService({
       try {
         rmSync(join(dir, name), { force: true });
       } catch {
-        // Ein nicht loeschbares Altbackup darf die Wartung nicht stoppen.
+        // Ein nicht löschbares Altbackup darf die Wartung nicht stoppen.
       }
     }
   }

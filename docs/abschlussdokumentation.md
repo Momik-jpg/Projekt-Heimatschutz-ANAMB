@@ -2,17 +2,17 @@
 
 ## Projektstand
 
-Die Anwendung ist als interner Pilot fuer den Heimatschutz Aargau fertig aufgebaut. Sie verbindet offizielle Gemeindequellen mit amtlichen AGIS-Daten und stellt dem Team eine klare Arbeitsoberflaeche fuer Sichtung, Bewertung und Bearbeitung von Baugesuchen bereit.
+Die Anwendung ist als interner Pilot für den Heimatschutz Aargau fertig aufgebaut. Sie verbindet offizielle Gemeindequellen mit amtlichen AGIS-Daten und stellt dem Team eine klare Arbeitsoberfläche für Sichtung, Bewertung und Bearbeitung von Baugesuchen bereit.
 
 ## Abdeckung aller Aargauer Gemeinden
 
-Der aktuelle Systemstand fuehrt einen vollstaendigen Gemeinden-/Quellenkatalog fuer alle 196 Aargauer Gemeinden.
+Der aktuelle Systemstand führt einen vollständigen Gemeinden-/Quellenkatalog für alle 196 Aargauer Gemeinden.
 
 Aktueller Reportstand:
 - 196 Gemeinden erfasst
-- 196 eindeutige Primaerquellen im aktuellen Seed
-- 4 Gemeinden mit geteilter Primaerquelle
-- 3 haeufig geteilte Zusatzquellen
+- 196 eindeutige Primärquellen im aktuellen Seed
+- 4 Gemeinden mit geteilter Primärquelle
+- 3 häufig geteilte Zusatzquellen
 - 106 unsichere Bewertungen
 
 Rating-Verteilung:
@@ -30,7 +30,7 @@ Die Quellen sind im System von den Gemeinden getrennt modelliert. Eine Gemeinde 
 
 ## Gestalterischer Endstand
 
-Die Oberflaeche wurde bewusst an oeffentlichen digitalen Auftritten ausgerichtet:
+Die Oberfläche wurde bewusst an öffentlichen digitalen Auftritten ausgerichtet:
 
 - ruhige, sachliche Farbpalette
 - klare Hierarchie zwischen Arbeitsliste und Detailansicht
@@ -38,7 +38,7 @@ Die Oberflaeche wurde bewusst an oeffentlichen digitalen Auftritten ausgerichtet
 - grosse, gut lesbare Eingaben und Statuschips
 - konsistente Panel- und Kartenstruktur
 
-Als Orientierung dienten offizielle, zurueckhaltende Webmuster aus dem Umfeld von Kanton und Bund, insbesondere die oeffentliche Gestaltung des Kantons Aargau und die Schweizer Bundes-Styleguide-Prinzipien fuer klare Informationsdarstellung.
+Als Orientierung dienten offizielle, zurückhaltende Webmuster aus dem Umfeld von Kanton und Bund, insbesondere die öffentliche Gestaltung des Kantons Aargau und die Schweizer Bundes-Styleguide-Prinzipien für klare Informationsdarstellung.
 
 ## Fachliche Logik
 
@@ -46,15 +46,15 @@ Als Orientierung dienten offizielle, zurueckhaltende Webmuster aus dem Umfeld vo
 
 - offizielle Gemeindequellen abrufen
 - relevante Baugesuche aus Detailseiten oder Publikations-PDFs ableiten
-- unzuverlaessige News-/Archiv-/Eventeintraege ausfiltern
+- unzuverlässige News-/Archiv-/Eventeinträge ausfiltern
 - Adressen und Parzellen normalisieren
-- moeglichst amtlich geokodieren
-- AGIS-Treffer gegen Schutzflaechen und Inventarobjekte pruefen
+- möglichst amtlich geokodieren
+- AGIS-Treffer gegen Schutzflächen und Inventarobjekte prüfen
 - Hinweise und Schutzstatus speichern
 
 ### Was bewusst manuell bleibt
 
-- Faelle ohne genug genaue Adresse oder nur mit Parzellenangabe
+- Fälle ohne genug genaue Adresse oder nur mit Parzellenangabe
 - fachliche Endbeurteilung
 - interne Priorisierung, Notizen und Kommentare
 
@@ -62,13 +62,13 @@ Als Orientierung dienten offizielle, zurueckhaltende Webmuster aus dem Umfeld vo
 
 ### 1. Login
 
-Die Anwendung trennt internen Zugang und Registrierung klar. Benutzer melden sich mit Benutzername und Passwort an; neue Konten brauchen einen Registrierungsschluessel.
+Die Anwendung trennt internen Zugang und Registrierung klar. Benutzer melden sich mit Benutzername und Passwort an; neue Konten brauchen einen Registrierungsschlüssel.
 
 ![Login](screenshots/01-login.png)
 
 ### 2. Arbeitsliste
 
-Die Standardansicht ist auf aktuelle und offene Faelle reduziert. Suche, Filter und Schnellauswahl stehen oben; links steht die Arbeitsliste, rechts die Bearbeitung des gewaehlten Falls.
+Die Standardansicht ist auf aktuelle und offene Fälle reduziert. Suche, Filter und Schnellauswahl stehen oben; links steht die Arbeitsliste, rechts die Bearbeitung des gewählten Falls.
 
 ![Arbeitsliste](screenshots/02-arbeitsliste.png)
 
@@ -80,7 +80,7 @@ Bei einem Schutztreffer zeigt die Karte Standort, rote Inventarobjekte und amtli
 
 ### 4. Verwaltungsbereich
 
-Das Master-Konto kann Schluessel, Passwoerter, Datenimporte, automatische Sync-Quellen und Gemeindequellen zentral verwalten. Der neue Verwaltungsbereich zeigt zusaetzlich Katalogreport, gemeinsame Quellen, Qualitaetsrating und Exportfunktionen.
+Das Master-Konto kann Schlüssel, Passwörter, Datenimporte, automatische Sync-Quellen und Gemeindequellen zentral verwalten. Der neue Verwaltungsbereich zeigt zusätzlich Katalogreport, gemeinsame Quellen, Qualitätsrating und Exportfunktionen.
 
 ![Verwaltung](screenshots/04-verwaltung.png)
 
@@ -96,15 +96,15 @@ Das Master-Konto kann Schluessel, Passwoerter, Datenimporte, automatische Sync-Q
 
 ### Rechte Seite
 
-- Stammdaten des ausgewaehlten Falls
+- Stammdaten des ausgewählten Falls
 - Karte
-- Einschaetzung
+- Einschätzung
 - interne Notiz
 - Team-Austausch
 
 ### Verwaltungsbereich
 
-- Registrierungsschluessel
+- Registrierungsschlüssel
 - Passwort-Reset
 - JSON-Import
 - automatische Sync-Quelle
@@ -115,10 +115,10 @@ Das Master-Konto kann Schluessel, Passwoerter, Datenimporte, automatische Sync-Q
 Die Anwendung setzt auf amtliche Quellen:
 
 - offizielle Gemeinde-Publikationsseiten
-- offizielle Gemeinde-PDFs fuer Baugesuche
-- AGIS-/ArcGIS-Layer des Kantons fuer Schutzpruefung
-- optional geschuetzte AGIS-/eBau-Quellen mit Token
-- offizieller Schweizer Suchdienst fuer Geokodierung
+- offizielle Gemeinde-PDFs für Baugesuche
+- AGIS-/ArcGIS-Layer des Kantons für Schutzprüfung
+- optional geschützte AGIS-/eBau-Quellen mit Token
+- offizieller Schweizer Suchdienst für Geokodierung
 
 Nicht als Hauptquelle vorgesehen:
 
@@ -129,16 +129,16 @@ Nicht als Hauptquelle vorgesehen:
 
 ## Test- und Abnahmestand
 
-Der Endstand wurde lokal geprueft:
+Der Endstand wurde lokal geprüft:
 
 - `42` automatisierte Tests erfolgreich
-- Syntaxpruefung von Frontend und Backend erfolgreich
-- manuelle UI-Pruefung mit Playwright MCP erfolgreich
+- Syntaxprüfung von Frontend und Backend erfolgreich
+- manuelle UI-Prüfung mit Playwright MCP erfolgreich
 - Screenshots stammen aus der laufenden lokalen Anwendung
 
 ## Produktive Bereitstellung
 
-Fuer den internen Pilot ist Railway mit Volume vorgesehen.
+Für den internen Pilot ist Railway mit Volume vorgesehen.
 
 Pflichtvariablen:
 
@@ -150,7 +150,7 @@ NODE_ENV=production
 PORT=3000
 ```
 
-Optional fuer eine echte geschuetzte Vollautomatik:
+Optional für eine echte geschützte Vollautomatik:
 
 ```env
 SYNC_SOURCE_URL=...
@@ -162,11 +162,11 @@ AUTO_SYNC_RUN_ON_START=true
 
 ## Offene technische Grenze
 
-Die Anwendung ist im internen Pilot einsatzbereit. Was fuer die volle kantonale Vollautomatik noch fehlt, ist kein Frontend- oder Importproblem mehr, sondern ein echter Zugriff auf eine geschuetzte Gesamtquelle oder ein offizieller periodischer Export.
+Die Anwendung ist im internen Pilot einsatzbereit. Was für die volle kantonale Vollautomatik noch fehlt, ist kein Frontend- oder Importproblem mehr, sondern ein echter Zugriff auf eine geschützte Gesamtquelle oder ein offizieller periodischer Export.
 
 ## Verwandte Dokumente
 
 - [README.md](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/README.md)
 - [benutzerhandbuch.md](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/benutzerhandbuch.md)
 - [systemdokumentation.md](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/systemdokumentation.md)
-- [pruefprotokoll.md](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/pruefprotokoll.md)
+- [prüfprotokoll.md](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/prüfprotokoll.md)

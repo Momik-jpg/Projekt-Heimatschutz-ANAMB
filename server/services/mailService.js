@@ -1,6 +1,6 @@
-// Schlanker SMTP-Versand ueber nodemailer. nodemailer wird bewusst erst beim
-// tatsaechlichen Senden dynamisch geladen, damit die Anwendung auch ohne aktive
-// E-Mail-Konfiguration (und in Tests mit injiziertem Versand) lauffaehig bleibt.
+// Schlanker SMTP-Versand über nodemailer. nodemailer wird bewusst erst beim
+// tatsächlichen Senden dynamisch geladen, damit die Anwendung auch ohne aktive
+// E-Mail-Konfiguration (und in Tests mit injiziertem Versand) lauffähig bleibt.
 function normalize(value) {
   return String(value ?? "").trim();
 }
@@ -41,7 +41,7 @@ export function createMailService({ getConfig, logger = console } = {}) {
       }
 
       if (!to) {
-        throw new Error("Kein Empfaenger angegeben.");
+        throw new Error("Kein Empfänger angegeben.");
       }
 
       const { default: nodemailer } = await import("nodemailer");

@@ -658,7 +658,7 @@ function buildReadableProjectType(item, { forList = false } = {}) {
     value = value.replace(/^Baugesuch,\s*/i, "");
   }
 
-  // Kein echtes Bauvorhaben, sondern ein Behoerden-/Seitentitel aus dem Scrape
+  // Kein echtes Bauvorhaben, sondern ein Behörden-/Seitentitel aus dem Scrape
   // (z. B. "Gemeinderat Birmenstorf", "Amtliche Publikationen") -> verwerfen.
   const headingNoisePattern =
     /^(?:gemeinderat|gemeinde(?:rat|kanzlei|verwaltung)?|stadt(?:rat|kanzlei|verwaltung)?|einwohnergemeinde|ortsb[üu]rgergemeinde|amtliche publikation(?:en)?|publikation(?:en)?|aktuelles|news|baugesuche?|baupublikation(?:en)?)\b/i;
@@ -676,7 +676,7 @@ function buildReadableProjectType(item, { forList = false } = {}) {
   if (
     /^[^\s]{1,14}$/.test(value) &&
     !/\d/.test(value) &&
-    !/(bau|umbau|neubau|anbau|sanierung|umnutzung|abbruch|ersatz|garage|carport|pool|dach|fenster|fassade|wärmepumpe|waermepumpe|photovoltaik|\bpv\b|gestaltungsplan|reklame|installation|terrasse|balkon|zaun|mauer|heizung)/i.test(value)
+    !/(bau|umbau|neubau|anbau|sanierung|umnutzung|abbruch|ersatz|garage|carport|pool|dach|fenster|fassade|wärmepumpe|wärmepumpe|photovoltaik|\bpv\b|gestaltungsplan|reklame|installation|terrasse|balkon|zaun|mauer|heizung)/i.test(value)
   ) {
     value = extractProjectFromDescription(item.description) || "";
   }
@@ -802,15 +802,15 @@ function humanizeAgisMatch(match, ambiguousAddress) {
     return "Kein Schutz";
   }
 
-  if (match === "ISOS-Fläche und Gebäude im Inventar" || match === "ISOS-Flaeche und Gebaeude im Inventar") {
+  if (match === "ISOS-Fläche und Gebäude im Inventar" || match === "ISOS-Fläche und Gebäude im Inventar") {
     return "Gebäude + Gebiet";
   }
 
-  if (match === "Treffer im Gebäudeinventar" || match === "Treffer im Gebaeudeinventar") {
+  if (match === "Treffer im Gebäudeinventar" || match === "Treffer im Gebäudeinventar") {
     return "Gebäude geschützt";
   }
 
-  if (match === "Treffer in ISOS-Fläche" || match === "Treffer in ISOS-Flaeche") {
+  if (match === "Treffer in ISOS-Fläche" || match === "Treffer in ISOS-Fläche") {
     return "Gebiet geschützt";
   }
 
@@ -822,11 +822,11 @@ function humanizeAgisMatch(match, ambiguousAddress) {
 }
 
 function humanizeAgisLayer(layer) {
-  if (layer === "Gebäude im Inventar" || layer === "Gebaeude im Inventar") {
+  if (layer === "Gebäude im Inventar" || layer === "Gebäude im Inventar") {
     return "Geschütztes Gebäude";
   }
 
-  if (layer === "ISOS-Fläche" || layer === "ISOS-Flaeche") {
+  if (layer === "ISOS-Fläche" || layer === "ISOS-Fläche") {
     return "Geschützte Umgebung";
   }
 
@@ -1088,7 +1088,7 @@ function isWorklistEligibleCase(item) {
 }
 
 function buildVisibleItems(items) {
-  // "Alle / Archiv" zeigt jeden erfassten Fall, auch ueberfaellige und aeltere,
+  // "Alle / Archiv" zeigt jeden erfassten Fall, auch überfällige und aeltere,
   // ohne die Arbeitslisten-Eingrenzung.
   if (getActiveQuickFilters().includes("archive")) {
     return applyQuickFilter(items);
@@ -2890,7 +2890,7 @@ function bindEvents() {
 
         elements.masterSetupKey.value = "";
         elements.masterSetupPassword.value = "";
-        setMasterSetupSuccess(payload.message ?? "Master-Passwort wurde gesetzt. Sie koennen sich jetzt anmelden.");
+        setMasterSetupSuccess(payload.message ?? "Master-Passwort wurde gesetzt. Sie können sich jetzt anmelden.");
         elements.loginUsername.value = "master";
         focusWithoutScroll(elements.loginPassword);
         showToast("Master-Passwort wurde gesetzt.");
@@ -2920,7 +2920,7 @@ function bindEvents() {
         });
 
         setForgotPasswordSuccess(
-          payload.message ?? "Falls eine E-Mail hinterlegt ist, wurde ein Reset-Schluessel versendet."
+          payload.message ?? "Falls eine E-Mail hinterlegt ist, wurde ein Reset-Schlüssel versendet."
         );
         focusWithoutScroll(elements.resetPasswordKey);
       });
@@ -2947,9 +2947,9 @@ function bindEvents() {
 
         elements.resetPasswordKey.value = "";
         elements.resetPasswordValue.value = "";
-        setResetPasswordSuccess(payload.message ?? "Passwort wurde gesetzt. Sie koennen sich jetzt anmelden.");
+        setResetPasswordSuccess(payload.message ?? "Passwort wurde gesetzt. Sie können sich jetzt anmelden.");
         focusWithoutScroll(elements.loginPassword);
-        showToast("Passwort wurde zurueckgesetzt.");
+        showToast("Passwort wurde zurückgesetzt.");
       });
     } catch (error) {
       setResetPasswordError(error.message);

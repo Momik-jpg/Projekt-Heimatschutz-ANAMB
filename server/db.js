@@ -322,14 +322,14 @@ function insertSeedRecords(db, items, syncedAt) {
 }
 
 // Sperrt ein Konto mit einem unbrauchbaren Zufallspasswort. Wird verwendet, wenn
-// fuer ein Konto kein Passwort konfiguriert ist (z. B. das Master-Konto vor der
+// für ein Konto kein Passwort konfiguriert ist (z. B. das Master-Konto vor der
 // Ersteinrichtung per Setup-Key).
 function lockedPasswordRecord() {
   return createUserPasswordRecord(randomBytes(32).toString("hex"));
 }
 
-// Fuegt eine Spalte nur hinzu, wenn sie in einer bestehenden DB noch fehlt
-// (CREATE TABLE IF NOT EXISTS aendert vorhandene Tabellen nicht).
+// Fügt eine Spalte nur hinzu, wenn sie in einer bestehenden DB noch fehlt
+// (CREATE TABLE IF NOT EXISTS ändert vorhandene Tabellen nicht).
 function ensureColumn(db, table, column, definition) {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all();
 
@@ -722,7 +722,7 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
         address LIKE 'Januar 20%'
         OR address LIKE 'Februar 20%'
         OR address LIKE 'März 20%'
-        OR address LIKE 'Maerz 20%'
+        OR address LIKE 'März 20%'
         OR address LIKE 'April 20%'
         OR address LIKE 'Mai 20%'
         OR address LIKE 'Juni 20%'

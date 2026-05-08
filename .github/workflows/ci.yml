@@ -26,7 +26,7 @@ jobs:
       - name: Run tests
         run: npm test
 
-      # Sicherheitspruefung der Abhaengigkeiten. Bricht den Build nur bei
+      # Sicherheitsprüfung der Abhängigkeiten. Bricht den Build nur bei
       # hohen/kritischen Schwachstellen ab; reine Audit-Infos blockieren nicht.
       - name: Security audit
         run: npm audit --audit-level=high

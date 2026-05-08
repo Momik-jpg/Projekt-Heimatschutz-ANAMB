@@ -454,9 +454,9 @@ export function createApplicationsRepository(db) {
       }
     },
 
-    // Ablaufdatum / Aufbewahrung: loescht unberuehrte Faelle, deren Auflagefrist
-    // laenger als retentionDays zurueckliegt. Vom Team bearbeitete Faelle (Status
-    // ungleich "new", mit Notiz, Zustaendiger oder Kommentar) bleiben erhalten.
+    // Ablaufdatum / Aufbewahrung: löscht unberührte Fälle, deren Auflagefrist
+    // länger als retentionDays zurückliegt. Vom Team bearbeitete Fälle (Status
+    // ungleich "new", mit Notiz, Zuständiger oder Kommentar) bleiben erhalten.
     pruneExpiredApplications({ retentionDays = 90, referenceDate = new Date() } = {}) {
       const days = Number(retentionDays);
 

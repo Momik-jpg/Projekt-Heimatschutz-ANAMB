@@ -1264,7 +1264,7 @@ td {
   overflow: visible;
 }
 
-/* Sticky muss auf <thead> liegen, sonst loest sich der Kopf in
+/* Sticky muss auf <thead> liegen, sonst löst sich der Kopf in
    Chromium/Edge/Chrome beim Scrollen der Liste und scrollt mit weg. */
 .list-panel thead {
   position: sticky;
@@ -1279,7 +1279,7 @@ th {
   z-index: 2;
   /* Deckend, damit beim Scrollen keine Zeile durch den Kopf scheint. Der
      box-shadow deckt die Zeilenluecke unter dem Kopf und (nach oben) den
-     schmalen Streifen ueber dem fixierten Kopf. */
+     schmalen Streifen über dem fixierten Kopf. */
   background: var(--panel-strong);
   box-shadow: 0 6px 0 var(--panel-strong), 0 -10px 0 var(--panel-strong);
   color: var(--ink-500);
@@ -3041,7 +3041,7 @@ body.dark tbody tr:hover td,
 body.dark .municipality-source-row:hover { background: rgba(70, 150, 132, 0.12); }
 
 /* Aktiver Schnellfilter muss auch im Dunkeln klar erkennbar bleiben
-   (Dark-Override ueberschreibt sonst die .active-Hervorhebung). */
+   (Dark-Override überschreibt sonst die .active-Hervorhebung). */
 body.dark .quick-filter-button.active {
   background: var(--brand-500);
   color: #fff;

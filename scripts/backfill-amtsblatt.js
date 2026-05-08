@@ -191,10 +191,10 @@ try {
     .get();
 
   console.log(
-    `[${new Date().toLocaleTimeString("de-CH")}] Seitenabrufe: ${requestCount}, hoechste Seite: ${highestPage}, Laufzeit: ${formatElapsed()}`
+    `[${new Date().toLocaleTimeString("de-CH")}] Seitenabrufe: ${requestCount}, höchste Seite: ${highestPage}, Laufzeit: ${formatElapsed()}`
   );
   console.log("Amtsblatt-Backfill fertig.");
-  console.log(`Neu: ${importedCount}, aktualisiert: ${updatedCount}, uebersprungen: ${skippedCount}, fehlgeschlagene Seiten: ${failedPages}`);
+  console.log(`Neu: ${importedCount}, aktualisiert: ${updatedCount}, übersprungen: ${skippedCount}, fehlgeschlagene Seiten: ${failedPages}`);
   console.log(`Roh-Publikationen gelesen: ${rawPublicationCount}`);
   console.log(`DB nachher: ${afterTotal} total, Amtsblatt: ${amtsblattTotal}`);
   console.log(`Amtsblatt-Zeitraum: ${dateRange.minDate ?? "-"} bis ${dateRange.maxDate ?? "-"}`);

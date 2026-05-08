@@ -45,7 +45,7 @@ export function createAuditLogRepository(db) {
           String(ip ?? "")
         );
       } catch {
-        // Logging darf den Ablauf nicht stoeren.
+        // Logging darf den Ablauf nicht stören.
       }
     },
 

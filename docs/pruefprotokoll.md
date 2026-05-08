@@ -2,15 +2,15 @@
 
 ## Stand
 
-Letzte Gesamtpruefung:
+Letzte Gesamtprüfung:
 - 23.03.2026
 
-Gepruefte Umgebung:
+Geprüfte Umgebung:
 - lokal unter `http://localhost:3000`
 
 ## Automatisierte Prüfungen
 
-Ausgefuehrt:
+Ausgeführt:
 
 ```bash
 npm test
@@ -23,30 +23,30 @@ Ergebnis:
 - 0 Tests fehlgeschlagen
 
 Wichtige abgedeckte Bereiche:
-- geschuetzte API-Endpunkte erfordern Login
-- Produktionsstart blockiert Platzhalter-Passwoerter
-- Registrierungen funktionieren nur mit gueltigem Schluessel
-- Registrierungsschluessel werden nach erster Nutzung verbraucht
-- Passwort-Reset fuer Teamkonten funktioniert
-- Sitzungen bleiben nach Server-Neustart gueltig
+- geschützte API-Endpunkte erfordern Login
+- Produktionsstart blockiert Platzhalter-Passwörter
+- Registrierungen funktionieren nur mit gültigem Schlüssel
+- Registrierungsschlüssel werden nach erster Nutzung verbraucht
+- Passwort-Reset für Teamkonten funktioniert
+- Sitzungen bleiben nach Server-Neustart gültig
 - JSON-Import offizieller Exportdaten funktioniert
 - automatische Sync-Quelle kann gespeichert werden
 - Gemeindequellen aller Aargauer Gemeinden werden bereitgestellt
 - normalisierter Gemeinden-/Quellenkatalog liefert 196 Gemeinden, Ratings und Shared Sources
-- JSON- und CSV-Export fuer den Katalog funktionieren
+- JSON- und CSV-Export für den Katalog funktionieren
 - Gemeindeimporte bevorzugen offizielle Detailseiten
-- allgemeine Archiv-, News- und unzuverlaessige Seitentitel werden nicht als Baugesuche uebernommen
-- Adressen und Parzellen werden ueber den offiziellen Schweizer Suchdienst geokodiert
+- allgemeine Archiv-, News- und unzuverlässige Seitentitel werden nicht als Baugesuche übernommen
+- Adressen und Parzellen werden über den offiziellen Schweizer Suchdienst geokodiert
 - AGIS-Endpunkt liefert direkte Treffer und Kontextzonen
-- geschuetzte AGIS-/ArcGIS-Quellen koennen mit Token synchronisiert werden
-- direkte amtliche PDF-Quellen koennen als eigene Quelle importiert werden
+- geschützte AGIS-/ArcGIS-Quellen können mit Token synchronisiert werden
+- direkte amtliche PDF-Quellen können als eigene Quelle importiert werden
 - HTML-/XML-Quellen duerfen auf amtliche Publikations-PDFs verlinken, die danach inhaltlich ausgewertet werden
 
 ## Manuelle Prüfungen
 
 ### Login und Sitzung
 
-Geprueft:
+Geprüft:
 - Login-Fenster erscheint
 - Login mit `master` funktioniert lokal
 - Abmelden funktioniert
@@ -54,45 +54,45 @@ Geprueft:
 
 ### Arbeitsliste
 
-Geprueft:
-- Standardansicht zeigt nur aktuelle und offene Faelle
-- Schnellfilter koennen kombiniert werden
+Geprüft:
+- Standardansicht zeigt nur aktuelle und offene Fälle
+- Schnellfilter können kombiniert werden
 - Suche und Gemeindefilter funktionieren
-- ueberfaellige Faelle erscheinen nicht mehr faelschlich in der Standard-Arbeitsliste
+- überfällige Fälle erscheinen nicht mehr fälschlich in der Standard-Arbeitsliste
 
 ### Detailansicht
 
-Geprueft:
+Geprüft:
 - Auswahl eines Falls aktualisiert die rechte Seite
-- `Adresse pruefen` erscheint nur bei genauer Adresse ohne automatische Zuordnung
-- `Manuell pruefen` bleibt fuer echte Restfaelle mit unklarer offizieller Standortangabe
+- `Adresse prüfen` erscheint nur bei genauer Adresse ohne automatische Zuordnung
+- `Manuell prüfen` bleibt für echte Restfälle mit unklarer offizieller Standortangabe
 - Kommentare sind im leeren Zustand nicht mehr als streuender UI-Rest sichtbar
 
 ### Karte und AGIS
 
-Geprueft:
+Geprüft:
 - falsche Atlantik-Koordinaten wurden behoben
 - Schweizer Koordinaten werden korrekt interpretiert
 - Inventarobjekte werden rot dargestellt
 - amtliche Kontextzonen werden unterschieden dargestellt
-- externe AGIS-Kartenlinks oeffnen den passenden Ort besser als vorher
+- externe AGIS-Kartenlinks öffnen den passenden Ort besser als vorher
 
-Beispielpruefungen:
+Beispielprüfungen:
 - `Kölliken, Schönenwerderstrasse 39`: Kontextzonen und Inventarpunkte sichtbar
 - `Spreitenbach, Bahnhofstrasse 73`: Schweizer Standort statt falscher Weltkarte
-- Faelle ohne exakte Koordinaten zeigen keinen falschen Marker, sondern einen klaren Hinweis
+- Fälle ohne exakte Koordinaten zeigen keinen falschen Marker, sondern einen klaren Hinweis
 
 ### Importlogik
 
-Geprueft:
-- generische Gemeinde-News, Events und Social-Media-Eintraege werden nicht mehr als Baugesuche uebernommen
+Geprüft:
+- generische Gemeinde-News, Events und Social-Media-Einträge werden nicht mehr als Baugesuche übernommen
 - offizielle Detailseiten und Publikations-PDFs werden bevorzugt
 - direkte PDF-Quellen und PDF-Detailseiten werden korrekt verarbeitet
 - alte offensichtliche Fehlimporte werden bereinigt
 
 ## UI-Sichtprüfung mit MCP
 
-Zusätzlich geprueft mit Playwright MCP:
+Zusätzlich geprüft mit Playwright MCP:
 - Login-Ansicht
 - Arbeitsliste
 - Detailansicht mit AGIS-Karte
@@ -106,25 +106,25 @@ Die Screenshots dazu liegen in:
 
 ## Behobene Probleme im aktuellen Endstand
 
-1. Allgemeine Gemeinde-News und Events wurden faelschlich als Baugesuche uebernommen.
+1. Allgemeine Gemeinde-News und Events wurden fälschlich als Baugesuche übernommen.
    Behoben:
-   - strengere Parserlogik fuer offizielle Detailseiten und Publikations-PDFs
+   - strengere Parserlogik für offizielle Detailseiten und Publikations-PDFs
 
-2. Fristen wurden faelschlich als ueberfaellig dargestellt.
+2. Fristen wurden fälschlich als überfällig dargestellt.
    Behoben:
    - Berechnung gegen das echte aktuelle Datum
-   - Standard-Arbeitsliste blendet ueberfaellige Standardfaelle aus
+   - Standard-Arbeitsliste blendet überfällige Standardfälle aus
 
 3. Einzelne Schweizer Koordinaten landeten im Atlantik.
    Behoben:
    - bessere Erkennung von Nord/Ost versus Ost/Nord
-   - Plausibilitaetspruefung fuer Schweizer Koordinaten
+   - Plausibilitätsprüfung für Schweizer Koordinaten
 
-4. Externe AGIS-Kartenlinks oeffneten nicht klar genug am richtigen Standort.
+4. Externe AGIS-Kartenlinks öffneten nicht klar genug am richtigen Standort.
    Behoben:
-   - verbesserte Layer- und `info`-Parameter fuer die offizielle Kartenansicht
+   - verbesserte Layer- und `info`-Parameter für die offizielle Kartenansicht
 
-5. Die Detailansicht war ueberladen.
+5. Die Detailansicht war überladen.
    Behoben:
    - kompaktere Bewertung
    - ausgeblendete Nebendetails
@@ -132,6 +132,6 @@ Die Screenshots dazu liegen in:
 
 ## Bekannte Restgrenzen
 
-- Einige offizielle Publikationen enthalten weiterhin nur Parzellen oder unvollstaendige Adressen.
-- Solche Faelle bleiben korrekt in `Adresse pruefen` oder `Manuell pruefen`.
-- Fuer eine echte vollautomatische kantonale Gesamtquelle braucht die App weiterhin einen echten Zugriff auf eine geschuetzte Quelle oder einen Export.
+- Einige offizielle Publikationen enthalten weiterhin nur Parzellen oder unvollständige Adressen.
+- Solche Fälle bleiben korrekt in `Adresse prüfen` oder `Manuell prüfen`.
+- Für eine echte vollautomatische kantonale Gesamtquelle braucht die App weiterhin einen echten Zugriff auf eine geschützte Quelle oder einen Export.
