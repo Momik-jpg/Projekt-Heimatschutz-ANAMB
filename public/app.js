@@ -102,6 +102,8 @@ const elements = {
   loginUsername: document.querySelector("#loginUsername"),
   rememberUsernameCheckbox: document.querySelector("#rememberUsernameCheckbox"),
   loginPassword: document.querySelector("#loginPassword"),
+  loginTotpField: document.querySelector("#loginTotpField"),
+  loginTotp: document.querySelector("#loginTotp"),
   loginButton: document.querySelector("#loginButton"),
   loginError: document.querySelector("#loginError"),
   registerForm: document.querySelector("#registerForm"),
@@ -141,6 +143,17 @@ const elements = {
   adminUserSelect: document.querySelector("#adminUserSelect"),
   adminPasswordResetInput: document.querySelector("#adminPasswordResetInput"),
   adminPasswordResetButton: document.querySelector("#adminPasswordResetButton"),
+  twoFactorStatus: document.querySelector("#twoFactorStatus"),
+  twoFactorSetupButton: document.querySelector("#twoFactorSetupButton"),
+  twoFactorSetupArea: document.querySelector("#twoFactorSetupArea"),
+  twoFactorSecret: document.querySelector("#twoFactorSecret"),
+  twoFactorCode: document.querySelector("#twoFactorCode"),
+  twoFactorEnableButton: document.querySelector("#twoFactorEnableButton"),
+  twoFactorDisableArea: document.querySelector("#twoFactorDisableArea"),
+  twoFactorDisableCode: document.querySelector("#twoFactorDisableCode"),
+  twoFactorDisableButton: document.querySelector("#twoFactorDisableButton"),
+  twoFactorError: document.querySelector("#twoFactorError"),
+  twoFactorSuccess: document.querySelector("#twoFactorSuccess"),
   manualImportJsonInput: document.querySelector("#manualImportJsonInput"),
   manualImportButton: document.querySelector("#manualImportButton"),
   syncSourceTypeSelect: document.querySelector("#syncSourceTypeSelect"),
@@ -1797,9 +1810,10 @@ async function requestJson(url, options = {}) {
 
   if (!response.ok) {
     let message = "Request failed";
+    let payload = null;
 
     try {
-      const payload = await response.json();
+      payload = await response.json();
       message = payload.error ?? message;
     } catch {
       message = await response.text();
@@ -1811,7 +1825,10 @@ async function requestJson(url, options = {}) {
       focusWithoutScroll(elements.loginUsername);
     }
 
-    throw new Error(message);
+    const requestError = new Error(message);
+    requestError.status = response.status;
+    requestError.payload = payload;
+    throw requestError;
   }
 
   return response.json();
@@ -2772,8 +2789,44 @@ async function showAuthenticatedApp() {
   await refreshAll();
   await loadRegistrationKeys();
   await loadAdminUsers();
+  await loadTwoFactorStatus();
   await loadMunicipalitySources();
   await loadSyncSettings();
+}
+
+function setTwoFactorError(message = "") {
+  elements.twoFactorError.textContent = message;
+  elements.twoFactorError.classList.toggle("hidden", !message);
+}
+
+function setTwoFactorSuccess(message = "") {
+  elements.twoFactorSuccess.textContent = message;
+  elements.twoFactorSuccess.classList.toggle("hidden", !message);
+}
+
+function renderTwoFactorStatus(enabled) {
+  elements.twoFactorStatus.textContent = enabled
+    ? "Status: aktiviert. Das Master-Login verlangt einen Code aus der Authenticator-App."
+    : "Status: nicht aktiviert.";
+  elements.twoFactorSetupButton.classList.toggle("hidden", enabled);
+  elements.twoFactorSetupArea.classList.add("hidden");
+  elements.twoFactorDisableArea.classList.toggle("hidden", !enabled);
+}
+
+async function loadTwoFactorStatus() {
+  if (!isMasterUser()) {
+    return;
+  }
+
+  setTwoFactorError("");
+  setTwoFactorSuccess("");
+
+  try {
+    const payload = await requestJson("/api/admin/2fa/status");
+    renderTwoFactorStatus(Boolean(payload.enabled));
+  } catch {
+    // 2FA-Status ist nicht kritisch fuer den Rest der Oberflaeche.
+  }
 }
 
 async function loadDashboard() {
@@ -2823,12 +2876,20 @@ function bindEvents() {
 
     try {
       await withBusyState(elements.loginButton, "Anmelden...", async () => {
+        const body = {
+          username: elements.loginUsername.value.trim().toLowerCase(),
+          password: elements.loginPassword.value
+        };
+
+        const totpCode = elements.loginTotp.value.trim();
+
+        if (totpCode) {
+          body.totp = totpCode;
+        }
+
         const payload = await requestJson("/api/auth/login", {
           method: "POST",
-          body: JSON.stringify({
-            username: elements.loginUsername.value.trim().toLowerCase(),
-            password: elements.loginPassword.value
-          }),
+          body: JSON.stringify(body),
           skipSessionReset: true
         });
 
@@ -2836,9 +2897,19 @@ function bindEvents() {
         setAuthenticatedUser(payload.user);
         await showAuthenticatedApp();
         elements.loginPassword.value = "";
+        elements.loginTotp.value = "";
+        elements.loginTotpField.classList.add("hidden");
         showToast(`Angemeldet als ${payload.user.displayName}.`);
       });
     } catch (error) {
+      // Master-Konto mit aktivierter 2FA: Code-Feld einblenden und nachfordern.
+      if (error?.payload?.totpRequired) {
+        elements.loginTotpField.classList.remove("hidden");
+        focusWithoutScroll(elements.loginTotp);
+        setLoginError(error.message);
+        return;
+      }
+
       setLoginError(error.message);
     }
   });
@@ -3040,6 +3111,64 @@ function bindEvents() {
         });
       } catch (error) {
         showToast(error.message);
+      }
+    });
+
+    elements.twoFactorSetupButton.addEventListener("click", async () => {
+      setTwoFactorError("");
+      setTwoFactorSuccess("");
+
+      try {
+        await withBusyState(elements.twoFactorSetupButton, "Wird vorbereitet...", async () => {
+          const payload = await requestJson("/api/admin/2fa/setup", { method: "POST" });
+          elements.twoFactorSecret.textContent = payload.secret;
+          elements.twoFactorSetupArea.classList.remove("hidden");
+          focusWithoutScroll(elements.twoFactorCode);
+        });
+      } catch (error) {
+        setTwoFactorError(error.message);
+      }
+    });
+
+    elements.twoFactorEnableButton.addEventListener("click", async () => {
+      setTwoFactorError("");
+      setTwoFactorSuccess("");
+
+      try {
+        await withBusyState(elements.twoFactorEnableButton, "Wird aktiviert...", async () => {
+          const payload = await requestJson("/api/admin/2fa/enable", {
+            method: "POST",
+            body: JSON.stringify({ code: elements.twoFactorCode.value.trim() })
+          });
+
+          elements.twoFactorCode.value = "";
+          renderTwoFactorStatus(true);
+          setTwoFactorSuccess(payload.message ?? "Zwei-Faktor-Authentifizierung ist aktiviert.");
+          showToast("2FA aktiviert.");
+        });
+      } catch (error) {
+        setTwoFactorError(error.message);
+      }
+    });
+
+    elements.twoFactorDisableButton.addEventListener("click", async () => {
+      setTwoFactorError("");
+      setTwoFactorSuccess("");
+
+      try {
+        await withBusyState(elements.twoFactorDisableButton, "Wird deaktiviert...", async () => {
+          const payload = await requestJson("/api/admin/2fa/disable", {
+            method: "POST",
+            body: JSON.stringify({ code: elements.twoFactorDisableCode.value.trim() })
+          });
+
+          elements.twoFactorDisableCode.value = "";
+          renderTwoFactorStatus(false);
+          setTwoFactorSuccess(payload.message ?? "Zwei-Faktor-Authentifizierung ist deaktiviert.");
+          showToast("2FA deaktiviert.");
+        });
+      } catch (error) {
+        setTwoFactorError(error.message);
       }
     });
 

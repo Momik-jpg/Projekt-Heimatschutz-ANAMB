@@ -61,6 +61,11 @@
               <input id="loginPassword" name="password" type="password" placeholder="Passwort eingeben" autocomplete="current-password">
             </label>
 
+            <label id="loginTotpField" class="hidden">
+              <span>2FA-Code (Authenticator-App)</span>
+              <input id="loginTotp" name="totp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-stelliger Code">
+            </label>
+
             <button id="loginButton" type="submit">Anmelden</button>
             <p class="auth-note muted">
               Passwort vergessen?
@@ -295,6 +300,41 @@
               >
             </label>
             <button id="adminPasswordResetButton" type="button">Passwort setzen</button>
+          </div>
+        </section>
+
+        <section class="master-admin-section">
+          <div class="panel-heading">
+            <div>
+              <h3>Zwei-Faktor-Authentifizierung</h3>
+              <p class="detail-helper-text">Zusätzlicher Schutz für das Master-Login per Authenticator-App (TOTP).</p>
+            </div>
+          </div>
+
+          <div class="master-key-controls">
+            <p id="twoFactorStatus" class="muted">Status wird geladen …</p>
+            <button id="twoFactorSetupButton" type="button">2FA einrichten</button>
+
+            <div id="twoFactorSetupArea" class="hidden">
+              <p class="detail-helper-text">Diesen Schlüssel in der Authenticator-App (z. B. Google/Microsoft Authenticator) als Konto hinzufügen:</p>
+              <code id="twoFactorSecret" class="two-factor-secret"></code>
+              <label>
+                <span>Code aus der App</span>
+                <input id="twoFactorCode" name="twoFactorCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-stelliger Code">
+              </label>
+              <button id="twoFactorEnableButton" type="button">Aktivieren</button>
+            </div>
+
+            <div id="twoFactorDisableArea" class="hidden">
+              <label>
+                <span>Code aus der App zum Deaktivieren</span>
+                <input id="twoFactorDisableCode" name="twoFactorDisableCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-stelliger Code">
+              </label>
+              <button id="twoFactorDisableButton" class="ghost" type="button">2FA deaktivieren</button>
+            </div>
+
+            <p id="twoFactorError" class="auth-error hidden" role="alert"></p>
+            <p id="twoFactorSuccess" class="auth-success hidden" role="status"></p>
           </div>
         </section>
 

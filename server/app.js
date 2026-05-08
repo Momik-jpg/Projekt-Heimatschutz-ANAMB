@@ -40,6 +40,7 @@ import {
 } from "./repository/applicationsRepository.js";
 import { createMailService } from "./services/mailService.js";
 import { createMaintenanceService } from "./services/maintenanceService.js";
+import { buildOtpauthUri, generateTotpSecret, verifyTotp } from "./services/totp.js";
 
 const gzipAsync = promisify(gzip);
 
@@ -938,6 +939,9 @@ export function createApp(options = {}) {
     });
   }
   const masterPasswordConfiguredSettingKey = "master_password_configured";
+  const masterTotpEnabledSettingKey = "master_totp_enabled";
+  const masterTotpSecretSettingKey = "master_totp_secret";
+  const masterTotpPendingSecretSettingKey = "master_totp_pending_secret";
 
   function getMasterUserId() {
     const row = db
@@ -1215,6 +1219,24 @@ export function createApp(options = {}) {
       });
       response.status(401).json({ error: "Benutzer oder Passwort stimmen nicht." });
       return;
+    }
+
+    // Zweiter Faktor (TOTP) fuer das Master-Konto, falls aktiviert.
+    if (isMasterUser(user) && settingsRepository.getValue(masterTotpEnabledSettingKey) === "1") {
+      const totpCode = String(request.body?.totp ?? "").trim();
+      const secret = settingsRepository.getValue(masterTotpSecretSettingKey);
+
+      if (!totpCode) {
+        response.status(401).json({ error: "2FA-Code erforderlich.", totpRequired: true });
+        return;
+      }
+
+      if (!secret || !verifyTotp(secret, totpCode)) {
+        loginRateLimiter?.recordFailure(rateLimitKey);
+        recordAudit("auth.login_2fa_failed", request, { actorUserId: user.id, actorName: user.displayName });
+        response.status(401).json({ error: "2FA-Code ist ungültig.", totpRequired: true });
+        return;
+      }
     }
 
     loginRateLimiter?.recordSuccess(rateLimitKey);
@@ -1682,6 +1704,84 @@ export function createApp(options = {}) {
     response.json({
       items: auditLogRepository.listRecent(200)
     });
+  });
+
+  app.get("/api/admin/2fa/status", (request, response) => {
+    if (!isMasterUser(request.currentUser)) {
+      response.status(403).json({ error: "Nur das Master-Konto darf die 2FA verwalten." });
+      return;
+    }
+
+    response.json({ enabled: settingsRepository.getValue(masterTotpEnabledSettingKey) === "1" });
+  });
+
+  app.post("/api/admin/2fa/setup", (request, response) => {
+    if (!isMasterUser(request.currentUser)) {
+      response.status(403).json({ error: "Nur das Master-Konto darf die 2FA verwalten." });
+      return;
+    }
+
+    const secret = generateTotpSecret();
+    settingsRepository.setValue(masterTotpPendingSecretSettingKey, secret);
+
+    response.json({
+      secret,
+      otpauthUri: buildOtpauthUri({ secret, account: request.currentUser.username ?? "master" })
+    });
+  });
+
+  app.post("/api/admin/2fa/enable", (request, response) => {
+    if (!isMasterUser(request.currentUser)) {
+      response.status(403).json({ error: "Nur das Master-Konto darf die 2FA verwalten." });
+      return;
+    }
+
+    const code = String(request.body?.code ?? "").trim();
+    const pendingSecret = settingsRepository.getValue(masterTotpPendingSecretSettingKey);
+
+    if (!pendingSecret) {
+      response.status(400).json({ error: "Bitte zuerst die Einrichtung starten." });
+      return;
+    }
+
+    if (!verifyTotp(pendingSecret, code)) {
+      response.status(400).json({ error: "Der Code ist ungültig. Bitte erneut versuchen." });
+      return;
+    }
+
+    settingsRepository.setValue(masterTotpSecretSettingKey, pendingSecret);
+    settingsRepository.setValue(masterTotpEnabledSettingKey, "1");
+    settingsRepository.deleteByKey(masterTotpPendingSecretSettingKey);
+
+    recordAudit("admin.2fa.enabled", request, { target: "master" });
+    response.json({ enabled: true, message: "Zwei-Faktor-Authentifizierung ist aktiviert." });
+  });
+
+  app.post("/api/admin/2fa/disable", (request, response) => {
+    if (!isMasterUser(request.currentUser)) {
+      response.status(403).json({ error: "Nur das Master-Konto darf die 2FA verwalten." });
+      return;
+    }
+
+    if (settingsRepository.getValue(masterTotpEnabledSettingKey) !== "1") {
+      response.json({ enabled: false });
+      return;
+    }
+
+    const code = String(request.body?.code ?? "").trim();
+    const secret = settingsRepository.getValue(masterTotpSecretSettingKey);
+
+    if (!secret || !verifyTotp(secret, code)) {
+      response.status(400).json({ error: "Der Code ist ungültig. Bitte erneut versuchen." });
+      return;
+    }
+
+    settingsRepository.deleteByKey(masterTotpSecretSettingKey);
+    settingsRepository.deleteByKey(masterTotpEnabledSettingKey);
+    settingsRepository.deleteByKey(masterTotpPendingSecretSettingKey);
+
+    recordAudit("admin.2fa.disabled", request, { target: "master" });
+    response.json({ enabled: false, message: "Zwei-Faktor-Authentifizierung ist deaktiviert." });
   });
 
   app.get("/api/admin/sync-settings", (request, response) => {

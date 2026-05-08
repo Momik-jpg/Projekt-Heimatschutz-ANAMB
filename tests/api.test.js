@@ -12,6 +12,7 @@ import {
 } from "../server/app.js";
 import { createDatabase } from "../server/db.js";
 import { createApplicationsRepository } from "../server/repository/applicationsRepository.js";
+import { generateTotp } from "../server/services/totp.js";
 
 function createTestServer(options = {}) {
   const directory = options.directory ?? mkdtempSync(join(tmpdir(), "heimatschutz-aargau-"));
@@ -5370,4 +5371,109 @@ test("maintenance creates a SQLite backup file when enabled", async (context) =>
 
   const backups = readdirSync(backupDir).filter((name) => name.endsWith(".bak"));
   assert.ok(backups.length >= 1);
+});
+
+test("master 2FA can be enabled and is then required at login", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: "HouseisGood1999?"
+  });
+
+  // Einrichtung starten -> Secret erhalten.
+  const setup = await requestJson(testServer.baseUrl, "/api/admin/2fa/setup", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(setup.status, 200);
+  assert.ok(setup.payload.secret);
+  assert.match(setup.payload.otpauthUri, /^otpauth:\/\/totp\//);
+
+  // Falscher Code -> Aktivierung abgelehnt.
+  const wrongEnable = await requestJson(testServer.baseUrl, "/api/admin/2fa/enable", {
+    method: "POST",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({ code: "000000" })
+  });
+  assert.equal(wrongEnable.status, 400);
+
+  // Korrekter Code -> aktiviert.
+  const enable = await requestJson(testServer.baseUrl, "/api/admin/2fa/enable", {
+    method: "POST",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({ code: generateTotp(setup.payload.secret) })
+  });
+  assert.equal(enable.status, 200);
+  assert.equal(enable.payload.enabled, true);
+
+  const status = await requestJson(testServer.baseUrl, "/api/admin/2fa/status", {
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(status.payload.enabled, true);
+
+  // Login ohne Code -> 401 mit totpRequired.
+  const noCode = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "master", password: "HouseisGood1999?" })
+  });
+  assert.equal(noCode.status, 401);
+  assert.equal(noCode.payload.totpRequired, true);
+
+  // Login mit falschem Code -> 401.
+  const badCode = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "master", password: "HouseisGood1999?", totp: "000000" })
+  });
+  assert.equal(badCode.status, 401);
+
+  // Login mit korrektem Code -> 200.
+  const goodCode = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({
+      username: "master",
+      password: "HouseisGood1999?",
+      totp: generateTotp(setup.payload.secret)
+    })
+  });
+  assert.equal(goodCode.status, 200);
+
+  // Deaktivieren mit korrektem Code -> Login wieder ohne Code moeglich.
+  const disable = await requestJson(testServer.baseUrl, "/api/admin/2fa/disable", {
+    method: "POST",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({ code: generateTotp(setup.payload.secret) })
+  });
+  assert.equal(disable.status, 200);
+  assert.equal(disable.payload.enabled, false);
+
+  const afterDisable = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "master", password: "HouseisGood1999?" })
+  });
+  assert.equal(afterDisable.status, 200);
+});
+
+test("a normal team login is unaffected by master 2FA being available", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const cookie = await login(testServer.baseUrl);
+  assert.ok(cookie);
+
+  // Team-Konto darf 2FA nicht verwalten.
+  const forbidden = await requestJson(testServer.baseUrl, "/api/admin/2fa/setup", {
+    method: "POST",
+    headers: { Cookie: cookie }
+  });
+  assert.equal(forbidden.status, 403);
 });
