@@ -69,6 +69,7 @@ const schema = `
     username TEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL,
     role TEXT NOT NULL,
+    email TEXT NOT NULL DEFAULT '',
     password_salt TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     active INTEGER NOT NULL DEFAULT 1,
@@ -115,6 +116,16 @@ const schema = `
     user_id TEXT NOT NULL,
     key_hash TEXT NOT NULL,
     sent_to TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT DEFAULT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS password_reset_keys (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
     used_at TEXT DEFAULT NULL,
@@ -315,6 +326,16 @@ function insertSeedRecords(db, items, syncedAt) {
 // Ersteinrichtung per Setup-Key).
 function lockedPasswordRecord() {
   return createUserPasswordRecord(randomBytes(32).toString("hex"));
+}
+
+// Fuegt eine Spalte nur hinzu, wenn sie in einer bestehenden DB noch fehlt
+// (CREATE TABLE IF NOT EXISTS aendert vorhandene Tabellen nicht).
+function ensureColumn(db, table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+
+  if (!columns.some((entry) => entry.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
+  }
 }
 
 function insertSeedUsers(db, items, createdAt, { masterAccountPassword = "", defaultLoginPassword = "" } = {}) {
@@ -666,6 +687,7 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
 
   const db = new DatabaseSync(dbPath);
   db.exec(schema);
+  ensureColumn(db, "users", "email", "TEXT NOT NULL DEFAULT ''");
   db.exec(`
     UPDATE applications
     SET workflow_status = 'new'

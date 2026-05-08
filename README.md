@@ -22,8 +22,9 @@ Allgemeine News-, Event- oder Social-Media-Seiten sollen nicht als produktive Ha
 - Login fuer internes Team
 - Master-Konto fuer Verwaltung
 - Keine Passwoerter im Quellcode: das Master-Konto wird per Umgebungsvariable oder ueber einen per E-Mail zugestellten Einmal-Setup-Schluessel eingerichtet
-- Registrierung nur mit einmaligem Registrierungsschluessel
-- Passwort-Reset durch das Master-Konto
+- Registrierung nur mit einmaligem Registrierungsschluessel (optionale E-Mail fuer Self-Service)
+- Passwort-Reset durch das Master-Konto oder per Self-Service-Schluessel an die hinterlegte E-Mail
+- CSRF-Schutz, Audit-Log fuer Master-Aktionen, automatische Wartung (Cleanup + optionale SQLite-Backups)
 - Schutz gegen Passwort-Raten (Rate-Limiting), asynchrones Passwort-Hashing (scrypt), gzip-Kompression und gehaertete Security-Header (CSP, HSTS u. a.)
 - Arbeitsliste mit Suche, Filtern und Schnellauswahl
 - Detailansicht mit Karte, AGIS-Treffer und naechstem Schritt

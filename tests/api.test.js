@@ -52,7 +52,8 @@ function createTestServer(options = {}) {
         : process.env.DEFAULT_LOGIN_PASSWORD ?? "Heimat2026!",
     masterSetupEmail: options.masterSetupEmail,
     mailService: options.mailService,
-    onMasterSetupKey: options.onMasterSetupKey
+    onMasterSetupKey: options.onMasterSetupKey,
+    onPasswordResetKey: options.onPasswordResetKey
   });
 
   if (!options.keepSeededMunicipalitySourcesEnabled) {
@@ -5159,6 +5160,104 @@ test("a configured master password does not trigger the setup key flow", async (
     body: JSON.stringify({ username: "master", password: "MasterDirekt_2026!" })
   });
   assert.equal(masterLogin.status, 200);
+});
+
+test("self-service password reset by email works for accounts with an email", async (context) => {
+  const resetKeys = [];
+  const testServer = createTestServer({
+    onPasswordResetKey: ({ key, sentTo }) => {
+      resetKeys.push({ key, sentTo });
+    }
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  // Seed-Konten haben keine E-Mail; fuer den Test eine hinterlegen.
+  testServer.db
+    .prepare("UPDATE users SET email = 'lucia@example.test' WHERE username = 'lucia.vettori'")
+    .run();
+
+  const forgot = await requestJson(testServer.baseUrl, "/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori" })
+  });
+  assert.equal(forgot.status, 200);
+  assert.equal(forgot.payload.success, true);
+  assert.equal(resetKeys.length, 1);
+  assert.equal(resetKeys[0].sentTo, "lucia@example.test");
+  assert.match(resetKeys[0].key, /^HSA-RESET-/);
+
+  const reset = await requestJson(testServer.baseUrl, "/api/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ key: resetKeys[0].key, password: "NeuLucia_2026!" })
+  });
+  assert.equal(reset.status, 200);
+
+  const newLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "NeuLucia_2026!" })
+  });
+  assert.equal(newLogin.status, 200);
+
+  const oldLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
+  });
+  assert.equal(oldLogin.status, 401);
+
+  const reuse = await requestJson(testServer.baseUrl, "/api/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ key: resetKeys[0].key, password: "NochMal_2026!" })
+  });
+  assert.equal(reuse.status, 400);
+});
+
+test("forgot-password does not reveal whether an account or email exists", async (context) => {
+  const resetKeys = [];
+  const testServer = createTestServer({
+    onPasswordResetKey: ({ key }) => resetKeys.push(key)
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  // Unbekanntes Konto -> generische Erfolgsantwort, kein Key.
+  const unknown = await requestJson(testServer.baseUrl, "/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ username: "gibt.es.nicht" })
+  });
+  assert.equal(unknown.status, 200);
+  assert.equal(unknown.payload.success, true);
+
+  // Bekanntes Konto ohne E-Mail -> ebenfalls generisch, kein Key.
+  const noEmail = await requestJson(testServer.baseUrl, "/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ username: "david.huber" })
+  });
+  assert.equal(noEmail.status, 200);
+  assert.equal(noEmail.payload.success, true);
+
+  assert.equal(resetKeys.length, 0);
+});
+
+test("reset-password rejects an invalid key", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const response = await requestJson(testServer.baseUrl, "/api/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ key: "HSA-RESET-0000-0000-0000-0000", password: "Irgendwas_2026!" })
+  });
+  assert.equal(response.status, 400);
 });
 
 test("cross-origin state-changing requests are blocked by the CSRF guard", async (context) => {

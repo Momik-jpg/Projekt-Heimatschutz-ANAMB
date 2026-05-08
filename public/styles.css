@@ -532,6 +532,19 @@ h4 {
   border: 1px solid rgba(46, 125, 50, 0.24);
 }
 
+.link-button {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent, #2a6f97);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* =====================================================================
    Formularelemente
    ===================================================================== */

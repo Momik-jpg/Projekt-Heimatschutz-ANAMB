@@ -62,7 +62,11 @@
             </label>
 
             <button id="loginButton" type="submit">Anmelden</button>
-            <p class="auth-note muted">Falls Sie Ihr Passwort vergessen haben, setzt das Master-Konto ein neues.</p>
+            <p class="auth-note muted">
+              Passwort vergessen?
+              <button id="showForgotPasswordButton" type="button" class="link-button">Per E-Mail zuruecksetzen</button>
+              oder das Master-Konto setzt ein neues.
+            </p>
             <p id="loginError" class="auth-error hidden" role="alert"></p>
           </form>
 
@@ -80,6 +84,11 @@
             <label>
               <span>Benutzername</span>
               <input id="registerUsername" name="username" type="text" placeholder="Zum Beispiel: maria.beispiel" autocomplete="username">
+            </label>
+
+            <label>
+              <span>E-Mail (optional, fuer Passwort-Reset)</span>
+              <input id="registerEmail" name="email" type="email" placeholder="z. B. name@example.org" autocomplete="email">
             </label>
 
             <label>
@@ -117,6 +126,43 @@
             <p class="auth-note muted">Den Schluessel erhalten Sie per E-Mail an die hinterlegte Master-Adresse.</p>
             <p id="masterSetupError" class="auth-error hidden" role="alert"></p>
             <p id="masterSetupSuccess" class="auth-success hidden" role="status"></p>
+          </form>
+
+          <form id="forgotPasswordForm" class="auth-form auth-form-secondary hidden">
+            <div class="auth-form-header">
+              <h2>Passwort zuruecksetzen</h2>
+              <p class="muted">Wir senden einen Einmal-Schluessel an die fuer das Konto hinterlegte E-Mail-Adresse.</p>
+            </div>
+
+            <label>
+              <span>Benutzername</span>
+              <input id="forgotPasswordUsername" name="username" type="text" placeholder="z. B. lucia.vettori" autocomplete="username">
+            </label>
+
+            <button id="forgotPasswordButton" class="secondary" type="submit">Schluessel anfordern</button>
+            <p id="forgotPasswordError" class="auth-error hidden" role="alert"></p>
+            <p id="forgotPasswordSuccess" class="auth-success hidden" role="status"></p>
+          </form>
+
+          <form id="resetPasswordForm" class="auth-form auth-form-secondary hidden">
+            <div class="auth-form-header">
+              <h2>Neues Passwort setzen</h2>
+              <p class="muted">Schluessel aus der E-Mail eingeben und neues Passwort vergeben.</p>
+            </div>
+
+            <label>
+              <span>Reset-Schluessel</span>
+              <input id="resetPasswordKey" name="resetKey" type="text" placeholder="z. B. HSA-RESET-1A2B-3C4D-5E6F-7A8B" autocomplete="one-time-code">
+            </label>
+
+            <label>
+              <span>Neues Passwort</span>
+              <input id="resetPasswordValue" name="password" type="password" placeholder="Mindestens 8 Zeichen" autocomplete="new-password">
+            </label>
+
+            <button id="resetPasswordButton" class="secondary" type="submit">Neues Passwort speichern</button>
+            <p id="resetPasswordError" class="auth-error hidden" role="alert"></p>
+            <p id="resetPasswordSuccess" class="auth-success hidden" role="status"></p>
           </form>
         </div>
       </section>

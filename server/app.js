@@ -24,6 +24,10 @@ import {
   createMasterSetupKeysRepository,
   hashSetupKey
 } from "./repository/masterSetupKeysRepository.js";
+import {
+  createPasswordResetKeysRepository,
+  hashResetKey
+} from "./repository/passwordResetKeysRepository.js";
 import { createSessionsRepository } from "./repository/sessionsRepository.js";
 import { createSettingsRepository } from "./repository/settingsRepository.js";
 import { createSyncJobsRepository } from "./repository/syncJobsRepository.js";
@@ -220,6 +224,18 @@ function generateMasterSetupKey() {
 
 function buildMasterSetupExpiry(issuedAt = new Date()) {
   return new Date(issuedAt.getTime() + masterSetupKeyLifetimeHours * 60 * 60 * 1000).toISOString();
+}
+
+const passwordResetKeyLifetimeHours = 2;
+
+// Hochentropischer Einmal-Key fuer den Passwort-Reset.
+function generatePasswordResetKey() {
+  const raw = randomBytes(12).toString("hex").toUpperCase();
+  return `HSA-RESET-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
+}
+
+function buildPasswordResetExpiry(issuedAt = new Date()) {
+  return new Date(issuedAt.getTime() + passwordResetKeyLifetimeHours * 60 * 60 * 1000).toISOString();
 }
 
 function normalizeRegistrationKey(value) {
@@ -550,6 +566,7 @@ function validateRegistrationPayload(payload) {
   const username = String(payload.username ?? "").trim().toLowerCase();
   const password = String(payload.password ?? "");
   const accessKey = normalizeRegistrationKey(payload.accessKey);
+  const email = String(payload.email ?? "").trim().toLowerCase();
 
   if (!displayName || !username || !password || !accessKey) {
     return { error: "Bitte Name, Benutzername, Passwort und Registrierungsschlüssel eingeben." };
@@ -567,8 +584,13 @@ function validateRegistrationPayload(payload) {
     return { error: "Das Passwort muss mindestens 8 Zeichen lang sein." };
   }
 
-  if (!/^HSA-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}$/.test(accessKey)) {
-    return { error: "Der Registrierungsschlüssel ist ungültig." };
+  // E-Mail ist optional, wird aber fuer den Self-Service-Passwort-Reset benoetigt.
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { error: "Bitte eine gültige E-Mail-Adresse eingeben oder das Feld leer lassen." };
+  }
+
+  if (email.length > 120) {
+    return { error: "Die E-Mail-Adresse ist zu lang." };
   }
 
   return {
@@ -577,6 +599,7 @@ function validateRegistrationPayload(payload) {
       username,
       password,
       accessKey,
+      email,
       role: "Mitarbeiter"
     }
   };
@@ -895,6 +918,7 @@ export function createApp(options = {}) {
   const municipalitySourcesRepository = createMunicipalitySourcesRepository(db);
   const registrationKeysRepository = createRegistrationKeysRepository(db);
   const masterSetupKeysRepository = createMasterSetupKeysRepository(db);
+  const passwordResetKeysRepository = createPasswordResetKeysRepository(db);
   const sessionsRepository = createSessionsRepository(db);
   const settingsRepository = createSettingsRepository(db);
   const syncJobsRepository = createSyncJobsRepository(db);
@@ -956,6 +980,41 @@ export function createApp(options = {}) {
     // die Ersteinrichtung nicht blockiert. In Produktion sollte SMTP gesetzt sein.
     logger.warn?.(
       `SMTP oder MASTER_SETUP_EMAIL ist nicht konfiguriert. Einmaliger Master-Setup-Key ` +
+        `(nur jetzt sichtbar): ${key} – gueltig bis ${expiresAt}.`
+    );
+  }
+
+  async function deliverPasswordResetKey({ key, sentTo, displayName, expiresAt }) {
+    // Test-/Integrationshook: erlaubt das direkte Abfangen des Klartext-Keys.
+    if (typeof options.onPasswordResetKey === "function") {
+      await options.onPasswordResetKey({ key, sentTo, expiresAt });
+      return;
+    }
+
+    const subject = "Heimatschutz Aargau – Passwort zuruecksetzen";
+    const text = [
+      `Hallo ${displayName || ""}`.trim() + ",",
+      "",
+      "fuer Ihr Konto wurde ein Passwort-Reset angefordert. Bitte oeffnen Sie die Anwendung,",
+      'waehlen Sie "Passwort vergessen" und geben Sie den folgenden Einmal-Schluessel zusammen',
+      "mit Ihrem neuen Passwort ein:",
+      "",
+      `    ${key}`,
+      "",
+      `Der Schluessel ist gueltig bis ${expiresAt}.`,
+      "Falls Sie keinen Reset angefordert haben, koennen Sie diese E-Mail ignorieren.",
+      "",
+      "Heimatschutz Aargau"
+    ].join("\n");
+
+    if (sentTo && mailService.isConfigured?.()) {
+      await mailService.sendMail({ to: sentTo, subject, text });
+      logger.log?.(`Passwort-Reset-Key per E-Mail an ${sentTo} gesendet.`);
+      return;
+    }
+
+    logger.warn?.(
+      `SMTP ist nicht konfiguriert. Einmaliger Passwort-Reset-Key fuer ${sentTo} ` +
         `(nur jetzt sichtbar): ${key} – gueltig bis ${expiresAt}.`
     );
   }
@@ -1074,6 +1133,7 @@ export function createApp(options = {}) {
     sessionsRepository,
     registrationKeysRepository,
     masterSetupKeysRepository,
+    passwordResetKeysRepository,
     auditLogRepository,
     enabled: options.maintenanceEnabled ?? process.env.MAINTENANCE_ENABLED !== "false",
     intervalMs:
@@ -1210,6 +1270,7 @@ export function createApp(options = {}) {
         id: `USR-${randomBytes(6).toString("hex")}`,
         displayName: validation.value.displayName,
         username: validation.value.username,
+        email: validation.value.email,
         passwordRecord,
         role: validation.value.role,
         createdAt: currentTimestamp
@@ -1360,6 +1421,131 @@ export function createApp(options = {}) {
     loginRateLimiter?.recordSuccess(rateLimitKey);
     recordAudit("auth.master_setup", request, { target: "master" });
     response.json({ success: true, message: "Master-Passwort wurde gesetzt. Sie koennen sich jetzt anmelden." });
+  });
+
+  // Self-Service Passwort vergessen: schickt einen Einmal-Key an die hinterlegte
+  // E-Mail. Antwortet immer gleich (kein Rueckschluss, ob Konto/E-Mail existiert).
+  app.post("/api/auth/forgot-password", async (request, response) => {
+    const genericResponse = {
+      success: true,
+      message: "Falls fuer dieses Konto eine E-Mail hinterlegt ist, wurde ein Reset-Schluessel versendet."
+    };
+
+    const username = String(request.body?.username ?? "").trim().toLowerCase();
+
+    if (!username) {
+      response.status(400).json({ error: "Bitte den Benutzernamen eingeben." });
+      return;
+    }
+
+    const contact = usersRepository.getContactByUsername(username);
+
+    if (!contact || !contact.email) {
+      // Kein Konto oder keine E-Mail: bewusst dieselbe Antwort.
+      recordAudit("auth.password_reset_requested", request, { target: username, detail: "no-email" });
+      response.json(genericResponse);
+      return;
+    }
+
+    const now = nowIso();
+    passwordResetKeysRepository.deletePendingForUser(contact.id);
+
+    const key = generatePasswordResetKey();
+    const expiresAt = buildPasswordResetExpiry(new Date(now));
+
+    passwordResetKeysRepository.create({
+      id: `PRK-${randomBytes(8).toString("hex")}`,
+      userId: contact.id,
+      keyHash: hashResetKey(key),
+      createdAt: now,
+      expiresAt
+    });
+
+    try {
+      await deliverPasswordResetKey({
+        key,
+        sentTo: contact.email,
+        displayName: contact.displayName,
+        expiresAt
+      });
+    } catch (error) {
+      logger.warn?.(`Passwort-Reset-Mail fehlgeschlagen: ${error.message}`);
+    }
+
+    recordAudit("auth.password_reset_requested", request, { target: username });
+    response.json(genericResponse);
+  });
+
+  app.post("/api/auth/reset-password", async (request, response) => {
+    const rateLimitKey = request.ip || "unknown";
+
+    if (loginRateLimiter) {
+      const limitStatus = loginRateLimiter.check(rateLimitKey);
+
+      if (limitStatus.limited) {
+        response.setHeader("Retry-After", String(limitStatus.retryAfterSeconds));
+        response
+          .status(429)
+          .json({ error: "Zu viele Versuche. Bitte in einigen Minuten erneut versuchen." });
+        return;
+      }
+    }
+
+    const key = String(request.body?.key ?? "").trim();
+    const passwordValidation = validatePasswordResetPayload(request.body ?? {});
+
+    if (!key) {
+      response.status(400).json({ error: "Bitte den Reset-Schluessel eingeben." });
+      return;
+    }
+
+    if (passwordValidation.error) {
+      response.status(400).json({ error: passwordValidation.error });
+      return;
+    }
+
+    const now = nowIso();
+    const resetKey = passwordResetKeysRepository.getActiveByKey(key, now);
+
+    if (!resetKey) {
+      loginRateLimiter?.recordFailure(rateLimitKey);
+      response.status(400).json({ error: "Der Reset-Schluessel ist ungueltig oder abgelaufen." });
+      return;
+    }
+
+    const passwordRecord = await createUserPasswordRecordAsync(passwordValidation.value.password);
+
+    db.exec("BEGIN");
+
+    try {
+      const consumed = passwordResetKeysRepository.markUsed({ id: resetKey.id, usedAt: now, now });
+
+      if (!consumed) {
+        throw new Error("reset-key-not-available");
+      }
+
+      const updated = usersRepository.applyPasswordRecord(resetKey.userId, passwordRecord, now);
+
+      if (!updated) {
+        throw new Error("reset-user-not-found");
+      }
+
+      passwordResetKeysRepository.deletePendingForUser(resetKey.userId);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+
+      if (error.message === "reset-key-not-available") {
+        response.status(400).json({ error: "Der Reset-Schluessel ist ungueltig oder abgelaufen." });
+        return;
+      }
+
+      throw error;
+    }
+
+    loginRateLimiter?.recordSuccess(rateLimitKey);
+    recordAudit("auth.password_reset", request, { actorUserId: resetKey.userId, target: resetKey.userId });
+    response.json({ success: true, message: "Passwort wurde gesetzt. Sie koennen sich jetzt anmelden." });
   });
 
   app.use("/api", (request, response, next) => {

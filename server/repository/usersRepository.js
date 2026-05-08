@@ -116,7 +116,7 @@ export function createUsersRepository(db) {
     // Synchroner Insert. Der Aufrufer uebergibt einen vorberechneten passwordRecord
     // (siehe createUserPasswordRecordAsync), damit dieser Aufruf gefahrlos innerhalb
     // einer offenen DB-Transaktion ohne await verwendet werden kann.
-    create({ id, username, displayName, role, passwordRecord, createdAt }) {
+    create({ id, username, displayName, role, email = "", passwordRecord, createdAt }) {
       const normalizedUsername = String(username).trim().toLowerCase();
 
       db.prepare(`
@@ -125,17 +125,19 @@ export function createUsersRepository(db) {
           username,
           display_name,
           role,
+          email,
           password_salt,
           password_hash,
           active,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         normalizedUsername,
         displayName.trim(),
         role,
+        String(email ?? "").trim().toLowerCase(),
         passwordRecord.salt,
         passwordRecord.hash,
         1,
@@ -144,6 +146,28 @@ export function createUsersRepository(db) {
       );
 
       return this.getPublicUserById(id);
+    },
+
+    // Kontaktdaten fuer den Passwort-Reset. Liefert auch die E-Mail (bewusst NICHT
+    // Teil der oeffentlichen mapUser-Ausgabe, damit die Login-Liste keine Adressen leakt).
+    getContactByUsername(username) {
+      const row = db
+        .prepare(`
+          SELECT id, display_name, email
+          FROM users
+          WHERE username = ? AND active = 1
+        `)
+        .get(String(username ?? "").trim().toLowerCase());
+
+      if (!row) {
+        return null;
+      }
+
+      return {
+        id: row.id,
+        displayName: row.display_name,
+        email: String(row.email ?? "").trim()
+      };
     },
 
     async authenticate({ userId, username, password }) {

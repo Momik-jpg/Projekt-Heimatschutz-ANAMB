@@ -109,8 +109,21 @@ const elements = {
   registerUsername: document.querySelector("#registerUsername"),
   registerPassword: document.querySelector("#registerPassword"),
   registerAccessKey: document.querySelector("#registerAccessKey"),
+  registerEmail: document.querySelector("#registerEmail"),
   registerButton: document.querySelector("#registerButton"),
   registerError: document.querySelector("#registerError"),
+  showForgotPasswordButton: document.querySelector("#showForgotPasswordButton"),
+  forgotPasswordForm: document.querySelector("#forgotPasswordForm"),
+  forgotPasswordUsername: document.querySelector("#forgotPasswordUsername"),
+  forgotPasswordButton: document.querySelector("#forgotPasswordButton"),
+  forgotPasswordError: document.querySelector("#forgotPasswordError"),
+  forgotPasswordSuccess: document.querySelector("#forgotPasswordSuccess"),
+  resetPasswordForm: document.querySelector("#resetPasswordForm"),
+  resetPasswordKey: document.querySelector("#resetPasswordKey"),
+  resetPasswordValue: document.querySelector("#resetPasswordValue"),
+  resetPasswordButton: document.querySelector("#resetPasswordButton"),
+  resetPasswordError: document.querySelector("#resetPasswordError"),
+  resetPasswordSuccess: document.querySelector("#resetPasswordSuccess"),
   masterSetupForm: document.querySelector("#masterSetupForm"),
   masterSetupKey: document.querySelector("#masterSetupKey"),
   masterSetupPassword: document.querySelector("#masterSetupPassword"),
@@ -280,6 +293,26 @@ function setMasterSetupSuccess(message = "") {
   elements.masterSetupSuccess.classList.toggle("hidden", !message);
 }
 
+function setForgotPasswordError(message = "") {
+  elements.forgotPasswordError.textContent = message;
+  elements.forgotPasswordError.classList.toggle("hidden", !message);
+}
+
+function setForgotPasswordSuccess(message = "") {
+  elements.forgotPasswordSuccess.textContent = message;
+  elements.forgotPasswordSuccess.classList.toggle("hidden", !message);
+}
+
+function setResetPasswordError(message = "") {
+  elements.resetPasswordError.textContent = message;
+  elements.resetPasswordError.classList.toggle("hidden", !message);
+}
+
+function setResetPasswordSuccess(message = "") {
+  elements.resetPasswordSuccess.textContent = message;
+  elements.resetPasswordSuccess.classList.toggle("hidden", !message);
+}
+
 function isMasterUser(user = state.currentUser) {
   return user?.role === "Master";
 }
@@ -435,6 +468,7 @@ function openConfirmDialog({
 function clearRegisterForm() {
   elements.registerDisplayName.value = "";
   elements.registerUsername.value = "";
+  elements.registerEmail.value = "";
   elements.registerPassword.value = "";
   elements.registerAccessKey.value = "";
 }
@@ -2820,6 +2854,7 @@ function bindEvents() {
           body: JSON.stringify({
             displayName: elements.registerDisplayName.value,
             username: elements.registerUsername.value,
+            email: elements.registerEmail.value,
             password: elements.registerPassword.value,
             accessKey: elements.registerAccessKey.value
           }),
@@ -2862,6 +2897,62 @@ function bindEvents() {
       });
     } catch (error) {
       setMasterSetupError(error.message);
+    }
+  });
+
+  elements.showForgotPasswordButton.addEventListener("click", () => {
+    elements.forgotPasswordForm.classList.remove("hidden");
+    elements.resetPasswordForm.classList.remove("hidden");
+    focusWithoutScroll(elements.forgotPasswordUsername);
+  });
+
+  elements.forgotPasswordForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setForgotPasswordError("");
+    setForgotPasswordSuccess("");
+
+    try {
+      await withBusyState(elements.forgotPasswordButton, "Wird gesendet...", async () => {
+        const payload = await requestJson("/api/auth/forgot-password", {
+          method: "POST",
+          body: JSON.stringify({ username: elements.forgotPasswordUsername.value.trim().toLowerCase() }),
+          skipSessionReset: true
+        });
+
+        setForgotPasswordSuccess(
+          payload.message ?? "Falls eine E-Mail hinterlegt ist, wurde ein Reset-Schluessel versendet."
+        );
+        focusWithoutScroll(elements.resetPasswordKey);
+      });
+    } catch (error) {
+      setForgotPasswordError(error.message);
+    }
+  });
+
+  elements.resetPasswordForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setResetPasswordError("");
+    setResetPasswordSuccess("");
+
+    try {
+      await withBusyState(elements.resetPasswordButton, "Wird gespeichert...", async () => {
+        const payload = await requestJson("/api/auth/reset-password", {
+          method: "POST",
+          body: JSON.stringify({
+            key: elements.resetPasswordKey.value.trim(),
+            password: elements.resetPasswordValue.value
+          }),
+          skipSessionReset: true
+        });
+
+        elements.resetPasswordKey.value = "";
+        elements.resetPasswordValue.value = "";
+        setResetPasswordSuccess(payload.message ?? "Passwort wurde gesetzt. Sie koennen sich jetzt anmelden.");
+        focusWithoutScroll(elements.loginPassword);
+        showToast("Passwort wurde zurueckgesetzt.");
+      });
+    } catch (error) {
+      setResetPasswordError(error.message);
     }
   });
 
