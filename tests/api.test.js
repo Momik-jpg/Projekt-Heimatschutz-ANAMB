@@ -37,6 +37,7 @@ function createTestServer(options = {}) {
     backupEnabled: options.backupEnabled,
     backupDir: options.backupDir,
     backupRetention: options.backupRetention,
+    csrfProtection: options.csrfProtection,
     // Seed-Passwörter stehen nicht mehr im Repository, daher liefert der Test-Harness
     // sie über Optionen. Einzelne Tests können sie überschreiben (z. B. weglassen,
     // um den Master-Setup-Key-Flow zu testen). Eine gesetzte Umgebungsvariable hat
@@ -5158,6 +5159,38 @@ test("a configured master password does not trigger the setup key flow", async (
     body: JSON.stringify({ username: "master", password: "MasterDirekt_2026!" })
   });
   assert.equal(masterLogin.status, 200);
+});
+
+test("cross-origin state-changing requests are blocked by the CSRF guard", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  // Fremder Origin auf einem aendernden Request -> blockiert.
+  const blocked = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    headers: { Origin: "https://boeswillig.example" },
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
+  });
+  assert.equal(blocked.status, 403);
+
+  // Gleicher Origin -> erlaubt (Login funktioniert normal).
+  const allowed = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    headers: { Origin: testServer.baseUrl },
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
+  });
+  assert.equal(allowed.status, 200);
+
+  // Ohne Origin/Referer (z. B. Server-zu-Server) -> erlaubt.
+  const noOrigin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
+  });
+  assert.equal(noOrigin.status, 200);
 });
 
 test("audit log records master actions and is only readable by the master", async (context) => {

@@ -266,6 +266,61 @@ function buildExpiredSessionCookie(request) {
   return `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureAttribute}`;
 }
 
+const csrfProtectedMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function getRequestHosts(request) {
+  const hosts = new Set();
+
+  if (request.headers.host) {
+    hosts.add(String(request.headers.host).toLowerCase());
+  }
+
+  const forwardedHost = request.headers["x-forwarded-host"];
+
+  if (forwardedHost) {
+    for (const host of String(forwardedHost).split(",")) {
+      hosts.add(host.trim().toLowerCase());
+    }
+  }
+
+  return hosts;
+}
+
+// CSRF-Schutz: Zusammen mit dem SameSite=Lax-Session-Cookie wird jede aendernde
+// Anfrage abgewiesen, deren Origin/Referer nicht zum eigenen Host gehoert. Fehlt
+// Origin UND Referer (Nicht-Browser-Clients, Server-zu-Server), wird durchgelassen.
+function createCsrfOriginGuard({ enabled = true } = {}) {
+  return function csrfOriginGuard(request, response, next) {
+    if (!enabled || !csrfProtectedMethods.has(request.method)) {
+      next();
+      return;
+    }
+
+    const source = request.headers.origin || request.headers.referer;
+
+    if (!source) {
+      next();
+      return;
+    }
+
+    let sourceHost;
+
+    try {
+      sourceHost = new URL(source).host.toLowerCase();
+    } catch {
+      response.status(403).json({ error: "Ungueltige Anfrage-Herkunft." });
+      return;
+    }
+
+    if (getRequestHosts(request).has(sourceHost)) {
+      next();
+      return;
+    }
+
+    response.status(403).json({ error: "Anfrage von fremder Herkunft wurde blockiert." });
+  };
+}
+
 function setCommonSecurityHeaders(_request, response, next) {
   response.setHeader("Content-Security-Policy", contentSecurityPolicy);
   response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
@@ -1044,6 +1099,7 @@ export function createApp(options = {}) {
     response.setHeader("Cache-Control", "no-store");
     next();
   });
+  app.use("/api", createCsrfOriginGuard({ enabled: options.csrfProtection !== false }));
 
   const healthDatabasePath = options.dbPath ?? getDefaultDbPath();
   app.get("/health", (_request, response) => handleHealthCheck(_request, response, healthDatabasePath));
