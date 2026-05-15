@@ -15,6 +15,21 @@ import {
   workflowStatusLabels
 } from "./labels.js";
 import { elements, mapState, state } from "./dom.js";
+import {
+  setLoginError,
+  setRegisterError,
+  setMasterSetupError,
+  setMasterSetupSuccess,
+  setForgotPasswordError,
+  setForgotPasswordSuccess,
+  setResetPasswordError,
+  setResetPasswordSuccess,
+  showToast,
+  focusWithoutScroll,
+  withBusyState,
+  setTwoFactorError,
+  setTwoFactorSuccess
+} from "./ui.js";
 
 const DEFAULT_STALE_DEADLINE_DAYS = 30;
 const DEFAULT_STALE_PUBLICATION_DAYS = 45;
@@ -38,45 +53,6 @@ const defaultRequestTimeoutMs = 60000;
 let searchTimeoutId = null;
 let confirmResolver = null;
 
-function setLoginError(message = "") {
-  elements.loginError.textContent = message;
-  elements.loginError.classList.toggle("hidden", !message);
-}
-
-function setRegisterError(message = "") {
-  elements.registerError.textContent = message;
-  elements.registerError.classList.toggle("hidden", !message);
-}
-
-function setMasterSetupError(message = "") {
-  elements.masterSetupError.textContent = message;
-  elements.masterSetupError.classList.toggle("hidden", !message);
-}
-
-function setMasterSetupSuccess(message = "") {
-  elements.masterSetupSuccess.textContent = message;
-  elements.masterSetupSuccess.classList.toggle("hidden", !message);
-}
-
-function setForgotPasswordError(message = "") {
-  elements.forgotPasswordError.textContent = message;
-  elements.forgotPasswordError.classList.toggle("hidden", !message);
-}
-
-function setForgotPasswordSuccess(message = "") {
-  elements.forgotPasswordSuccess.textContent = message;
-  elements.forgotPasswordSuccess.classList.toggle("hidden", !message);
-}
-
-function setResetPasswordError(message = "") {
-  elements.resetPasswordError.textContent = message;
-  elements.resetPasswordError.classList.toggle("hidden", !message);
-}
-
-function setResetPasswordSuccess(message = "") {
-  elements.resetPasswordSuccess.textContent = message;
-  elements.resetPasswordSuccess.classList.toggle("hidden", !message);
-}
 
 function isMasterUser(user = state.currentUser) {
   return user?.role === "Master";
@@ -156,44 +132,6 @@ function persistRememberedUsername() {
   }
 }
 
-function showToast(message) {
-  elements.toast.textContent = message;
-  elements.toast.classList.remove("hidden");
-
-  clearTimeout(showToast.timeoutId);
-  showToast.timeoutId = setTimeout(() => {
-    elements.toast.classList.add("hidden");
-  }, 3200);
-}
-
-function focusWithoutScroll(element) {
-  try {
-    element?.focus({ preventScroll: true });
-  } catch {
-    element?.focus();
-  }
-}
-
-async function withBusyState(button, busyLabel, task) {
-  if (!button) {
-    return task();
-  }
-
-  const originalText = button.textContent;
-  const wasDisabled = button.disabled;
-  button.disabled = true;
-
-  if (busyLabel) {
-    button.textContent = busyLabel;
-  }
-
-  try {
-    return await task();
-  } finally {
-    button.disabled = wasDisabled;
-    button.textContent = originalText;
-  }
-}
 
 function closeConfirmDialog(accepted) {
   elements.confirmOverlay.classList.add("hidden");
@@ -2474,15 +2412,6 @@ async function showAuthenticatedApp() {
   await loadSyncSettings();
 }
 
-function setTwoFactorError(message = "") {
-  elements.twoFactorError.textContent = message;
-  elements.twoFactorError.classList.toggle("hidden", !message);
-}
-
-function setTwoFactorSuccess(message = "") {
-  elements.twoFactorSuccess.textContent = message;
-  elements.twoFactorSuccess.classList.toggle("hidden", !message);
-}
 
 function renderTwoFactorStatus(enabled) {
   elements.twoFactorStatus.textContent = enabled
