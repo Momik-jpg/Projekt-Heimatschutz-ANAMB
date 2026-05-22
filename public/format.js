@@ -1,5 +1,5 @@
 // Reine Formatierungs- und Text-Helfer (kein DOM, kein State).
-// Aus app.js ausgelagert, um die Oberflaeche schrittweise zu modularisieren.
+// Aus app.js ausgelagert, um die Oberfläche schrittweise zu modularisieren.
 
 export function formatDate(dateValue) {
   if (!dateValue) {

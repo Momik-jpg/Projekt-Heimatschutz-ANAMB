@@ -104,8 +104,13 @@
 }
 
 html {
+  font-size: 16px;
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
+}
+
+html.large-text {
+  font-size: 20px;
 }
 
 body {
@@ -113,7 +118,7 @@ body {
   min-height: 100vh;
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.5;
   font-feature-settings: "cv05" 1, "ss01" 1;
   text-rendering: optimizeLegibility;
@@ -125,7 +130,7 @@ body {
 }
 
 body.large-text {
-  font-size: 20px;
+  font-size: 1rem;
 }
 
 a {
@@ -331,12 +336,12 @@ h4 {
    ===================================================================== */
 
 .simple-page {
-  width: auto;
-  max-width: 1840px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
-  padding: 16px clamp(12px, 2.4vw, 30px) 30px;
+  padding: 12px clamp(12px, 1.4vw, 26px) 22px;
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 /* =====================================================================
@@ -719,12 +724,23 @@ button:disabled {
 }
 
 button.secondary {
-  background: linear-gradient(180deg, var(--copper-400), var(--copper-500));
-  box-shadow: 0 14px 28px -12px rgba(164, 88, 43, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  background: linear-gradient(180deg, var(--brand-600), var(--brand-700));
+  box-shadow: 0 14px 28px -12px rgba(31, 120, 101, 0.44), inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 button.secondary:hover {
-  box-shadow: 0 18px 32px -14px rgba(164, 88, 43, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 18px 32px -14px rgba(31, 120, 101, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+#clearButton.secondary,
+#forgotPasswordButton.secondary,
+#resetPasswordButton.secondary,
+#registerButton.secondary,
+#masterSetupButton.secondary {
+  background: linear-gradient(180deg, var(--brand-600), var(--brand-700)) !important;
+  color: var(--white) !important;
+  border-color: transparent !important;
+  box-shadow: 0 14px 28px -12px rgba(31, 120, 101, 0.44), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
 }
 
 button.ghost {
@@ -1193,7 +1209,7 @@ button.ghost:hover {
 
 .main-grid {
   display: grid;
-  grid-template-columns: minmax(700px, 1.45fr) minmax(520px, 0.95fr);
+  grid-template-columns: minmax(760px, 1.65fr) minmax(520px, 0.9fr);
   gap: 16px;
   align-items: start;
 }
@@ -1207,9 +1223,9 @@ button.ghost:hover {
   box-shadow: var(--shadow);
   overflow: hidden;
   min-width: 0;
-  height: calc(100vh - 232px);
-  min-height: 480px;
-  max-height: 880px;
+  height: clamp(560px, calc(100vh - 500px), 1320px);
+  min-height: 520px;
+  max-height: none;
 }
 
 .list-panel {

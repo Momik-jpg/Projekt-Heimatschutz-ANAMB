@@ -1540,6 +1540,7 @@ function updateQuickFilterButtons() {
 }
 
 function updateFontSizeUi() {
+  document.documentElement.classList.toggle("large-text", state.largeTextEnabled);
   document.body.classList.toggle("large-text", state.largeTextEnabled);
   elements.fontSizeToggleButton.textContent = state.largeTextEnabled ? "Normale Schrift" : "Grössere Schrift";
   elements.fontSizeToggleButton.setAttribute("aria-pressed", String(state.largeTextEnabled));
@@ -2482,7 +2483,7 @@ async function loadTwoFactorStatus() {
     const payload = await requestJson("/api/admin/2fa/status");
     renderTwoFactorStatus(Boolean(payload.enabled));
   } catch {
-    // 2FA-Status ist nicht kritisch fuer den Rest der Oberflaeche.
+    // 2FA-Status ist nicht kritisch für den Rest der Oberfläche.
   }
 }
 
@@ -2573,7 +2574,7 @@ function bindEvents() {
         return;
       }
 
-      // Ab dem 2. Versuch verlangt der Server eine Bot-Pruefung: Widget einblenden.
+      // Ab dem 2. Versuch verlangt der Server eine Bot-Prüfung: Widget einblenden.
       if (error?.payload?.captchaRequired) {
         ensureTurnstileWidget(elements.loginTurnstile);
       }
@@ -3134,7 +3135,11 @@ function bindEvents() {
   elements.themeToggleButton?.addEventListener("click", () => {
     state.darkModeEnabled = !state.darkModeEnabled;
     localStorage.setItem("heimatschutz-dark-mode", state.darkModeEnabled ? "1" : "0");
+    localStorage.setItem("hsd-design-dark", state.darkModeEnabled ? "1" : "0");
     updateThemeUi();
+    window.dispatchEvent(new CustomEvent("heimatschutz-dark-mode-change", {
+      detail: { enabled: state.darkModeEnabled }
+    }));
   });
 
   elements.toggleAdminPanelButton.addEventListener("click", () => {

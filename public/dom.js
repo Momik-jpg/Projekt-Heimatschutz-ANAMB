@@ -1,4 +1,4 @@
-// Geteilte UI-Singletons (kein Import aus app.js -> keine Zirkel-Abhaengigkeiten).
+// Geteilte UI-Singletons (kein Import aus app.js -> keine Zirkel-Abhängigkeiten).
 // state: laufender App-Zustand. elements: DOM-Referenzen. mapState: Leaflet-Karte.
 
 export const state = {
