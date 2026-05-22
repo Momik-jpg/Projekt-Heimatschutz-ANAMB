@@ -58,8 +58,8 @@ const placeholderPasswordValues = new Set([
   "dein_sicheres_team_passwort",
   "eigenesmasterpasswort",
   "eigenessicherespasswort",
-  "bittemasterpasswortvordemreleaseändern123",
-  "bittevordemreleaseändern123"
+  "bittemasterpasswortvordemreleaseaendern123",
+  "bittevordemreleaseaendern123"
 ]);
 const placeholderSyncSourceMarkers = ["example.test", "beispiel", "placeholder"];
 const contentSecurityPolicy = [
@@ -68,11 +68,12 @@ const contentSecurityPolicy = [
   "form-action 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
-  "script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com",
+  "script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: https:",
-  "connect-src 'self' https://www.ag.ch"
+  "connect-src 'self' https://www.ag.ch https://challenges.cloudflare.com",
+  "frame-src https://challenges.cloudflare.com"
 ].join("; ");
 
 function nowIso() {
@@ -519,6 +520,19 @@ function createLoginRateLimiter({
       return { limited: false };
     },
 
+    // True, sobald fuer diesen Schluessel im Zeitfenster bereits ein Fehlversuch
+    // vorliegt (=> ab dem 2. Login-Versuch eine Bot-Pruefung verlangen).
+    requiresChallenge(key) {
+      const now = Date.now();
+      const entry = entries.get(key);
+
+      if (!entry || now - entry.firstAttempt > windowMs) {
+        return false;
+      }
+
+      return (entry.count ?? 0) >= 1;
+    },
+
     recordFailure(key) {
       const now = Date.now();
       prune(now);
@@ -542,6 +556,26 @@ function createLoginRateLimiter({
       entries.delete(key);
     }
   };
+}
+
+// Prueft ein Cloudflare-Turnstile-Token gegen die siteverify-API.
+async function verifyTurnstileToken(token, secret, remoteIp) {
+  const params = new URLSearchParams();
+  params.set("secret", secret);
+  params.set("response", token);
+
+  if (remoteIp) {
+    params.set("remoteip", remoteIp);
+  }
+
+  const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString()
+  });
+
+  const data = await response.json();
+  return Boolean(data?.success);
 }
 
 function validateLoginPayload(payload) {
@@ -927,6 +961,33 @@ export function createApp(options = {}) {
   const usersRepository = createUsersRepository(db);
   const mailService = options.mailService ?? createMailService({ logger });
 
+  // Cloudflare Turnstile (Bot-Schutz). Ohne konfigurierte Keys vollstaendig
+  // deaktiviert, damit lokale/Test-Laeufe ohne externe Abhaengigkeit funktionieren.
+  const turnstileSiteKey = normalizeEnvString(options.turnstileSiteKey ?? process.env.TURNSTILE_SITE_KEY ?? "");
+  const turnstileSecretKey = normalizeEnvString(options.turnstileSecretKey ?? process.env.TURNSTILE_SECRET_KEY ?? "");
+  const turnstileVerifyImpl = options.turnstileVerify ?? verifyTurnstileToken;
+  const turnstileEnabled =
+    Boolean(turnstileSiteKey) && (Boolean(turnstileSecretKey) || typeof options.turnstileVerify === "function");
+
+  async function passesTurnstile(request) {
+    if (!turnstileEnabled) {
+      return true;
+    }
+
+    const token = String(request.body?.turnstileToken ?? "").trim();
+
+    if (!token) {
+      return false;
+    }
+
+    try {
+      return Boolean(await turnstileVerifyImpl(token, turnstileSecretKey, request.ip));
+    } catch (error) {
+      logger.warn?.(`Turnstile-Pruefung fehlgeschlagen: ${error.message}`);
+      return false;
+    }
+  }
+
   function recordAudit(action, request, fields = {}) {
     const actor = request?.currentUser;
     auditLogRepository.record({
@@ -1210,6 +1271,14 @@ export function createApp(options = {}) {
       return;
     }
 
+    // Bot-Pruefung erst ab dem 2. Versuch (nach einem vorherigen Fehlschlag).
+    if (turnstileEnabled && loginRateLimiter?.requiresChallenge(rateLimitKey)) {
+      if (!(await passesTurnstile(request))) {
+        response.status(401).json({ error: "Bitte die Bot-Prüfung abschliessen.", captchaRequired: true });
+        return;
+      }
+    }
+
     const user = await usersRepository.authenticate(validation.value);
 
     if (!user) {
@@ -1217,7 +1286,11 @@ export function createApp(options = {}) {
       recordAudit("auth.login_failed", request, {
         target: validation.value.username || validation.value.userId || ""
       });
-      response.status(401).json({ error: "Benutzer oder Passwort stimmen nicht." });
+      // Nach einem Fehlversuch verlangt der naechste Versuch eine Bot-Pruefung.
+      response.status(401).json({
+        error: "Benutzer oder Passwort stimmen nicht.",
+        captchaRequired: turnstileEnabled
+      });
       return;
     }
 
@@ -1263,6 +1336,11 @@ export function createApp(options = {}) {
 
     if (validation.error) {
       response.status(400).json({ error: validation.error });
+      return;
+    }
+
+    if (!(await passesTurnstile(request))) {
+      response.status(400).json({ error: "Bitte die Bot-Prüfung abschliessen.", captchaRequired: true });
       return;
     }
 
@@ -1354,6 +1432,16 @@ export function createApp(options = {}) {
 
   // Ersteinrichtung des Master-Kontos über den per E-Mail zugestellten Setup-Key.
   // Erst danach hat das Master-Konto ein gültiges Passwort.
+  // Oeffentliche Client-Konfiguration (z. B. Turnstile-Site-Key fuers Widget).
+  app.get("/api/auth/config", (_request, response) => {
+    response.json({
+      turnstile: {
+        enabled: turnstileEnabled,
+        siteKey: turnstileEnabled ? turnstileSiteKey : ""
+      }
+    });
+  });
+
   app.get("/api/auth/master-setup-status", (_request, response) => {
     const masterUserId = getMasterUserId();
     const setupRequired =
@@ -1460,6 +1548,11 @@ export function createApp(options = {}) {
 
     if (!email && !username) {
       response.status(400).json({ error: "Bitte Ihre E-Mail-Adresse eingeben." });
+      return;
+    }
+
+    if (!(await passesTurnstile(request))) {
+      response.status(400).json({ error: "Bitte die Bot-Prüfung abschliessen.", captchaRequired: true });
       return;
     }
 

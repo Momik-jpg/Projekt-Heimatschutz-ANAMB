@@ -54,7 +54,10 @@ function createTestServer(options = {}) {
     masterSetupEmail: options.masterSetupEmail,
     mailService: options.mailService,
     onMasterSetupKey: options.onMasterSetupKey,
-    onPasswordResetKey: options.onPasswordResetKey
+    onPasswordResetKey: options.onPasswordResetKey,
+    turnstileSiteKey: options.turnstileSiteKey,
+    turnstileSecretKey: options.turnstileSecretKey,
+    turnstileVerify: options.turnstileVerify
   });
 
   if (!options.keepSeededMunicipalitySourcesEnabled) {
@@ -287,7 +290,7 @@ test("production startup validation rejects placeholder passwords", () => {
       validateProductionRuntimeConfiguration({
         NODE_ENV: "production",
         MASTER_ACCOUNT_PASSWORD: "HouseisGood1999?",
-        DEFAULT_LOGIN_PASSWORD: "BitteVorDemReleaseÄndern123"
+        DEFAULT_LOGIN_PASSWORD: "BitteVorDemReleaseAendern123"
       }),
     /Produktionsstart abgebrochen/i
   );
@@ -5510,4 +5513,81 @@ test("forgot-password by email address finds the account and sends a key", async
   assert.equal(unknown.status, 200);
   assert.equal(unknown.payload.success, true);
   assert.equal(resetKeys.length, 1);
+});
+
+test("turnstile (when enabled) protects register, forgot-password and the second login attempt", async (context) => {
+  const testServer = createTestServer({
+    turnstileSiteKey: "test-site-key",
+    turnstileVerify: async (token) => token === "good"
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  testServer.db
+    .prepare("UPDATE users SET email = 'lucia@example.test' WHERE username = 'lucia.vettori'")
+    .run();
+
+  // Config-Endpoint meldet aktiviert + Site-Key (fuers Frontend-Widget).
+  const config = await requestJson(testServer.baseUrl, "/api/auth/config");
+  assert.equal(config.payload.turnstile.enabled, true);
+  assert.equal(config.payload.turnstile.siteKey, "test-site-key");
+
+  // forgot-password: ohne Token abgewiesen, mit gueltigem Token erlaubt.
+  const forgotNoToken = await requestJson(testServer.baseUrl, "/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email: "lucia@example.test" })
+  });
+  assert.equal(forgotNoToken.status, 400);
+  assert.equal(forgotNoToken.payload.captchaRequired, true);
+
+  const forgotGood = await requestJson(testServer.baseUrl, "/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email: "lucia@example.test", turnstileToken: "good" })
+  });
+  assert.equal(forgotGood.status, 200);
+
+  // Registrierung ohne Token abgewiesen.
+  const masterCookie = await login(testServer.baseUrl, { username: "master", password: "HouseisGood1999?" });
+  const keyResponse = await requestJson(testServer.baseUrl, "/api/admin/registration-keys", {
+    method: "POST",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({ note: "Turnstile-Test" })
+  });
+  const regNoToken = await requestJson(testServer.baseUrl, "/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({
+      displayName: "Bot Person",
+      username: "bot.person",
+      password: "Sicher1234",
+      accessKey: keyResponse.payload.keyCode
+    })
+  });
+  assert.equal(regNoToken.status, 400);
+  assert.equal(regNoToken.payload.captchaRequired, true);
+
+  // Login: 1. Versuch (falsch) braucht KEIN Token, meldet aber captchaRequired fuer den naechsten.
+  const firstWrong = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "falsch" })
+  });
+  assert.equal(firstWrong.status, 401);
+  assert.equal(firstWrong.payload.captchaRequired, true);
+
+  // 2. Versuch ohne Token -> abgewiesen (Bot-Pruefung verlangt).
+  const secondNoToken = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
+  });
+  assert.equal(secondNoToken.status, 401);
+  assert.equal(secondNoToken.payload.captchaRequired, true);
+
+  // 2. Versuch mit gueltigem Token + richtigem Passwort -> Login klappt.
+  const secondGood = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!", turnstileToken: "good" })
+  });
+  assert.equal(secondGood.status, 200);
 });

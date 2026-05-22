@@ -26,6 +26,7 @@ Allgemeine News-, Event- oder Social-Media-Seiten sollen nicht als produktive Ha
 - Passwort-Reset durch das Master-Konto oder per Self-Service-Schlüssel an die hinterlegte E-Mail
 - CSRF-Schutz, Audit-Log für Master-Aktionen, automatische Wartung (Cleanup + optionale SQLite-Backups)
 - Optionale Zwei-Faktor-Authentifizierung (TOTP/Authenticator-App) für das Master-Konto
+- Optionaler Bot-Schutz (Cloudflare Turnstile) für Registrierung, Passwort-vergessen und Login (ab 2. Versuch)
 - Schutz gegen Passwort-Raten (Rate-Limiting), asynchrones Passwort-Hashing (scrypt), gzip-Kompression und gehärtete Security-Header (CSP, HSTS u. a.)
 - Arbeitsliste mit Suche, Filtern und Schnellauswahl
 - Detailansicht mit Karte, AGIS-Treffer und nächstem Schritt

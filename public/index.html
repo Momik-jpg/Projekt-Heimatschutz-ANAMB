@@ -66,6 +66,7 @@
               <input id="loginTotp" name="totp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-stelliger Code">
             </label>
 
+            <div id="loginTurnstile" class="turnstile-slot hidden"></div>
             <button id="loginButton" type="submit">Anmelden</button>
             <p class="auth-note muted">
               Passwort vergessen?
@@ -115,6 +116,7 @@
               <input id="registerAccessKey" name="accessKey" type="text" placeholder="Zum Beispiel: HSA-1A2B-3C4D-5E6F" autocomplete="one-time-code">
             </label>
 
+            <div id="registerTurnstile" class="turnstile-slot hidden"></div>
             <button id="registerButton" class="secondary" type="submit">Konto erstellen</button>
             <p class="auth-note muted hidden">Den Registrierungsschlüssel erhalten neue Mitarbeitende vom Master-Konto.</p>
             <p id="registerError" class="auth-error hidden" role="alert"></p>
@@ -153,6 +155,7 @@
               <input id="forgotPasswordEmail" name="email" type="email" placeholder="z. B. name@example.org" autocomplete="email">
             </label>
 
+            <div id="forgotTurnstile" class="turnstile-slot hidden"></div>
             <button id="forgotPasswordButton" class="secondary" type="submit">Schlüssel anfordern</button>
             <p id="forgotPasswordError" class="auth-error hidden" role="alert"></p>
             <p id="forgotPasswordSuccess" class="auth-success hidden" role="status"></p>

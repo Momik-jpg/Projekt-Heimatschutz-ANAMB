@@ -38,6 +38,87 @@ const DEFAULT_STALE_PUBLICATION_DAYS = 45;
 const DEFAULT_AMBIGUOUS_INCLUDE_DAYS = 3;
 const globalScrapingSourceTypes = new Set(["html", "xml", "pdf"]);
 
+// --- Cloudflare Turnstile (Bot-Schutz) ---------------------------------------
+// Wird nur aktiv, wenn der Server in /api/auth/config einen Site-Key meldet.
+let turnstileConfig = { enabled: false, siteKey: "" };
+let turnstileScriptPromise = null;
+const turnstileWidgets = {}; // slotId -> { widgetId, token }
+
+function loadTurnstileScript() {
+  if (turnstileScriptPromise) {
+    return turnstileScriptPromise;
+  }
+
+  turnstileScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.addEventListener("load", () => resolve());
+    script.addEventListener("error", () => reject(new Error("Turnstile konnte nicht geladen werden.")));
+    document.head.appendChild(script);
+  });
+
+  return turnstileScriptPromise;
+}
+
+async function ensureTurnstileWidget(slotElement) {
+  if (!turnstileConfig.enabled || !slotElement) {
+    return;
+  }
+
+  try {
+    await loadTurnstileScript();
+  } catch {
+    return;
+  }
+
+  if (!window.turnstile) {
+    return;
+  }
+
+  slotElement.classList.remove("hidden");
+  const slotId = slotElement.id;
+  const existing = turnstileWidgets[slotId];
+
+  if (existing && existing.widgetId !== undefined) {
+    window.turnstile.reset(existing.widgetId);
+    existing.token = "";
+    return;
+  }
+
+  const entry = { widgetId: undefined, token: "" };
+  entry.widgetId = window.turnstile.render(slotElement, {
+    sitekey: turnstileConfig.siteKey,
+    callback: (token) => {
+      entry.token = token;
+    },
+    "expired-callback": () => {
+      entry.token = "";
+    },
+    "error-callback": () => {
+      entry.token = "";
+    }
+  });
+  turnstileWidgets[slotId] = entry;
+}
+
+function turnstileToken(slotId) {
+  return turnstileWidgets[slotId]?.token ?? "";
+}
+
+async function loadAuthConfig() {
+  try {
+    const config = await requestJson("/api/auth/config", { skipSessionReset: true });
+
+    if (config?.turnstile?.enabled && config.turnstile.siteKey) {
+      turnstileConfig = { enabled: true, siteKey: config.turnstile.siteKey };
+    }
+  } catch {
+    // Ohne Config laeuft die App wie bisher (kein Bot-Schutz im Frontend).
+  }
+}
+
 const ONLINEKARTEN_URL = "https://www.ag.ch/geoportal/apps/onlinekarten/";
 const ONLINEKARTEN_OVERVIEW_URL =
   "https://www.ag.ch/de/themen/planen-bauen/raumentwicklung/grundlagen-und-kantonalplanung/online-karten";
@@ -2463,6 +2544,12 @@ function bindEvents() {
           body.totp = totpCode;
         }
 
+        const captchaToken = turnstileToken("loginTurnstile");
+
+        if (captchaToken) {
+          body.turnstileToken = captchaToken;
+        }
+
         const payload = await requestJson("/api/auth/login", {
           method: "POST",
           body: JSON.stringify(body),
@@ -2486,6 +2573,11 @@ function bindEvents() {
         return;
       }
 
+      // Ab dem 2. Versuch verlangt der Server eine Bot-Pruefung: Widget einblenden.
+      if (error?.payload?.captchaRequired) {
+        ensureTurnstileWidget(elements.loginTurnstile);
+      }
+
       setLoginError(error.message);
     }
   });
@@ -2503,7 +2595,8 @@ function bindEvents() {
             username: elements.registerUsername.value,
             email: elements.registerEmail.value,
             password: elements.registerPassword.value,
-            accessKey: elements.registerAccessKey.value
+            accessKey: elements.registerAccessKey.value,
+            turnstileToken: turnstileToken("registerTurnstile")
           }),
           skipSessionReset: true
         });
@@ -2550,6 +2643,7 @@ function bindEvents() {
   elements.showRegisterButton.addEventListener("click", () => {
     elements.loginForm.classList.add("hidden");
     elements.registerForm.classList.remove("hidden");
+    ensureTurnstileWidget(elements.registerTurnstile);
     focusWithoutScroll(elements.registerDisplayName);
   });
 
@@ -2562,6 +2656,7 @@ function bindEvents() {
   elements.showForgotPasswordButton.addEventListener("click", () => {
     elements.forgotPasswordForm.classList.remove("hidden");
     elements.resetPasswordForm.classList.remove("hidden");
+    ensureTurnstileWidget(elements.forgotTurnstile);
     focusWithoutScroll(elements.forgotPasswordEmail);
   });
 
@@ -2574,7 +2669,10 @@ function bindEvents() {
       await withBusyState(elements.forgotPasswordButton, "Wird gesendet...", async () => {
         const payload = await requestJson("/api/auth/forgot-password", {
           method: "POST",
-          body: JSON.stringify({ email: elements.forgotPasswordEmail.value.trim().toLowerCase() }),
+          body: JSON.stringify({
+            email: elements.forgotPasswordEmail.value.trim().toLowerCase(),
+            turnstileToken: turnstileToken("forgotTurnstile")
+          }),
           skipSessionReset: true
         });
 
@@ -3135,6 +3233,7 @@ async function init() {
   updateThemeUi();
   loadRememberedUsername();
   bindEvents();
+  await loadAuthConfig();
 
   try {
     const hasSession = await restoreSession();
