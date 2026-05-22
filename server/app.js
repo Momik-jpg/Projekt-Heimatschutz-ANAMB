@@ -1453,18 +1453,26 @@ export function createApp(options = {}) {
       message: "Falls für dieses Konto eine E-Mail hinterlegt ist, wurde ein Reset-Schlüssel versendet."
     };
 
+    // Primaer wird die E-Mail-Adresse eingegeben; Benutzername bleibt als
+    // Alternative moeglich (z. B. fuer Skripte/Altpfade).
+    const email = String(request.body?.email ?? "").trim().toLowerCase();
     const username = String(request.body?.username ?? "").trim().toLowerCase();
 
-    if (!username) {
-      response.status(400).json({ error: "Bitte den Benutzernamen eingeben." });
+    if (!email && !username) {
+      response.status(400).json({ error: "Bitte Ihre E-Mail-Adresse eingeben." });
       return;
     }
 
-    const contact = usersRepository.getContactByUsername(username);
+    const contact = email
+      ? usersRepository.getContactByEmail(email)
+      : usersRepository.getContactByUsername(username);
 
     if (!contact || !contact.email) {
-      // Kein Konto oder keine E-Mail: bewusst dieselbe Antwort.
-      recordAudit("auth.password_reset_requested", request, { target: username, detail: "no-email" });
+      // Keine passende E-Mail/kein Konto: bewusst dieselbe Antwort (kein Rueckschluss).
+      recordAudit("auth.password_reset_requested", request, {
+        target: email || username,
+        detail: "no-match"
+      });
       response.json(genericResponse);
       return;
     }

@@ -5477,3 +5477,37 @@ test("a normal team login is unaffected by master 2FA being available", async (c
   });
   assert.equal(forbidden.status, 403);
 });
+
+test("forgot-password by email address finds the account and sends a key", async (context) => {
+  const resetKeys = [];
+  const testServer = createTestServer({
+    onPasswordResetKey: ({ key, sentTo }) => resetKeys.push({ key, sentTo })
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  testServer.db
+    .prepare("UPDATE users SET email = 'lucia@example.test' WHERE username = 'lucia.vettori'")
+    .run();
+
+  // Bekannte E-Mail -> Key wird an genau diese Adresse gesendet.
+  const known = await requestJson(testServer.baseUrl, "/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email: "LUCIA@example.test" })
+  });
+  assert.equal(known.status, 200);
+  assert.equal(resetKeys.length, 1);
+  assert.equal(resetKeys[0].sentTo, "lucia@example.test");
+
+  // Unbekannte E-Mail -> generische Antwort, kein Key.
+  const unknown = await requestJson(testServer.baseUrl, "/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email: "niemand@example.test" })
+  });
+  assert.equal(unknown.status, 200);
+  assert.equal(unknown.payload.success, true);
+  assert.equal(resetKeys.length, 1);
+});

@@ -72,14 +72,23 @@
               <button id="showForgotPasswordButton" type="button" class="link-button">Per E-Mail zurücksetzen</button>
               oder das Master-Konto setzt ein neues.
             </p>
+            <p class="auth-note muted">
+              Noch kein Konto?
+              <button id="showRegisterButton" type="button" class="link-button">Jetzt registrieren</button>
+            </p>
             <p id="loginError" class="auth-error hidden" role="alert"></p>
           </form>
 
-          <form id="registerForm" class="auth-form auth-form-secondary">
+          <form id="registerForm" class="auth-form auth-form-secondary hidden">
             <div class="auth-form-header">
               <h2>Neues Konto</h2>
               <p class="muted">Neue Konten können nur mit einem gültigen Registrierungsschlüssel angelegt werden.</p>
             </div>
+
+            <p class="auth-note muted">
+              Schon registriert?
+              <button id="showLoginButton" type="button" class="link-button">Zurück zum Login</button>
+            </p>
 
             <label>
               <span>Vollständiger Name</span>
@@ -136,12 +145,12 @@
           <form id="forgotPasswordForm" class="auth-form auth-form-secondary hidden">
             <div class="auth-form-header">
               <h2>Passwort zurücksetzen</h2>
-              <p class="muted">Wir senden einen Einmal-Schlüssel an die für das Konto hinterlegte E-Mail-Adresse.</p>
+              <p class="muted">E-Mail-Adresse eingeben. Ist sie bei einem Konto hinterlegt, senden wir einen Einmal-Schlüssel dorthin.</p>
             </div>
 
             <label>
-              <span>Benutzername</span>
-              <input id="forgotPasswordUsername" name="username" type="text" placeholder="z. B. lucia.vettori" autocomplete="username">
+              <span>E-Mail-Adresse</span>
+              <input id="forgotPasswordEmail" name="email" type="email" placeholder="z. B. name@example.org" autocomplete="email">
             </label>
 
             <button id="forgotPasswordButton" class="secondary" type="submit">Schlüssel anfordern</button>

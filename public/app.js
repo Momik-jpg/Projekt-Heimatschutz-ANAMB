@@ -2547,10 +2547,22 @@ function bindEvents() {
     }
   });
 
+  elements.showRegisterButton.addEventListener("click", () => {
+    elements.loginForm.classList.add("hidden");
+    elements.registerForm.classList.remove("hidden");
+    focusWithoutScroll(elements.registerDisplayName);
+  });
+
+  elements.showLoginButton.addEventListener("click", () => {
+    elements.registerForm.classList.add("hidden");
+    elements.loginForm.classList.remove("hidden");
+    focusWithoutScroll(elements.loginUsername);
+  });
+
   elements.showForgotPasswordButton.addEventListener("click", () => {
     elements.forgotPasswordForm.classList.remove("hidden");
     elements.resetPasswordForm.classList.remove("hidden");
-    focusWithoutScroll(elements.forgotPasswordUsername);
+    focusWithoutScroll(elements.forgotPasswordEmail);
   });
 
   elements.forgotPasswordForm.addEventListener("submit", async (event) => {
@@ -2562,7 +2574,7 @@ function bindEvents() {
       await withBusyState(elements.forgotPasswordButton, "Wird gesendet...", async () => {
         const payload = await requestJson("/api/auth/forgot-password", {
           method: "POST",
-          body: JSON.stringify({ username: elements.forgotPasswordUsername.value.trim().toLowerCase() }),
+          body: JSON.stringify({ email: elements.forgotPasswordEmail.value.trim().toLowerCase() }),
           skipSessionReset: true
         });
 

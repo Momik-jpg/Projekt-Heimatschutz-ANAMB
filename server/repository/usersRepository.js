@@ -170,6 +170,35 @@ export function createUsersRepository(db) {
       };
     },
 
+    // Kontaktdaten anhand der hinterlegten E-Mail-Adresse (fuer Self-Service-Reset
+    // per E-Mail-Eingabe). E-Mails werden klein geschrieben gespeichert.
+    getContactByEmail(email) {
+      const normalizedEmail = String(email ?? "").trim().toLowerCase();
+
+      if (!normalizedEmail) {
+        return null;
+      }
+
+      const row = db
+        .prepare(`
+          SELECT id, display_name, email
+          FROM users
+          WHERE email = ? AND email <> '' AND active = 1
+          LIMIT 1
+        `)
+        .get(normalizedEmail);
+
+      if (!row) {
+        return null;
+      }
+
+      return {
+        id: row.id,
+        displayName: row.display_name,
+        email: String(row.email ?? "").trim()
+      };
+    },
+
     async authenticate({ userId, username, password }) {
       let row = null;
 
