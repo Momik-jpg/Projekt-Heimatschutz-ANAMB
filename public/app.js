@@ -28,7 +28,9 @@ import {
   focusWithoutScroll,
   withBusyState,
   setTwoFactorError,
-  setTwoFactorSuccess
+  setTwoFactorSuccess,
+  closeConfirmDialog,
+  openConfirmDialog
 } from "./ui.js";
 
 const DEFAULT_STALE_DEADLINE_DAYS = 30;
@@ -51,7 +53,6 @@ const defaultRequestTimeoutMs = 60000;
 
 
 let searchTimeoutId = null;
-let confirmResolver = null;
 
 
 function isMasterUser(user = state.currentUser) {
@@ -133,40 +134,6 @@ function persistRememberedUsername() {
 }
 
 
-function closeConfirmDialog(accepted) {
-  elements.confirmOverlay.classList.add("hidden");
-  elements.confirmOverlay.setAttribute("aria-hidden", "true");
-
-  if (confirmResolver) {
-    const resolver = confirmResolver;
-    confirmResolver = null;
-    resolver(Boolean(accepted));
-  }
-}
-
-function openConfirmDialog({
-  eyebrow = "Bitte bestätigen",
-  title = "Aktion bestätigen",
-  message = "Möchten Sie fortfahren?",
-  confirmLabel = "Bestätigen"
-} = {}) {
-  if (confirmResolver) {
-    confirmResolver(false);
-    confirmResolver = null;
-  }
-
-  elements.confirmEyebrow.textContent = eyebrow;
-  elements.confirmTitle.textContent = title;
-  elements.confirmMessage.textContent = message;
-  elements.confirmAcceptButton.textContent = confirmLabel;
-  elements.confirmOverlay.classList.remove("hidden");
-  elements.confirmOverlay.setAttribute("aria-hidden", "false");
-
-  return new Promise((resolve) => {
-    confirmResolver = resolve;
-    elements.confirmAcceptButton.focus();
-  });
-}
 
 function clearRegisterForm() {
   elements.registerDisplayName.value = "";

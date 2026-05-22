@@ -90,3 +90,41 @@ export function setTwoFactorSuccess(message = "") {
   elements.twoFactorSuccess.textContent = message;
   elements.twoFactorSuccess.classList.toggle("hidden", !message);
 }
+
+// Bestaetigungs-Dialog. confirmResolver bleibt modul-lokal (nur diese zwei Funktionen nutzen ihn).
+let confirmResolver = null;
+
+export function closeConfirmDialog(accepted) {
+  elements.confirmOverlay.classList.add("hidden");
+  elements.confirmOverlay.setAttribute("aria-hidden", "true");
+
+  if (confirmResolver) {
+    const resolver = confirmResolver;
+    confirmResolver = null;
+    resolver(Boolean(accepted));
+  }
+}
+
+export function openConfirmDialog({
+  eyebrow = "Bitte bestätigen",
+  title = "Aktion bestätigen",
+  message = "Möchten Sie fortfahren?",
+  confirmLabel = "Bestätigen"
+} = {}) {
+  if (confirmResolver) {
+    confirmResolver(false);
+    confirmResolver = null;
+  }
+
+  elements.confirmEyebrow.textContent = eyebrow;
+  elements.confirmTitle.textContent = title;
+  elements.confirmMessage.textContent = message;
+  elements.confirmAcceptButton.textContent = confirmLabel;
+  elements.confirmOverlay.classList.remove("hidden");
+  elements.confirmOverlay.setAttribute("aria-hidden", "false");
+
+  return new Promise((resolve) => {
+    confirmResolver = resolve;
+    elements.confirmAcceptButton.focus();
+  });
+}
