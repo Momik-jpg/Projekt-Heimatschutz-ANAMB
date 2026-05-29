@@ -170,7 +170,7 @@ export function createUsersRepository(db) {
       };
     },
 
-    // Kontaktdaten anhand der hinterlegten E-Mail-Adresse (fuer Self-Service-Reset
+    // Kontaktdaten anhand der hinterlegten E-Mail-Adresse (für Self-Service-Reset
     // per E-Mail-Eingabe). E-Mails werden klein geschrieben gespeichert.
     getContactByEmail(email) {
       const normalizedEmail = String(email ?? "").trim().toLowerCase();

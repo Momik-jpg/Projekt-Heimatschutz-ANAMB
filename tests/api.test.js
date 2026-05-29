@@ -14,6 +14,12 @@ import { createDatabase } from "../server/db.js";
 import { createApplicationsRepository } from "../server/repository/applicationsRepository.js";
 import { generateTotp } from "../server/services/totp.js";
 
+// Test-Zugangsdaten für die ephemere In-Memory-Testdatenbank. Das sind KEINE
+// echten Secrets und tauchen nirgends produktiv auf. Per Umgebungsvariable
+// überschreibbar, sonst neutrale Platzhalter.
+const TEST_MASTER_PASSWORD = process.env.TEST_MASTER_PASSWORD ?? "Test-Master-Pw-1!";
+const TEST_TEAM_PASSWORD = process.env.TEST_TEAM_PASSWORD ?? "Test-Team-Pw-1!";
+
 function createTestServer(options = {}) {
   const directory = options.directory ?? mkdtempSync(join(tmpdir(), "heimatschutz-aargau-"));
   const dbPath = options.dbPath ?? join(directory, "test.sqlite");
@@ -33,6 +39,7 @@ function createTestServer(options = {}) {
     autoSyncRunOnStart: options.autoSyncRunOnStart,
     loginRateLimit: options.loginRateLimit,
     compression: options.compression,
+    logger: options.logger,
     maintenanceEnabled: options.maintenanceEnabled ?? false,
     maintenanceRunOnStart: options.maintenanceRunOnStart ?? false,
     backupEnabled: options.backupEnabled,
@@ -46,7 +53,7 @@ function createTestServer(options = {}) {
     masterAccountPassword:
       "masterAccountPassword" in options
         ? options.masterAccountPassword
-        : process.env.MASTER_ACCOUNT_PASSWORD ?? "HouseisGood1999?",
+        : process.env.MASTER_ACCOUNT_PASSWORD ?? TEST_MASTER_PASSWORD,
     defaultLoginPassword:
       "defaultLoginPassword" in options
         ? options.defaultLoginPassword
@@ -215,7 +222,7 @@ async function login(baseUrl, credentials = {}) {
 async function createRegistrationKey(baseUrl) {
   const masterCookie = await login(baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
   const response = await requestJson(baseUrl, "/api/admin/registration-keys", {
     method: "POST",
@@ -289,7 +296,7 @@ test("production startup validation rejects placeholder passwords", () => {
     () =>
       validateProductionRuntimeConfiguration({
         NODE_ENV: "production",
-        MASTER_ACCOUNT_PASSWORD: "HouseisGood1999?",
+        MASTER_ACCOUNT_PASSWORD: TEST_MASTER_PASSWORD,
         DEFAULT_LOGIN_PASSWORD: "BitteVorDemReleaseAendern123"
       }),
     /Produktionsstart abgebrochen/i
@@ -425,7 +432,7 @@ test("master can reset a forgotten password for a team member", async (context) 
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
@@ -479,7 +486,7 @@ test("master can import an AGIS export JSON as a practical fallback", async (con
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const importResponse = await requestJson(testServer.baseUrl, "/api/admin/import-json", {
@@ -591,7 +598,7 @@ test("master can store an automatic JSON source url and trigger the first sync",
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const saveResponse = await requestJson(testServer.baseUrl, "/api/admin/sync-settings", {
@@ -690,7 +697,7 @@ test("master can use a global website scraping source for a municipality", async
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const saveResponse = await requestJson(testServer.baseUrl, "/api/admin/sync-settings", {
@@ -741,7 +748,7 @@ test("global website scraping settings require a municipality context", async (c
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const explicitScrapingResponse = await requestJson(testServer.baseUrl, "/api/admin/sync-settings", {
@@ -782,7 +789,7 @@ test("master can list seeded municipality sources for all Aargau municipalities"
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const response = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -834,7 +841,7 @@ test("municipality source catalog exposes coverage report, ratings and shared so
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const response = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -886,7 +893,7 @@ test("municipality source exports are available as json and csv", async (context
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const jsonResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources/export.json", {
@@ -1058,7 +1065,7 @@ test("municipality website sources can be configured and imported automatically"
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -1319,7 +1326,7 @@ test("municipality import hydrates official detail pages and ignores generic arc
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -1457,7 +1464,7 @@ test("municipality import prefers official detail pages over vague list titles",
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -1601,7 +1608,7 @@ test("municipality import supports official RSS feeds with linked detail pages",
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -1739,7 +1746,7 @@ test("municipality import auto-detects XML feed URLs even if a source is configu
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -1888,7 +1895,7 @@ test("municipality import supports sitemap sources with official detail pages", 
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -2028,7 +2035,7 @@ test("municipality import supports official iframe-embedded publication pages", 
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -2145,7 +2152,7 @@ test("municipality import extracts official publication metadata from JSON-LD pa
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -2254,7 +2261,7 @@ test("municipality import geocodes valid addresses through the official swiss se
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -2368,7 +2375,7 @@ test("municipality import geocodes addresses without a street suffix and skips c
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -2494,7 +2501,7 @@ test("municipality import can geocode parcel-based locations through the officia
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -2619,7 +2626,7 @@ test("municipality import resolves the correct address from mixed official overv
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -2730,7 +2737,7 @@ test("municipality import narrows Aarau overview blocks by official BG links ins
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -2830,7 +2837,7 @@ test("municipality import keeps official Aarau publication blocks separated", as
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -2926,7 +2933,7 @@ test("municipality import derives project types from official pdf publication ti
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -3046,7 +3053,7 @@ test("municipality import can extract official details from publication PDFs whe
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -3138,7 +3145,7 @@ test("municipality import supports direct official pdf sources", async (context)
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -3226,7 +3233,7 @@ test("municipality import auto-detects direct pdf urls even if a source is confi
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -3339,7 +3346,7 @@ test("municipality import treats query-parameter pdf links as publication files 
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -3430,7 +3437,7 @@ test("municipality import ignores generic publication pdf entries without a reli
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -3556,7 +3563,7 @@ test("municipality import auto-discovers the publication page from a homepage-on
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -3664,7 +3671,7 @@ test("Amtsblatt source scrapes canton-wide Baugesuche and tags the correct munic
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
@@ -3735,7 +3742,7 @@ test("Amtsblatt uses the build-site address, not the applicant's residence", asy
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
@@ -3840,7 +3847,7 @@ test("municipality import deduplicates repeated official detail links and uses m
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -3951,7 +3958,7 @@ test("municipality import skips synthetic Aarau detail pages when only a filenam
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
@@ -4050,7 +4057,7 @@ test("protected AGIS ArcGIS sources can sync automatically with a token", async 
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   const saveResponse = await requestJson(testServer.baseUrl, "/api/admin/sync-settings", {
@@ -4116,7 +4123,7 @@ test("configured master password is applied again on server start", async (conte
     method: "POST",
     body: JSON.stringify({
       username: "master",
-      password: "HouseisGood1999?"
+      password: TEST_MASTER_PASSWORD
     })
   });
   assert.equal(originalLogin.status, 200);
@@ -4129,7 +4136,7 @@ test("configured master password is applied again on server start", async (conte
     method: "POST",
     body: JSON.stringify({
       username: "master",
-      password: "HouseisGood1999?"
+      password: TEST_MASTER_PASSWORD
     })
   });
   assert.equal(oldPasswordLogin.status, 401);
@@ -5166,6 +5173,47 @@ test("a configured master password does not trigger the setup key flow", async (
   assert.equal(masterLogin.status, 200);
 });
 
+test("one-time setup and reset keys are not written to logs without mail delivery", async (context) => {
+  const logMessages = [];
+  const logger = {
+    log: (message) => logMessages.push(String(message)),
+    warn: (message) => logMessages.push(String(message)),
+    error: (message) => logMessages.push(String(message))
+  };
+  const testServer = createTestServer({
+    masterAccountPassword: "",
+    masterSetupEmail: "",
+    logger
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  await testServer.ready;
+
+  assert.doesNotMatch(logMessages.join("\n"), /HSA-(?:SETUP|RESET)-/);
+
+  const status = await requestJson(testServer.baseUrl, "/api/auth/master-setup-status");
+  assert.equal(status.payload.setupRequired, false);
+
+  testServer.db
+    .prepare("UPDATE users SET email = 'lucia@example.test' WHERE username = 'lucia.vettori'")
+    .run();
+
+  const forgot = await requestJson(testServer.baseUrl, "/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email: "lucia@example.test" })
+  });
+  assert.equal(forgot.status, 200);
+  assert.equal(forgot.payload.success, true);
+
+  const resetKeyCount = testServer.db.prepare("SELECT COUNT(*) AS count FROM password_reset_keys").get().count;
+  assert.equal(resetKeyCount, 0);
+  assert.doesNotMatch(logMessages.join("\n"), /HSA-(?:SETUP|RESET)-/);
+});
+
 test("self-service password reset by email works for accounts with an email", async (context) => {
   const resetKeys = [];
   const testServer = createTestServer({
@@ -5386,7 +5434,7 @@ test("master 2FA can be enabled and is then required at login", async (context) 
 
   const masterCookie = await login(testServer.baseUrl, {
     username: "master",
-    password: "HouseisGood1999?"
+    password: TEST_MASTER_PASSWORD
   });
 
   // Einrichtung starten -> Secret erhalten.
@@ -5423,7 +5471,7 @@ test("master 2FA can be enabled and is then required at login", async (context) 
   // Login ohne Code -> 401 mit totpRequired.
   const noCode = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ username: "master", password: "HouseisGood1999?" })
+    body: JSON.stringify({ username: "master", password: TEST_MASTER_PASSWORD })
   });
   assert.equal(noCode.status, 401);
   assert.equal(noCode.payload.totpRequired, true);
@@ -5431,7 +5479,7 @@ test("master 2FA can be enabled and is then required at login", async (context) 
   // Login mit falschem Code -> 401.
   const badCode = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ username: "master", password: "HouseisGood1999?", totp: "000000" })
+    body: JSON.stringify({ username: "master", password: TEST_MASTER_PASSWORD, totp: "000000" })
   });
   assert.equal(badCode.status, 401);
 
@@ -5440,13 +5488,13 @@ test("master 2FA can be enabled and is then required at login", async (context) 
     method: "POST",
     body: JSON.stringify({
       username: "master",
-      password: "HouseisGood1999?",
+      password: TEST_MASTER_PASSWORD,
       totp: generateTotp(setup.payload.secret)
     })
   });
   assert.equal(goodCode.status, 200);
 
-  // Deaktivieren mit korrektem Code -> Login wieder ohne Code moeglich.
+  // Deaktivieren mit korrektem Code -> Login wieder ohne Code möglich.
   const disable = await requestJson(testServer.baseUrl, "/api/admin/2fa/disable", {
     method: "POST",
     headers: { Cookie: masterCookie },
@@ -5457,7 +5505,7 @@ test("master 2FA can be enabled and is then required at login", async (context) 
 
   const afterDisable = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ username: "master", password: "HouseisGood1999?" })
+    body: JSON.stringify({ username: "master", password: TEST_MASTER_PASSWORD })
   });
   assert.equal(afterDisable.status, 200);
 });
@@ -5518,7 +5566,8 @@ test("forgot-password by email address finds the account and sends a key", async
 test("turnstile (when enabled) protects register, forgot-password and the second login attempt", async (context) => {
   const testServer = createTestServer({
     turnstileSiteKey: "test-site-key",
-    turnstileVerify: async (token) => token === "good"
+    turnstileVerify: async (token) => token === "good",
+    onPasswordResetKey: () => {}
   });
 
   context.after(async () => {
@@ -5530,12 +5579,12 @@ test("turnstile (when enabled) protects register, forgot-password and the second
     .prepare("UPDATE users SET email = 'lucia@example.test' WHERE username = 'lucia.vettori'")
     .run();
 
-  // Config-Endpoint meldet aktiviert + Site-Key (fuers Frontend-Widget).
+  // Config-Endpoint meldet aktiviert + Site-Key (fürs Frontend-Widget).
   const config = await requestJson(testServer.baseUrl, "/api/auth/config");
   assert.equal(config.payload.turnstile.enabled, true);
   assert.equal(config.payload.turnstile.siteKey, "test-site-key");
 
-  // forgot-password: ohne Token abgewiesen, mit gueltigem Token erlaubt.
+  // forgot-password: ohne Token abgewiesen, mit gültigem Token erlaubt.
   const forgotNoToken = await requestJson(testServer.baseUrl, "/api/auth/forgot-password", {
     method: "POST",
     body: JSON.stringify({ email: "lucia@example.test" })
@@ -5550,7 +5599,7 @@ test("turnstile (when enabled) protects register, forgot-password and the second
   assert.equal(forgotGood.status, 200);
 
   // Registrierung ohne Token abgewiesen.
-  const masterCookie = await login(testServer.baseUrl, { username: "master", password: "HouseisGood1999?" });
+  const masterCookie = await login(testServer.baseUrl, { username: "master", password: TEST_MASTER_PASSWORD });
   const keyResponse = await requestJson(testServer.baseUrl, "/api/admin/registration-keys", {
     method: "POST",
     headers: { Cookie: masterCookie },
@@ -5568,7 +5617,7 @@ test("turnstile (when enabled) protects register, forgot-password and the second
   assert.equal(regNoToken.status, 400);
   assert.equal(regNoToken.payload.captchaRequired, true);
 
-  // Login: 1. Versuch (falsch) braucht KEIN Token, meldet aber captchaRequired fuer den naechsten.
+  // Login: 1. Versuch (falsch) braucht KEIN Token, meldet aber captchaRequired für den nächsten.
   const firstWrong = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username: "lucia.vettori", password: "falsch" })
@@ -5576,7 +5625,7 @@ test("turnstile (when enabled) protects register, forgot-password and the second
   assert.equal(firstWrong.status, 401);
   assert.equal(firstWrong.payload.captchaRequired, true);
 
-  // 2. Versuch ohne Token -> abgewiesen (Bot-Pruefung verlangt).
+  // 2. Versuch ohne Token -> abgewiesen (Bot-Prüfung verlangt).
   const secondNoToken = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
@@ -5584,7 +5633,7 @@ test("turnstile (when enabled) protects register, forgot-password and the second
   assert.equal(secondNoToken.status, 401);
   assert.equal(secondNoToken.payload.captchaRequired, true);
 
-  // 2. Versuch mit gueltigem Token + richtigem Passwort -> Login klappt.
+  // 2. Versuch mit gültigem Token + richtigem Passwort -> Login klappt.
   const secondGood = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!", turnstileToken: "good" })

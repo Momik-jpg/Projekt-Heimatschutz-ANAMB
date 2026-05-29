@@ -59,7 +59,7 @@ export function createMailService({ getConfig, logger = console } = {}) {
         text
       });
 
-      logger.log?.(`E-Mail an ${to} gesendet: ${subject}`);
+      logger.log?.(`E-Mail gesendet: ${subject}`);
     }
   };
 }

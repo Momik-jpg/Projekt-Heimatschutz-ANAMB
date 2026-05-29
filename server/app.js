@@ -520,8 +520,8 @@ function createLoginRateLimiter({
       return { limited: false };
     },
 
-    // True, sobald fuer diesen Schluessel im Zeitfenster bereits ein Fehlversuch
-    // vorliegt (=> ab dem 2. Login-Versuch eine Bot-Pruefung verlangen).
+    // True, sobald für diesen Schlüssel im Zeitfenster bereits ein Fehlversuch
+    // vorliegt (=> ab dem 2. Login-Versuch eine Bot-Prüfung verlangen).
     requiresChallenge(key) {
       const now = Date.now();
       const entry = entries.get(key);
@@ -558,7 +558,7 @@ function createLoginRateLimiter({
   };
 }
 
-// Prueft ein Cloudflare-Turnstile-Token gegen die siteverify-API.
+// Prüft ein Cloudflare-Turnstile-Token gegen die siteverify-API.
 async function verifyTurnstileToken(token, secret, remoteIp) {
   const params = new URLSearchParams();
   params.set("secret", secret);
@@ -961,8 +961,8 @@ export function createApp(options = {}) {
   const usersRepository = createUsersRepository(db);
   const mailService = options.mailService ?? createMailService({ logger });
 
-  // Cloudflare Turnstile (Bot-Schutz). Ohne konfigurierte Keys vollstaendig
-  // deaktiviert, damit lokale/Test-Laeufe ohne externe Abhaengigkeit funktionieren.
+  // Cloudflare Turnstile (Bot-Schutz). Ohne konfigurierte Keys vollständig
+  // deaktiviert, damit lokale/Test-Läufe ohne externe Abhängigkeit funktionieren.
   const turnstileSiteKey = normalizeEnvString(options.turnstileSiteKey ?? process.env.TURNSTILE_SITE_KEY ?? "");
   const turnstileSecretKey = normalizeEnvString(options.turnstileSecretKey ?? process.env.TURNSTILE_SECRET_KEY ?? "");
   const turnstileVerifyImpl = options.turnstileVerify ?? verifyTurnstileToken;
@@ -983,7 +983,7 @@ export function createApp(options = {}) {
     try {
       return Boolean(await turnstileVerifyImpl(token, turnstileSecretKey, request.ip));
     } catch (error) {
-      logger.warn?.(`Turnstile-Pruefung fehlgeschlagen: ${error.message}`);
+      logger.warn?.(`Turnstile-Prüfung fehlgeschlagen: ${error.message}`);
       return false;
     }
   }
@@ -1003,6 +1003,22 @@ export function createApp(options = {}) {
   const masterTotpEnabledSettingKey = "master_totp_enabled";
   const masterTotpSecretSettingKey = "master_totp_secret";
   const masterTotpPendingSecretSettingKey = "master_totp_pending_secret";
+
+  function canUseMailDelivery(sentTo) {
+    return Boolean(
+      sentTo &&
+        typeof mailService.sendMail === "function" &&
+        (typeof mailService.isConfigured !== "function" || mailService.isConfigured())
+    );
+  }
+
+  function canDeliverMasterSetupKey() {
+    return typeof options.onMasterSetupKey === "function" || canUseMailDelivery(masterSetupEmail);
+  }
+
+  function canDeliverPasswordResetKey(contact) {
+    return typeof options.onPasswordResetKey === "function" || canUseMailDelivery(contact?.email);
+  }
 
   function getMasterUserId() {
     const row = db
@@ -1035,18 +1051,13 @@ export function createApp(options = {}) {
       "Heimatschutz Aargau"
     ].join("\n");
 
-    if (sentTo && mailService.isConfigured?.()) {
+    if (canUseMailDelivery(sentTo)) {
       await mailService.sendMail({ to: sentTo, subject, text });
-      logger.log?.(`Master-Setup-Key per E-Mail an ${sentTo} gesendet.`);
+      logger.log?.("Master-Setup-Key per E-Mail versendet.");
       return;
     }
 
-    // Fallback ohne SMTP/Empfänger: Key einmalig ins Server-Log schreiben, damit
-    // die Ersteinrichtung nicht blockiert. In Produktion sollte SMTP gesetzt sein.
-    logger.warn?.(
-      `SMTP oder MASTER_SETUP_EMAIL ist nicht konfiguriert. Einmaliger Master-Setup-Key ` +
-        `(nur jetzt sichtbar): ${key} – gültig bis ${expiresAt}.`
-    );
+    throw new Error("Master-Setup-Key kann nicht sicher zugestellt werden (SMTP oder Empfänger fehlt).");
   }
 
   async function deliverPasswordResetKey({ key, sentTo, displayName, expiresAt }) {
@@ -1072,16 +1083,13 @@ export function createApp(options = {}) {
       "Heimatschutz Aargau"
     ].join("\n");
 
-    if (sentTo && mailService.isConfigured?.()) {
+    if (canUseMailDelivery(sentTo)) {
       await mailService.sendMail({ to: sentTo, subject, text });
-      logger.log?.(`Passwort-Reset-Key per E-Mail an ${sentTo} gesendet.`);
+      logger.log?.("Passwort-Reset-Key per E-Mail versendet.");
       return;
     }
 
-    logger.warn?.(
-      `SMTP ist nicht konfiguriert. Einmaliger Passwort-Reset-Key für ${sentTo} ` +
-        `(nur jetzt sichtbar): ${key} – gültig bis ${expiresAt}.`
-    );
+    throw new Error("Passwort-Reset-Key kann nicht sicher zugestellt werden (SMTP fehlt).");
   }
 
   async function ensureMasterAccountReady() {
@@ -1104,6 +1112,13 @@ export function createApp(options = {}) {
     const now = nowIso();
 
     if (masterSetupKeysRepository.hasActiveForUser(masterUserId, now)) {
+      return;
+    }
+
+    if (!canDeliverMasterSetupKey()) {
+      logger.warn?.(
+        "Master-Setup-Key wurde nicht erzeugt: Bitte MASTER_ACCOUNT_PASSWORD setzen oder SMTP + MASTER_SETUP_EMAIL konfigurieren."
+      );
       return;
     }
 
@@ -1271,7 +1286,7 @@ export function createApp(options = {}) {
       return;
     }
 
-    // Bot-Pruefung erst ab dem 2. Versuch (nach einem vorherigen Fehlschlag).
+    // Bot-Prüfung erst ab dem 2. Versuch (nach einem vorherigen Fehlschlag).
     if (turnstileEnabled && loginRateLimiter?.requiresChallenge(rateLimitKey)) {
       if (!(await passesTurnstile(request))) {
         response.status(401).json({ error: "Bitte die Bot-Prüfung abschliessen.", captchaRequired: true });
@@ -1286,7 +1301,7 @@ export function createApp(options = {}) {
       recordAudit("auth.login_failed", request, {
         target: validation.value.username || validation.value.userId || ""
       });
-      // Nach einem Fehlversuch verlangt der naechste Versuch eine Bot-Pruefung.
+      // Nach einem Fehlversuch verlangt der nächste Versuch eine Bot-Prüfung.
       response.status(401).json({
         error: "Benutzer oder Passwort stimmen nicht.",
         captchaRequired: turnstileEnabled
@@ -1294,7 +1309,7 @@ export function createApp(options = {}) {
       return;
     }
 
-    // Zweiter Faktor (TOTP) fuer das Master-Konto, falls aktiviert.
+    // Zweiter Faktor (TOTP) für das Master-Konto, falls aktiviert.
     if (isMasterUser(user) && settingsRepository.getValue(masterTotpEnabledSettingKey) === "1") {
       const totpCode = String(request.body?.totp ?? "").trim();
       const secret = settingsRepository.getValue(masterTotpSecretSettingKey);
@@ -1432,7 +1447,7 @@ export function createApp(options = {}) {
 
   // Ersteinrichtung des Master-Kontos über den per E-Mail zugestellten Setup-Key.
   // Erst danach hat das Master-Konto ein gültiges Passwort.
-  // Oeffentliche Client-Konfiguration (z. B. Turnstile-Site-Key fuers Widget).
+  // Öffentliche Client-Konfiguration (z. B. Turnstile-Site-Key fürs Widget).
   app.get("/api/auth/config", (_request, response) => {
     response.json({
       turnstile: {
@@ -1534,15 +1549,15 @@ export function createApp(options = {}) {
   });
 
   // Self-Service Passwort vergessen: schickt einen Einmal-Key an die hinterlegte
-  // E-Mail. Antwortet immer gleich (kein Rueckschluss, ob Konto/E-Mail existiert).
+  // E-Mail. Antwortet immer gleich (kein Rückschluss, ob Konto/E-Mail existiert).
   app.post("/api/auth/forgot-password", async (request, response) => {
     const genericResponse = {
       success: true,
       message: "Falls für dieses Konto eine E-Mail hinterlegt ist, wurde ein Reset-Schlüssel versendet."
     };
 
-    // Primaer wird die E-Mail-Adresse eingegeben; Benutzername bleibt als
-    // Alternative moeglich (z. B. fuer Skripte/Altpfade).
+    // Primär wird die E-Mail-Adresse eingegeben; Benutzername bleibt als
+    // Alternative möglich (z. B. für Skripte/Altpfade).
     const email = String(request.body?.email ?? "").trim().toLowerCase();
     const username = String(request.body?.username ?? "").trim().toLowerCase();
 
@@ -1561,10 +1576,22 @@ export function createApp(options = {}) {
       : usersRepository.getContactByUsername(username);
 
     if (!contact || !contact.email) {
-      // Keine passende E-Mail/kein Konto: bewusst dieselbe Antwort (kein Rueckschluss).
+      // Keine passende E-Mail/kein Konto: bewusst dieselbe Antwort (kein Rückschluss).
       recordAudit("auth.password_reset_requested", request, {
         target: email || username,
         detail: "no-match"
+      });
+      response.json(genericResponse);
+      return;
+    }
+
+    if (!canDeliverPasswordResetKey(contact)) {
+      logger.warn?.(
+        "Passwort-Reset-Key wurde nicht erzeugt: SMTP ist nicht konfiguriert."
+      );
+      recordAudit("auth.password_reset_requested", request, {
+        target: username || email,
+        detail: "delivery-unavailable"
       });
       response.json(genericResponse);
       return;
