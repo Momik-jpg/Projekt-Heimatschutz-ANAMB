@@ -98,11 +98,7 @@ Zusätzlich geprüft mit Playwright MCP:
 - Detailansicht mit AGIS-Karte
 - Verwaltungsbereich des Master-Kontos
 
-Die Screenshots dazu liegen in:
-- [docs/screenshots/01-login.png](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/screenshots/01-login.png)
-- [docs/screenshots/02-arbeitsliste.png](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/screenshots/02-arbeitsliste.png)
-- [docs/screenshots/03-detail-agis.png](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/screenshots/03-detail-agis.png)
-- [docs/screenshots/04-verwaltung.png](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/screenshots/04-verwaltung.png)
+Die Sichtprüfung wurde ohne versionierte Screenshot-Artefakte dokumentiert, damit das Repository schlank bleibt.
 
 ## Behobene Probleme im aktuellen Endstand
 

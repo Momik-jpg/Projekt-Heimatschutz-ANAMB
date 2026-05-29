@@ -58,31 +58,23 @@ Als Orientierung dienten offizielle, zurückhaltende Webmuster aus dem Umfeld vo
 - fachliche Endbeurteilung
 - interne Priorisierung, Notizen und Kommentare
 
-## Screenshots
+## Sichtprüfung
 
 ### 1. Login
 
 Die Anwendung trennt internen Zugang und Registrierung klar. Benutzer melden sich mit Benutzername und Passwort an; neue Konten brauchen einen Registrierungsschlüssel.
 
-![Login](screenshots/01-login.png)
-
 ### 2. Arbeitsliste
 
 Die Standardansicht ist auf aktuelle und offene Fälle reduziert. Suche, Filter und Schnellauswahl stehen oben; links steht die Arbeitsliste, rechts die Bearbeitung des gewählten Falls.
-
-![Arbeitsliste](screenshots/02-arbeitsliste.png)
 
 ### 3. Detailansicht mit AGIS
 
 Bei einem Schutztreffer zeigt die Karte Standort, rote Inventarobjekte und amtliche Kontextzonen. Die Bewertung bleibt kompakt und ist direkt unter der Karte lesbar.
 
-![Detailansicht mit AGIS](screenshots/03-detail-agis.png)
-
 ### 4. Verwaltungsbereich
 
 Das Master-Konto kann Schlüssel, Passwörter, Datenimporte, automatische Sync-Quellen und Gemeindequellen zentral verwalten. Der neue Verwaltungsbereich zeigt zusätzlich Katalogreport, gemeinsame Quellen, Qualitätsrating und Exportfunktionen.
-
-![Verwaltung](screenshots/04-verwaltung.png)
 
 ## Aufbau der Anwendung
 

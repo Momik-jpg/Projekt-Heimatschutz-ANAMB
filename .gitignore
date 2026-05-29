@@ -18,3 +18,7 @@ data-local.sqlite
 data-local.sqlite-shm
 data-local.sqlite-wal
 backup/
+docs/screenshots/
+docs/*.docx
+*-check.png
+*-fix.png
