@@ -1,7 +1,7 @@
 {
   "name": "heimatschutz-aargau",
   "version": "1.0.0",
-  "description": "Interner Prototyp zur Vorsortierung von Baugesuchen fuer den Heimatschutz Aargau.",
+  "description": "Interner Prototyp zur Vorsortierung von Baugesuchen für den Heimatschutz Aargau.",
   "main": "server/app.js",
   "scripts": {
     "dev": "node --watch server/app.js",

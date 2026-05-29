@@ -28,8 +28,7 @@ Nicht enthalten sind absichtlich:
 
 ```powershell
 npm install
-$env:MASTER_ACCOUNT_PASSWORD="LokalesMasterPasswort_2026!"
-$env:DEFAULT_LOGIN_PASSWORD="LokalesTeamPasswort_2026!"
+$env:MASTER_ACCOUNT_PASSWORD = Read-Host "Master-Passwort für diese lokale Sitzung"
 npm start
 ```
 

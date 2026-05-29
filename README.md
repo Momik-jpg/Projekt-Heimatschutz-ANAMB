@@ -104,11 +104,8 @@ Voraussetzung:
 PowerShell:
 
 ```powershell
-# Einfachste Variante: Master-Passwort direkt setzen (kein Passwort im Code).
-$env:MASTER_ACCOUNT_PASSWORD="LokalesMasterPasswort_2026!"
-# Optional: Startpasswort für die Seed-Teamkonten (sonst bleiben sie gesperrt).
-$env:DEFAULT_LOGIN_PASSWORD="LokalesTeamPasswort_2026!"
 npm install
+$env:MASTER_ACCOUNT_PASSWORD = Read-Host "Master-Passwort für diese lokale Sitzung"
 npm start
 ```
 
@@ -116,7 +113,8 @@ Danach ist die Anwendung lokal unter [http://localhost:3000](http://localhost:30
 
 Alternativ ohne Passwort in der Umgebung: `MASTER_ACCOUNT_PASSWORD` weglassen. Beim
 ersten Start erzeugt die App einen Einmal-Setup-Schlüssel. Ist SMTP konfiguriert,
-wird er an `MASTER_SETUP_EMAIL` gesendet; sonst erscheint er einmalig im Server-Log.
+wird er an `MASTER_SETUP_EMAIL` gesendet. Ohne SMTP wird aus Sicherheitsgründen
+kein Klartext-Schlüssel in Logs geschrieben.
 Im Login-Bildschirm unter "Master-Konto einrichten" Schlüssel und neues Passwort
 eingeben.
 
@@ -127,19 +125,19 @@ DATABASE_PATH=/data/heimatschutz.sqlite
 NODE_ENV=production
 PORT=3000
 
-# Master-Konto: entweder direkt ein Passwort setzen ...
-MASTER_ACCOUNT_PASSWORD=EinSicheresMasterPasswort
+# Master-Konto: entweder direkt ein Passwort als Hosting-Secret setzen ...
+MASTER_ACCOUNT_PASSWORD=<als-secret-setzen>
 # ... oder MASTER_ACCOUNT_PASSWORD leer lassen und die E-Mail-Einrichtung nutzen:
 # MASTER_SETUP_EMAIL=master@example.org
 # SMTP_HOST=smtp.example.org
 # SMTP_PORT=587
 # SMTP_SECURE=false
 # SMTP_USER=postfach@example.org
-# SMTP_PASSWORD=DEIN_SMTP_PASSWORT
+# SMTP_PASSWORD=<als-secret-setzen>
 # SMTP_FROM=Heimatschutz Aargau <postfach@example.org>
 
 # Optionales Startpasswort für die Seed-Teamkonten (sonst gesperrt):
-# DEFAULT_LOGIN_PASSWORD=EinSicheresTeamPasswort
+# DEFAULT_LOGIN_PASSWORD=<als-secret-setzen>
 ```
 
 Hinweis: Es sind keine Standardpasswörter im Code hinterlegt. In Produktion
@@ -152,7 +150,7 @@ konfiguriert ist.
 1. `MASTER_ACCOUNT_PASSWORD` leer lassen, dafür `MASTER_SETUP_EMAIL` und die
    `SMTP_*`-Variablen setzen.
 2. Beim ersten Start erzeugt die App einen Einmal-Schlüssel und sendet ihn an
-   `MASTER_SETUP_EMAIL` (ohne SMTP: einmalige Ausgabe im Server-Log).
+   `MASTER_SETUP_EMAIL`. Ohne SMTP wird kein Schlüssel ins Server-Log geschrieben.
 3. Im Login-Bildschirm "Master-Konto einrichten" öffnen, Schlüssel und neues
    Passwort eingeben. Der Schlüssel ist 48 Stunden gültig und nur einmal nutzbar.
 4. Danach normal mit Benutzer `master` und dem neuen Passwort anmelden.
