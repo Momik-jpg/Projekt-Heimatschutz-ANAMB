@@ -123,14 +123,15 @@ Nicht als Hauptquelle vorgesehen:
 
 Der Endstand wurde lokal geprüft:
 
-- `42` automatisierte Tests erfolgreich
+- `89` automatisierte Tests erfolgreich
 - Syntaxprüfung von Frontend und Backend erfolgreich
 - manuelle UI-Prüfung mit Playwright MCP erfolgreich
 - Screenshots stammen aus der laufenden lokalen Anwendung
 
 ## Produktive Bereitstellung
 
-Für den internen Pilot ist Railway mit Volume vorgesehen.
+Für den internen Pilot braucht die Hosting-Umgebung HTTPS, persistente
+SQLite-Ablage und sichere Umgebungsvariablen.
 
 Pflichtvariablen:
 

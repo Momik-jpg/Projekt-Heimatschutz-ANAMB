@@ -136,7 +136,7 @@ const defaultMunicipalityXmlLocationLimit = Number(process.env.MUNICIPALITY_XML_
 const defaultSwissGeocoderUrl =
   process.env.SWISS_GEOCODER_URL ?? "https://api3.geo.admin.ch/rest/services/api/SearchServer";
 const defaultRemoteRequestHeaders = {
-  "User-Agent": "HeimatschutzAargauBot/1.0 (+https://projekt-heimatschutz-anamb-production.up.railway.app)",
+  "User-Agent": "HeimatschutzAargauBot/1.0",
   "Accept-Language": "de-CH,de;q=0.9,en;q=0.8"
 };
 const germanMonthNumberMap = new Map([

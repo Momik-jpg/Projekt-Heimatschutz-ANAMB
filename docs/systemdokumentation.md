@@ -39,7 +39,7 @@ Allgemeine News-, Event- oder Social-Media-Seiten gelten nicht als produktive Ha
 Pfad:
 - `public/index.html`
 - `public/app.js`
-- `public/styles.css`
+- `public/redesign.css`
 
 Aufgaben:
 - Login und Registrierung
@@ -360,7 +360,7 @@ Damit ist die Detailkarte fachlich aussagekraeftiger als eine reine Textliste.
 - Produktion startet nicht mit Platzhalter-Passwörtern.
 - `MASTER_ACCOUNT_PASSWORD` und `DEFAULT_LOGIN_PASSWORD` müssen in Produktion echt gesetzt sein.
 - Geschützte Quellen können über Token eingebunden werden.
-- Railway mit Volume ist die vorgesehene produktive Pilotumgebung.
+- Der produktive Betrieb braucht HTTPS und ein persistentes SQLite-Datenverzeichnis.
 
 ## Testabdeckung
 

@@ -408,7 +408,7 @@ function setCommonSecurityHeaders(_request, response, next) {
   response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   // HSTS: Browser ignorieren den Header über HTTP, daher ist das unbedenklich und
-  // erzwingt HTTPS, sobald die App hinter TLS (z. B. Railway) ausgeliefert wird.
+  // erzwingt HTTPS, sobald die App hinter TLS ausgeliefert wird.
   response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("X-Frame-Options", "DENY");

@@ -11,6 +11,8 @@ output/
 server.out.log
 server.err.log
 .env
+frontend/
+frontend-export/
 heimatschutz-*.png
 output-*.html
 output-*.xml

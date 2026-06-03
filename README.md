@@ -182,17 +182,15 @@ AMTSBLATT_GEOCODE=true
 - `AMTSBLATT_MAX_PAGES`: wie viele Ergebnisseiten je Sync gelesen werden (jede Seite ~10 amtliche Publikationen, davon ~4 Baugesuche). Höhere Werte holen mehr Historie, erzeugen aber mehr Anfragen an die Behördenseite.
 - `AMTSBLATT_GEOCODE`: `false` schaltet die Live-Geokodierung beim Massen-Import ab (schneller Backfill grosser Mengen ohne Last-Spitze auf die amtlichen Dienste); die AGIS-Schutzprüfung erfolgt dann pro Fall später.
 
-## Railway
+## Produktiver Betrieb
 
-Für den internen Pilot ist Railway mit Volume die vorgesehene Betriebsumgebung.
+Für einen produktiven internen Pilot braucht die Hosting-Umgebung HTTPS,
+persistente SQLite-Ablage und sichere Umgebungsvariablen.
 
 Pflicht:
-- Volume an `/data`
+- persistentes Datenverzeichnis an `/data`
 - `DATABASE_PATH=/data/heimatschutz.sqlite`
 - Master-Konto eingerichtet: entweder ein sicherer Wert für `MASTER_ACCOUNT_PASSWORD` oder die E-Mail-Einrichtung (`MASTER_SETUP_EMAIL` + `SMTP_*`)
-
-Details:
-- [docs/deployment-railway.md](C:/Users/Andrin/OneDrive%20-%20Alte%20Kantonsschule%20Aarau/Desktop/xxxx/repo/docs/deployment-railway.md)
 
 ## Dokumentation
 

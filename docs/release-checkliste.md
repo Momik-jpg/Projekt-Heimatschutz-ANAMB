@@ -32,7 +32,8 @@
   Die Live-AGIS-Prüfung wird rechts für den ausgewählten Fall ausgeführt.
 - Der Amtsblatt-Import ist im Prototyp weiterhin demo-basiert.
 
-## Hosting-Entscheid
+## Hosting-Anforderungen
 
-- Für eine kostenlose Demo kann Koyeb verwendet werden, aber ohne dauerhaft garantierte SQLite-Daten.
-- Für den echten internen Pilot mit gespeicherten Teamdaten ist Railway mit Volume die empfohlene Variante.
+- Die Hosting-Umgebung muss HTTPS bereitstellen.
+- SQLite braucht ein persistentes Datenverzeichnis, zum Beispiel `/data`.
+- Produktive Secrets werden ausschliesslich als Umgebungsvariablen gesetzt.

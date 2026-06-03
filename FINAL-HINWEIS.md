@@ -39,7 +39,7 @@ Danach läuft die App unter:
 
 ## Wichtig
 
-Für Railway produktive Werte setzen:
+Für die produktive Hosting-Umgebung echte Werte setzen:
 
 ```env
 DATABASE_PATH=/data/heimatschutz.sqlite
