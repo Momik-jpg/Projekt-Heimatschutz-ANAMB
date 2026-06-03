@@ -399,8 +399,25 @@ function isMaster() {
   return state.currentUser?.role === "Master";
 }
 
+// Säubert die Bauvorhaben-Beschreibung: entfernt HTML-Reste, ein vorangestelltes
+// Rubrik-Label ("Bauvorhaben: …") und angehängten Fremdtext anderer Rubriken
+// (Bauherr/Lage/Parzelle …), die beim Import manchmal mit hineinrutschen.
+function readableProject(item) {
+  let text = normalizeText(item.description || item.projectType || "");
+  text = text
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&(?:nbsp|amp|lt|gt|quot|#0?39|apos);/gi, " ")
+    .replace(/^\s*(?:Bauvorhaben|Bauprojekt|Bauobjekt|Projekt)\s*[:.–-]\s*/i, "")
+    .replace(
+      /\s*(?:Bauherr(?:schaft)?|Grundeigentümer(?:in)?|Eigentümer(?:in)?|Projektverfasser|Bauplatz|Standort|Lage|Parzelle|Auflage(?:frist)?|Publikation|Frist|Einsprache)\s*:.*$/i,
+      ""
+    );
+  text = normalizeText(text).replace(/[\s,;:–-]+$/, "").trim();
+  return text || normalizeText(item.projectType) || "Baugesuch";
+}
+
 function itemTitle(item) {
-  return truncate(item.projectType || item.description || "Baugesuch", 74);
+  return truncate(readableProject(item), 74);
 }
 
 function readableAddress(item) {
@@ -1087,7 +1104,7 @@ function renderDetail() {
   el.fPub.textContent = formatDate(item.publicationDate);
   el.fDue.innerHTML = `${escapeHtml(formatDate(item.deadlineDate))} <span class="cell-due-meta ${due.cls}" style="display:inline">· ${escapeHtml(due.txt)}</span>`;
   el.fAgis.textContent = item.agisMatch || protection.label;
-  el.fProject.textContent = normalizeText(item.description) || itemTitle(item);
+  el.fProject.textContent = readableProject(item);
   el.agisLink.href = agisHref(item);
   el.agisLink.textContent = buildDataLinkLabel(item);
   el.recTitle.textContent = recommendationTitle(item);
@@ -1380,7 +1397,7 @@ function fillPrintArea(item) {
   el.paPub.textContent = formatDate(item.publicationDate);
   el.paDue.textContent = `${formatDate(item.deadlineDate)} · ${due.txt}`;
   el.paAgis.textContent = item.agisMatch || protectionMeta(item).label;
-  el.paProject.textContent = normalizeText(item.description) || itemTitle(item);
+  el.paProject.textContent = readableProject(item);
   el.paRec.textContent = recommendationText(item);
   el.paSource.textContent = `${item.source || "unbekannt"}${item.sourceReference ? ` · ${item.sourceReference}` : ""}`;
   el.paFoot.textContent = "Heimatschutz Aargau";

@@ -458,6 +458,24 @@ function createImportCandidate(rawItem, sourceUrl, fallbacks = {}) {
   };
 }
 
+// Säubert Bauvorhaben-/Beschreibungstext bereits beim Import: entfernt HTML-Reste,
+// ein vorangestelltes Rubrik-Label ("Bauvorhaben: …") und angehängten Fremdtext
+// anderer Rubriken (Bauherr/Lage/Parzelle …). Verbessert Anzeige und Lern-Signaturen
+// gleichermassen. Für bereits saubere Werte ist die Funktion eine Identität.
+function cleanProjectText(value) {
+  const text = String(value ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&(?:nbsp|amp|lt|gt|quot|#0?39|apos);/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^\s*(?:Bauvorhaben|Bauprojekt|Bauobjekt|Projekt)\s*[:.–-]\s*/i, "")
+    .replace(
+      /\s*(?:Bauherr(?:schaft)?|Grundeigentümer(?:in)?|Eigentümer(?:in)?|Projektverfasser|Bauplatz|Standort|Lage|Parzelle|Auflage(?:frist)?|Publikation|Frist|Einsprache)\s*:.*$/i,
+      ""
+    );
+  return text.replace(/[\s,;:–-]+$/, "").trim();
+}
+
 function createNormalizedApplication(rawItem, sourceUrl, fallbacks = {}) {
   const item = createImportCandidate(rawItem, sourceUrl, fallbacks);
   const coordinates = normalizeCoordinates(item);
@@ -468,7 +486,7 @@ function createNormalizedApplication(rawItem, sourceUrl, fallbacks = {}) {
   const address = String(item.address ?? item.adresse ?? fallbacks.address ?? "").trim() || (parcel ? `Parzelle ${parcel}` : "");
   const publicationDate = normalizeDate(item.publicationDate ?? item.publication_date ?? item.publishedAt);
   const deadlineDate = normalizeDate(item.deadlineDate ?? item.deadline_date ?? item.fristende);
-  const projectType = String(item.projectType ?? item.project_type ?? item.bauvorhaben ?? "Baugesuch").trim();
+  const projectType = cleanProjectText(item.projectType ?? item.project_type ?? item.bauvorhaben) || "Baugesuch";
   const sourceReference =
     String(item.sourceReference ?? item.source_reference ?? item.reference ?? item.id ?? "").trim() ||
     buildGeneratedSourceReference([
@@ -501,7 +519,7 @@ function createNormalizedApplication(rawItem, sourceUrl, fallbacks = {}) {
     publicationDate,
     deadlineDate,
     projectType,
-    description: String(item.description ?? item.beschreibung ?? fallbacks.description ?? "").trim(),
+    description: cleanProjectText(item.description ?? item.beschreibung ?? fallbacks.description),
     protectionStatus,
     agisMatch: String(item.agisMatch ?? item.agis_match ?? defaultAgisMatch(protectionStatus, ambiguousAddress)).trim(),
     agisLayers: normalizeArray(item.agisLayers ?? item.agis_layers),
