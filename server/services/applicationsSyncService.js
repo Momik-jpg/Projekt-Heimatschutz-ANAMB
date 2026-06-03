@@ -70,8 +70,22 @@ const defaultHtmlExcludePattern =
 const genericMunicipalityListingPattern =
   /\b(facebook|instagram|youtube|linkedin|whatsapp|gemeinderatsnachrichten|nachrichten|newsletter|veranstaltungen|agenda|termine|vernehmlassung(?:en)?|news|aktuelles)\b/i;
 const genericMunicipalityArchivePattern = /\b(rss|archiv|archive|newsarchive|author|category|feed)\b/i;
+const genericMunicipalityPublicationRoutePattern =
+  /\/_rtr\/(?:beschluesse|rechtsgueltigeamtlichepublikationen|reglemente|projektemain|budgetrechung|sucheeinerpublikation)(?:[/?#]|$)/i;
 const nonPendingPermitPattern =
   /\b(erteilte baubewilligungen?|baubewilligung(?:en)? erteilt|erteilte bewilligungen?)\b/i;
+const municipalitySearchResultPattern = /\b(suchergebnisse?|suchresultate|search results?|resultate)\b/i;
+const municipalityBulletinPattern = /\b(mitteilungsblatt|infoblatt)\b/i;
+const nonMunicipalPermitProcedurePattern =
+  /\b(plangenehmigungsverfahren|elektrizit(?:ä|ae)tsgesetz|\beleg\b)\b/i;
+const nonPermitMunicipalityTopicPattern =
+  /\b(mitteilungsblatt|infoblatt|gemeinderat|gemeindeversammlung|traktanden|protokoll|beschl(?:ü|ue)sse?|reglemente?|budget|rechnung|steuer|abstimmung|wahl|nutzungsplanung|bau-\s*und\s*nutzungsordnung|bno|teil(?:änderung|aenderung)|zonenvorschriften|gestaltungsplan|familiengartenzone|vorpr(?:ü|ue)fung|mitwirkung|genehmigung|kommunal(?:er|e|es)?\s+gesamtplan|politik\s+und\s+verwaltung|plangenehmigungsverfahren|elektrizit(?:ä|ae)tsgesetz|\beleg\b)\b/i;
+const explicitPermitSignalPattern =
+  /\b(baugesuch(?:e)?|baupublikation(?:en)?|baubewilligung(?:en)?|bauherr(?:schaft)?|bauobjekt|bauvorhaben|bauprojekt|bauplatz|baustelle|objektadresse|standort|auflage\s+baugesuch)\b/i;
+const administrativePermitTemplatePattern =
+  /(baugesuchumschlag|baugesuchsformular|baugesuch[_\s-]*formular|formular[_\s-]*baugesuch|gesuchsformular|bauformular|online[_\s-]*schalter)/i;
+const administrativePermitAttachmentPattern =
+  /(katasterplan(?:kopie)?|situationsplan|grundriss|schnitt|fassadenplan|energienachweis)/i;
 const genericDownloadPattern = /\b(herunterladen|download)\b/i;
 const genericMunicipalityAnchorPattern =
   /^(?:zu den dokumenten|mehr lesen|öffnen|herunterladen|download|weiter|details?|artikel lesen)$/i;
@@ -531,7 +545,7 @@ async function fetchWithTimeout(fetchImpl, resource, options = {}, timeoutMs = d
       ...options,
       headers: {
         ...defaultRemoteRequestHeaders,
-        ...(options.headers ?? {})
+        ...options.headers
       },
       signal: options.signal ?? controller.signal
     });
@@ -842,6 +856,27 @@ function normalizeWhitespace(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
+function normalizeSourcePatternText(value) {
+  return normalizeWhitespace(value).toLowerCase();
+}
+
+function createSourcePatternMatcher(pattern) {
+  const terms = String(pattern ?? "")
+    .split("|")
+    .map((term) => normalizeSourcePatternText(term))
+    .filter(Boolean)
+    .slice(0, 24);
+
+  if (terms.length === 0) {
+    return null;
+  }
+
+  return (value) => {
+    const text = normalizeSourcePatternText(value);
+    return Boolean(text && terms.some((term) => text.includes(term)));
+  };
+}
+
 function looksLikeStandaloneDate(value) {
   const text = normalizeWhitespace(value);
 
@@ -860,7 +895,6 @@ function looksLikeStandaloneDate(value) {
 function decodeHtmlEntities(value) {
   return String(value ?? "")
     .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
     .replace(/&apos;/gi, "'")
@@ -874,14 +908,15 @@ function decodeHtmlEntities(value) {
     .replace(/&Auml;/gi, "Ä")
     .replace(/&eacute;/gi, "é")
     .replace(/&egrave;/gi, "è")
-    .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)));
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)))
+    .replace(/&amp;/gi, "&");
 }
 
 function stripHtml(value) {
   return normalizeWhitespace(
     decodeHtmlEntities(String(value ?? ""))
-      .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+      .replace(/<script\b[\s\S]*?<\/script\b[^>]*>/gi, " ")
+      .replace(/<style\b[\s\S]*?<\/style\b[^>]*>/gi, " ")
       .replace(/<br\s*\/?>/gi, " ")
       .replace(/<[^>]+>/g, " ")
   );
@@ -906,10 +941,30 @@ async function extractPdfTextFromBuffer(data) {
 
 function extractAttributeValue(attributeText, attributeName) {
   const match = String(attributeText ?? "").match(
-    new RegExp(`${attributeName}\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))`, "i")
+    new RegExp(`${attributeName}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i")
   );
 
   return decodeHtmlEntities(match?.[1] ?? match?.[2] ?? match?.[3] ?? "");
+}
+
+function resolveHttpUrlReference(value, baseUrl, { skipFragmentOnly = true } = {}) {
+  const rawValue = decodeHtmlEntities(String(value ?? "")).trim();
+
+  if (!rawValue || (skipFragmentOnly && rawValue.startsWith("#"))) {
+    return null;
+  }
+
+  try {
+    const resolved = new URL(rawValue, baseUrl);
+
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+      return null;
+    }
+
+    return resolved;
+  } catch {
+    return null;
+  }
 }
 
 function looksLikeTrustedEmbeddedSource(resolvedUrl, sourceUrl) {
@@ -945,14 +1000,14 @@ function extractEmbeddedMunicipalityFrameCandidates(html, sourceUrl) {
       });
     }
 
-    const src = extractAttributeValue(attributes, "src");
+    const src = resolveHttpUrlReference(extractAttributeValue(attributes, "src"), sourceUrl);
 
-    if (!src || src.startsWith("javascript:") || src.startsWith("mailto:")) {
+    if (!src) {
       continue;
     }
 
     try {
-      const resolvedUrl = new URL(src, sourceUrl).toString();
+      const resolvedUrl = src.toString();
 
       if (!looksLikeTrustedEmbeddedSource(resolvedUrl, sourceUrl) || seenUrls.has(resolvedUrl)) {
         continue;
@@ -1054,8 +1109,8 @@ function extractStructuredMetadataText(html) {
 
 function sanitizeExtractedAddress(value) {
   const text = normalizeWhitespace(value)
-    .replace(/^[,;:\-]+\s*/, "")
-    .replace(/\s*[,;:\-]+$/, "");
+    .replace(/^[,;:-]+\s*/, "")
+    .replace(/\s*[,;:-]+$/, "");
 
   if (!text) {
     return "";
@@ -1089,6 +1144,9 @@ function sanitizeExtractedAddress(value) {
 
   if (
     looksLikeStandaloneDate(cleanedText) ||
+    /^(?:im|ab)?\s*(?:anfang|mitte|ende)?\s*(?:januar|februar|märz|maerz|marz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+20\d{2}$/i.test(cleanedText) ||
+    /^vom\s+\d{1,2}\.\s*(?:januar|februar|märz|maerz|marz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+20\d{2}\s+bis\s+\d{1,2}\.\s*(?:januar|februar|märz|maerz|marz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+20\d{2}$/i.test(cleanedText) ||
+    /^(?:pdf|doc|src)\b[\w\s-]*\bbg\b/i.test(cleanedText) ||
     genericMunicipalityListingPattern.test(cleanedText) ||
     genericMunicipalityArchivePattern.test(cleanedText) ||
     garbledStructuredTextPattern.test(cleanedText)
@@ -1123,8 +1181,8 @@ function sanitizeExtractedAddress(value) {
   if (streetLikeAddressPattern.test(cleanedText)) {
     return cleanedText
       .replace(/^\s*Parz(?:elle|\.| Nr\.?)?\s*(?:Nr\.?\s*)?\d{1,6}\s*,?\s*/i, "")
-      .replace(/\b(?:\d{4}\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]+(?:\s*\([^)]+\))?)\b/gu, "")
-      .replace(/^[,;:\-]+\s*|\s*[,;:\-.]+$/g, "")
+      .replace(/\b(?:\d{4}\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]+(?:\s*\([^)]+\))?)\b/gu, "")
+      .replace(/^[,;:-]+\s*|\s*[,;:\-.]+$/g, "")
       .trim();
   }
 
@@ -1147,8 +1205,8 @@ function shortenText(value, maxLength = 320) {
 
 function removeNonContentHtmlRegions(html) {
   return String(html ?? "")
-    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script\b[\s\S]*?<\/script\b[^>]*>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style\b[^>]*>/gi, " ")
     .replace(/<header\b[\s\S]*?<\/header>/gi, " ")
     .replace(/<footer\b[\s\S]*?<\/footer>/gi, " ")
     .replace(/<nav\b[\s\S]*?<\/nav>/gi, " ")
@@ -1387,8 +1445,8 @@ function extractAddressFromText(value) {
   }
 
   const patterns = [
-    /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]*(?:strasse|strasse|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)\s+\d+[A-Za-z]?)\b/ui,
-    /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]+)+(?:strasse|strasse|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)?\s+\d+[A-Za-z]?)\b/u
+    /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]*(?:strasse|strasse|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)\s+\d+[A-Za-z]?)\b/ui,
+    /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]+)+(?:strasse|strasse|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)?\s+\d+[A-Za-z]?)\b/u
   ];
 
   for (const pattern of patterns) {
@@ -1578,14 +1636,14 @@ function cleanProjectFilePathText(value) {
     .replace(/\b\d{1,2}\.\d{1,2}\.20\d{2}\s+[A-Z]{2,}.*$/i, "")
     .replace(/^[\\/\w.-]+\.(?:pln|dwg|dxf|ifc|pdf)\b\s*/i, "")
     .replace(/^[A-Z]\s+(?=\b(?:Bauprojekt|Bauvorhaben)\b)/i, "")
-    .replace(/\s*[,;:\-]+\s*$/g, "")
+    .replace(/\s*[,;:-]+\s*$/g, "")
     .trim();
 
   return normalizeWhitespace(normalized);
 }
 
 function normalizeImportedProjectType(projectType, sourceUrl = "") {
-  let normalizedProjectType = normalizeWhitespace(projectType).replace(/^[,;:\-]+\s*/, "");
+  let normalizedProjectType = normalizeWhitespace(projectType).replace(/^[,;:-]+\s*/, "");
   normalizedProjectType = cleanProjectFilePathText(normalizedProjectType);
   const hasAarauDetailFallback = /\.aarau\.ch\/.*\/bg[-_.]?20\d{2}/i.test(sourceUrl);
 
@@ -1914,6 +1972,46 @@ function normalizeMunicipalityResolvedUrl(resolvedUrl) {
   }
 }
 
+function hasExplicitPermitSignal(value) {
+  return explicitPermitSignalPattern.test(String(value ?? ""));
+}
+
+function looksLikeGenericSearchResult(resolvedUrl, text) {
+  const combined = normalizeWhitespace(`${resolvedUrl ?? ""} ${text ?? ""}`);
+  return municipalitySearchResultPattern.test(combined) && !looksLikeMunicipalityDetailUrl(resolvedUrl);
+}
+
+function looksLikeNonPermitMunicipalityContent(value, resolvedUrl = "") {
+  const text = normalizeWhitespace(value);
+  const combined = normalizeWhitespace(`${resolvedUrl} ${text}`);
+
+  if (!text) {
+    return false;
+  }
+
+  if (looksLikeGenericSearchResult(resolvedUrl, text)) {
+    return true;
+  }
+
+  if (genericMunicipalityPublicationRoutePattern.test(String(resolvedUrl ?? ""))) {
+    return true;
+  }
+
+  if (municipalityBulletinPattern.test(combined)) {
+    return true;
+  }
+
+  if (nonMunicipalPermitProcedurePattern.test(combined)) {
+    return true;
+  }
+
+  if (nonPermitMunicipalityTopicPattern.test(combined) && !hasExplicitPermitSignal(combined)) {
+    return true;
+  }
+
+  return false;
+}
+
 function buildMunicipalityLinkedSourceReference(source, resolvedUrl, contextText) {
   const normalizedResolvedUrl = normalizeMunicipalityResolvedUrl(resolvedUrl);
 
@@ -1981,13 +2079,23 @@ function evaluateMunicipalityCandidateDetails(resolvedUrl, candidateText, pageDe
   const looksLikePdf = looksLikePdfUrl(resolvedUrl);
   const hasStableIdentifiers = Boolean(address || parcel || coordinates);
   const hasPublicationMetadata = Boolean(publicationDate || deadlineDate);
+  const looksLikeAdministrativePermitTemplate = administrativePermitTemplatePattern.test(
+    `${resolvedUrl} ${candidateText}`
+  );
+  const looksLikeAdministrativePermitAttachment =
+    looksLikePdf && administrativePermitAttachmentPattern.test(`${resolvedUrl} ${candidateText}`);
   const looksGenericListingEntry =
     genericMunicipalityListingPattern.test(candidateText) ||
     genericMunicipalityArchivePattern.test(candidateText) ||
+    genericMunicipalityPublicationRoutePattern.test(resolvedUrl) ||
+    looksLikeGenericSearchResult(resolvedUrl, candidateText) ||
+    looksLikeNonPermitMunicipalityContent(candidateText, resolvedUrl) ||
+    looksLikeAdministrativePermitTemplate ||
+    looksLikeAdministrativePermitAttachment ||
     garbledStructuredTextPattern.test(candidateText) ||
     nonPendingPermitPattern.test(candidateText) ||
     monthYearListingPattern.test(candidateText) ||
-    /^[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]+\s+20\d{2}$/u.test(candidateText);
+    /^[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]+\s+20\d{2}$/u.test(candidateText);
 
   return {
     address,
@@ -2574,15 +2682,15 @@ async function buildXmlFeedImportedItems(
     }
 
     const matchingText = normalizeWhitespace([entry.title, entry.summary, entry.content, candidateText].filter(Boolean).join(" "));
-    const includePattern = source.includePattern ? new RegExp(source.includePattern, "i") : null;
-    const excludePattern = source.excludePattern ? new RegExp(source.excludePattern, "i") : null;
-    const includedByPattern = includePattern ? includePattern.test(matchingText) || includePattern.test(resolvedUrl) : false;
-    const excludedByPattern = excludePattern ? excludePattern.test(matchingText) || excludePattern.test(resolvedUrl) : false;
+    const includeMatcher = createSourcePatternMatcher(source.includePattern);
+    const excludeMatcher = createSourcePatternMatcher(source.excludePattern);
+    const includedByPattern = includeMatcher ? includeMatcher(matchingText) || includeMatcher(resolvedUrl) : false;
+    const excludedByPattern = excludeMatcher ? excludeMatcher(matchingText) || excludeMatcher(resolvedUrl) : false;
     const matchesFeedCandidate =
       !excludedByPattern &&
       !candidateDetails.looksGenericListingEntry &&
       !nonPendingPermitPattern.test(matchingText) &&
-      (includePattern
+      (includeMatcher
         ? includedByPattern && (candidateDetails.hasStableIdentifiers || candidateDetails.hasPublicationMetadata)
         : defaultHtmlKeywordsPattern.test(matchingText) &&
           candidateDetails.hasStableIdentifiers &&
@@ -2916,7 +3024,7 @@ function cleanTabularProjectText(value, address = "") {
       .replace(/\b(?:Bauherrschaft|Bauherr|Gesuchsteller(?:\/in)?|Grundeigentümer(?:\/in)?|Projektverfasser)\b.*$/i, "")
       .replace(/\(\s*ohne Profilierung\s*\)/gi, "")
       .replace(/\bParz(?:elle|\.| Nr\.?)?\s*(?:Nr\.?\s*)?\d{1,6}\b/gi, "")
-      .replace(/\b\d{4}\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.\-]+(?:\s*\([^)]+\))?/gu, "")
+      .replace(/\b\d{4}\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]+(?:\s*\([^)]+\))?/gu, "")
       .replace(/\s{2,}/g, " ")
       .trim(),
     normalizedAddress
@@ -3007,31 +3115,54 @@ async function buildTabularImportedItems(relevantHtml, source, requestTimeoutMs,
   return items;
 }
 
+// Begriffs-Synonyme, damit komplexe Gemeinde-Websites mit unterschiedlicher
+// Wortwahl erkannt werden. Längere Synonyme stehen vorn, damit die Alternation
+// sie zuerst trifft.
+const structuredPublicationLabelGroups = {
+  owner: ["Bauherrschaft", "Bauherrin", "Bauherr", "Gesuchstellerin", "Gesuchsteller"],
+  object: ["Bauobjekt", "Bauvorhaben", "Bauprojekt"],
+  place: ["Bauplatz", "Baustelle", "Bauort", "Standort", "Lage"]
+};
+
+// Inline-Tags, in denen ein Feld-Label stehen kann (<strong>, <b>, Definitionsliste, Tabelle, ...).
+const structuredPublicationLabelTags = "strong|b|dt|span|th|td|p|h\\d";
+
+function structuredPublicationLabelSource(labels) {
+  const alternation = labels
+    .map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"))
+    .join("|");
+
+  // Label entweder in einem Inline-Tag verpackt (mit/ohne Doppelpunkt) oder als reiner Text mit Doppelpunkt.
+  return (
+    `<(?:${structuredPublicationLabelTags})\\b[^>]*>\\s*(?:${alternation})\\b\\s*:?\\s*<\\/(?:${structuredPublicationLabelTags})>` +
+    `|\\b(?:${alternation})\\b\\s*:`
+  );
+}
+
 function extractStructuredPublicationBlocks(html) {
   const normalizedHtml = String(html ?? "");
+  const ownerSource = structuredPublicationLabelSource(structuredPublicationLabelGroups.owner);
+  const objectRe = new RegExp(structuredPublicationLabelSource(structuredPublicationLabelGroups.object), "i");
+  const placeRe = new RegExp(structuredPublicationLabelSource(structuredPublicationLabelGroups.place), "i");
 
-  if (
-    !/<strong\b[^>]*>\s*Bauherr:\s*<\/strong>/i.test(normalizedHtml) ||
-    !/<strong\b[^>]*>\s*Bauobjekt:\s*<\/strong>/i.test(normalizedHtml) ||
-    !/<strong\b[^>]*>\s*Bauplatz:\s*<\/strong>/i.test(normalizedHtml)
-  ) {
+  if (!new RegExp(ownerSource, "i").test(normalizedHtml) || !objectRe.test(normalizedHtml) || !placeRe.test(normalizedHtml)) {
     return [];
   }
 
   return normalizedHtml
-    .split(/(?=<strong\b[^>]*>\s*Bauherr:\s*<\/strong>)/i)
+    .split(new RegExp(`(?=${ownerSource})`, "i"))
     .map((block) => block.trim())
-    .filter(
-      (block) =>
-        /<strong\b[^>]*>\s*Bauobjekt:\s*<\/strong>/i.test(block) &&
-        /<strong\b[^>]*>\s*Bauplatz:\s*<\/strong>/i.test(block)
-    );
+    .filter((block) => objectRe.test(block) && placeRe.test(block));
 }
 
-function extractStructuredPublicationField(blockHtml, label) {
+function extractStructuredPublicationField(blockHtml, labelKey) {
+  const labels = structuredPublicationLabelGroups[labelKey] ?? [labelKey];
+  const allLabels = Object.values(structuredPublicationLabelGroups).flat();
+  const markerSource = structuredPublicationLabelSource(labels);
+  const boundarySource = structuredPublicationLabelSource(allLabels);
   const match = String(blockHtml ?? "").match(
     new RegExp(
-      `<strong\\b[^>]*>\\s*${label}:\\s*<\\/strong>\\s*([\\s\\S]*?)(?=<br\\b|<strong\\b|<a\\b|<em\\b|<\\/p>|$)`,
+      `(?:${markerSource})\\s*([\\s\\S]*?)(?=(?:${boundarySource})|<br\\b|<a\\b|<em\\b|<\\/p>|<\\/li>|<\\/dd>|<\\/td>|<\\/tr>|$)`,
       "i"
     )
   );
@@ -3049,11 +3180,7 @@ function extractStructuredPublicationHref(blockHtml, baseUrl) {
     return "";
   }
 
-  try {
-    return new URL(decodeHtmlEntities(href), baseUrl).toString();
-  } catch {
-    return "";
-  }
+  return resolveHttpUrlReference(href, baseUrl)?.toString() ?? "";
 }
 
 async function buildStructuredPublicationImportedItems(
@@ -3078,21 +3205,21 @@ async function buildStructuredPublicationImportedItems(
       continue;
     }
 
-    const bauobjekt = extractStructuredPublicationField(block, "Bauobjekt");
-    const bauplatz = extractStructuredPublicationField(block, "Bauplatz");
+    const bauobjekt = extractStructuredPublicationField(block, "object");
+    const bauplatz = extractStructuredPublicationField(block, "place");
     const blockText = normalizeWhitespace(stripHtml(block));
     const publicationDate = extractPublicationDateFromText(blockText) || pageDefaults.publicationDate || "";
     const deadlineDate = extractDeadlineDateFromText(blockText) || pageDefaults.deadlineDate || (publicationDate ? addDays(publicationDate, 30) : "");
     const resolvedUrl = extractStructuredPublicationHref(block, source.sourceUrl);
-    const includePattern = source.includePattern ? new RegExp(source.includePattern, "i") : null;
-    const excludePattern = source.excludePattern ? new RegExp(source.excludePattern, "i") : null;
+    const includeMatcher = createSourcePatternMatcher(source.includePattern);
+    const excludeMatcher = createSourcePatternMatcher(source.excludePattern);
     const matchingText = normalizeWhitespace([resolvedUrl, blockText, bauobjekt, bauplatz].filter(Boolean).join(" "));
 
-    if (excludePattern && excludePattern.test(matchingText)) {
+    if (excludeMatcher && excludeMatcher(matchingText)) {
       continue;
     }
 
-    if (includePattern && !includePattern.test(matchingText)) {
+    if (includeMatcher && !includeMatcher(matchingText)) {
       continue;
     }
 
@@ -3177,8 +3304,8 @@ function matchesMunicipalityCandidate(
   pageDefaults,
   matchingText = candidateText
 ) {
-  const includePattern = source.includePattern ? new RegExp(source.includePattern, "i") : null;
-  const excludePattern = source.excludePattern ? new RegExp(source.excludePattern, "i") : null;
+  const includeMatcher = createSourcePatternMatcher(source.includePattern);
+  const excludeMatcher = createSourcePatternMatcher(source.excludePattern);
   const text = normalizeWhitespace(candidateText);
   const matchText = normalizeWhitespace(matchingText);
   const details = evaluateMunicipalityCandidateDetails(resolvedUrl, text, pageDefaults);
@@ -3193,8 +3320,8 @@ function matchesMunicipalityCandidate(
     return false;
   }
 
-  const included = includePattern ? includePattern.test(matchText) || includePattern.test(resolvedUrl) : false;
-  const excluded = excludePattern ? excludePattern.test(matchText) || excludePattern.test(resolvedUrl) : false;
+  const included = includeMatcher ? includeMatcher(matchText) || includeMatcher(resolvedUrl) : false;
+  const excluded = excludeMatcher ? excludeMatcher(matchText) || excludeMatcher(resolvedUrl) : false;
   const qualifiesAsConcretePublication =
     (details.hasStrongKeyword && (details.hasStableIdentifiers || details.hasPublicationMetadata)) ||
     (details.hasStableIdentifiers && details.hasPublicationMetadata) ||
@@ -3203,7 +3330,7 @@ function matchesMunicipalityCandidate(
       details.hasStableIdentifiers &&
       (details.hasStrongKeyword || bgReferencePattern.test(`${resolvedUrl} ${text}`)));
 
-  if (includePattern) {
+  if (includeMatcher) {
     return included && !excluded && qualifiesAsConcretePublication;
   }
 
@@ -3268,12 +3395,13 @@ async function buildHtmlImportedItems(
 
   while ((match = anchorRegex.exec(relevantHtml)) !== null) {
     const href = match[1] ?? match[2] ?? match[3] ?? "";
+    const resolved = resolveHttpUrlReference(href, source.sourceUrl);
 
-    if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("javascript:")) {
+    if (!resolved) {
       continue;
     }
 
-    const resolvedUrl = new URL(decodeHtmlEntities(href), source.sourceUrl).toString();
+    const resolvedUrl = resolved.toString();
     const anchorText = stripHtml(match[4]);
     const contextHtml = extractEnclosingBlockHtml(relevantHtml, match.index);
     const candidateContextHtml = narrowMunicipalityContextHtml(contextHtml, anchorText, resolvedUrl);
@@ -3459,7 +3587,12 @@ async function buildHtmlImportedItems(
       continue;
     }
 
-    if (!publicationDate && !deadlineDate) {
+    // Recall vor Precision: Ein klar als Baugesuch erkennbarer Fall (explizites
+    // Stichwort + Adresse/Parzelle) wird auch ohne erkanntes Datum aufgenommen
+    // und zur manuellen Prüfung markiert, statt ihn ganz zu verwerfen.
+    const missingAllDates = !publicationDate && !deadlineDate;
+
+    if (missingAllDates && !candidateDetails.hasStrongKeyword) {
       continue;
     }
 
@@ -3467,13 +3600,17 @@ async function buildHtmlImportedItems(
       continue;
     }
 
+    const needsManualReview = ambiguousAddress || missingAllDates;
+
     if (ambiguousAddress) {
       automatedAssessmentNotes.push("Standort konnte auf der Gemeindewebseite nicht eindeutig gefunden werden.");
     } else if (!candidateDetails.coordinates) {
       automatedAssessmentNotes.push("Standort wurde über den offiziellen schweizerischen Adresssuchdienst ergänzt.");
     }
 
-    if (!deadlineDate) {
+    if (missingAllDates) {
+      automatedAssessmentNotes.push("Kein Publikations- oder Fristdatum gefunden - bitte von Hand prüfen.");
+    } else if (!deadlineDate) {
       automatedAssessmentNotes.push("Frist auf der Gemeindewebseite nicht eindeutig gefunden.");
     }
 
@@ -3489,12 +3626,12 @@ async function buildHtmlImportedItems(
       deadlineDate,
       projectType,
       description: shortenText(candidateText, 320),
-      protectionStatus: ambiguousAddress ? "manual-review" : "no-hit",
-      agisMatch: ambiguousAddress ? "Noch nicht eindeutig zugeordnet" : "Kein Schutztreffer",
+      protectionStatus: needsManualReview ? "manual-review" : "no-hit",
+      agisMatch: needsManualReview ? "Noch nicht eindeutig zugeordnet" : "Kein Schutztreffer",
       agisLayers: [],
       workflowStatus: "new",
       automatedAssessment: automatedAssessmentNotes.join(" "),
-      ambiguousAddress: ambiguousAddress ? 1 : 0
+      ambiguousAddress: needsManualReview ? 1 : 0
     });
   }
 
@@ -3754,17 +3891,48 @@ async function buildPdfImportedItems(
 }
 
 const discoveryWrongTopicPattern =
-  /(einbürger|einbürger|fahrplan|verkehrsverbund|\bzvv\b|gemeindeversammlung|abstimmung|\bwahlen\b|newsletter|veranstaltung|\bagenda\b|kontakt|impressum|datenschutz|\blogin\b|\bjobs\b|stellen|bibliothek|kindergarten)/i;
+  /(einbürger|einbürger|fahrplan|verkehrsverbund|\bzvv\b|gemeindeversammlung|abstimmung|\bwahlen\b|newsletter|veranstaltung|\bagenda\b|kontakt|impressum|datenschutz|\blogin\b|\bjobs\b|stellen|bibliothek|kindergarten|erteilte baubewilligung|erteilte bewilligung|baubewilligung erteilt)/i;
 const discoveryPublicationTextPattern =
   /(baugesuch|baupublikation|baugesuchspublikation|öffentliche auflage|öffentliche auflage|amtliche publikation|amtliches publikationsorgan|baubewilligung)/i;
+const discoveryConcretePublicationPattern =
+  /(bauherrschaft|bauobjekt|bauplatz|orts?lage|parzelle|planauflage|einwendungen|einsprachefrist|auflage vom|rubrik auswählen\s+alle rubriken[\s\S]*baugesuche)/i;
 const discoveryCommonPaths = [
   "/baugesuche",
   "/baupublikationen",
   "/amtliche-publikationen",
+  "/amtlichepublikationen",
+  "/amtlpublikationen",
+  "/aktuelles/amtliche-publikationen",
+  "/aktuelles/amtlichepublikationen",
+  "/infospublikationen/baugesuchspublikationen",
   "/publikationen",
   "/öffentliche-auflage",
-  "/baugesuchspublikationen"
+  "/oeffentliche-auflage",
+  "/baugesuchspublikationen",
+  "/baugesuchs-publikationen",
+  "/auflagebaugesuche",
+  "/aktuelles",
+  "/news",
+  "/gemeinde/aktuelles",
+  "/portraet/aktuelles"
 ];
+const defaultDiscoveryCandidateProbeLimit = Math.max(3, Number(process.env.MUNICIPALITY_DISCOVERY_CANDIDATE_LIMIT ?? 12));
+const defaultDiscoverySitemapProbeLimit = Math.max(5, Number(process.env.MUNICIPALITY_DISCOVERY_SITEMAP_LIMIT ?? 60));
+const discoverySearchTerms = [
+  "Baugesuche",
+  "Baugesuch",
+  "Baupublikation",
+  "Baugesuchspublikation",
+  "Öffentliche Auflage",
+  "Amtliche Publikation Baugesuch"
+];
+const discoverySearchPaths = ["/suche/", "/suche", "/search/", "/search", "/recherche/", "/recherche"];
+const discoverySinglePublicationPathPattern =
+  /(?:\/news-detail\/|\/archiv-detail\/|\/artikel\/|\/news\/\d+\b|\/_rte\/information\/\d+\b|\/\d{4}\/\d{2}\/\d{2}\/)/i;
+const discoveryListingPagePattern =
+  /(?:baugesuche?$|baupublikationen?|baugesuchspublikationen?|baugesuchs-publikationen?|auflagebaugesuche|amtliche-publikationen?|amtlichepublikationen?|amtlpublikationen?|infospublikationen|publikationen?|oeffentliche-auflage|öffentliche-auflage|laufende-auflagen|aktuell(?:es)?$)/i;
+const discoveryResultListingTextPattern =
+  /(anzeige der ergebnisse|ergebnisse\s+\d+\s+bis|insgesamt\s+\d+|rubrik|alle rubriken|amtliche publikationen|amtliches publikationsorgan|limmatwelle|öffentliche auflagen|öffentliche auflagen)/i;
 
 // Defensive guard against SSRF: only allow public http(s) hosts, never internal
 // networks, loopback, link-local or *.local/*.internal names.
@@ -3814,13 +3982,12 @@ function isSafePublicHttpUrl(value) {
   return true;
 }
 
-function isRootLikeMunicipalityUrl(value) {
+function getRootMunicipalityUrl(value) {
   try {
     const parsed = new URL(String(value ?? "").trim());
-    const path = parsed.pathname.replace(/\/+$/, "");
-    return path === "" || path === "/";
+    return `${parsed.protocol}//${parsed.host}/`;
   } catch {
-    return false;
+    return "";
   }
 }
 
@@ -3828,11 +3995,343 @@ function slugifyForAggregator(value) {
   return String(value ?? "")
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
-    .replace(/ss/g, "ss")
     .toLowerCase()
     .replace(/\([^)]*\)/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function extractHtmlAttributes(tag) {
+  const attributes = {};
+  const attributeRegex = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
+  let match = null;
+
+  while ((match = attributeRegex.exec(String(tag ?? ""))) !== null) {
+    attributes[match[1].toLowerCase()] = decodeHtmlEntities(match[2] ?? match[3] ?? match[4] ?? "");
+  }
+
+  return attributes;
+}
+
+function buildDiscoverySearchRequestsFromHtml(html, baseUrl) {
+  const requests = [];
+  const formRegex = /<form\b([^>]*)>([\s\S]*?)<\/form>/gi;
+  let formMatch = null;
+
+  while ((formMatch = formRegex.exec(String(html ?? ""))) !== null) {
+    const formAttributes = extractHtmlAttributes(formMatch[1]);
+    const formBody = formMatch[2] ?? "";
+    const action = formAttributes.action || baseUrl;
+    let actionUrl = "";
+
+    try {
+      actionUrl = new URL(action, baseUrl).toString();
+    } catch {
+      continue;
+    }
+
+    const method = String(formAttributes.method || "get").toLowerCase() === "post" ? "POST" : "GET";
+    const formHint = `${actionUrl} ${formAttributes.id ?? ""} ${formAttributes.class ?? ""} ${formBody}`;
+
+    if (!/suche|search|recherche|indexedsearch|kesearch/i.test(formHint)) {
+      continue;
+    }
+
+    const params = new URLSearchParams();
+    const inputTags = [...formBody.matchAll(/<input\b[^>]*>/gi)].map((match) => match[0]);
+    let searchFieldName = "";
+
+    for (const tag of inputTags) {
+      const inputAttributes = extractHtmlAttributes(tag);
+      const name = inputAttributes.name;
+
+      if (!name) {
+        continue;
+      }
+
+      const type = String(inputAttributes.type || "text").toLowerCase();
+
+      if (type === "button" || type === "image" || type === "file") {
+        continue;
+      }
+
+      params.set(name, inputAttributes.value ?? "");
+
+      if (
+        !searchFieldName &&
+        (/\[(?:sword|query|q|search)\]$/i.test(name) ||
+          /(?:^|[_-])(?:sword|query|q|search)$/i.test(name))
+      ) {
+        searchFieldName = name;
+      }
+    }
+
+    if (!searchFieldName) {
+      const textInput = inputTags
+        .map((tag) => extractHtmlAttributes(tag))
+        .find((input) => input.name && /^(?:text|search)?$/i.test(input.type || "text"));
+      searchFieldName = textInput?.name ?? "";
+    }
+
+    if (!searchFieldName) {
+      continue;
+    }
+
+    for (const term of discoverySearchTerms) {
+      const searchParams = new URLSearchParams(params);
+      searchParams.set(searchFieldName, term);
+      requests.push({
+        url: actionUrl,
+        method,
+        body: searchParams
+      });
+    }
+  }
+
+  return requests;
+}
+
+function collectOpenSearchDescriptionUrlsFromHtml(html, baseUrl) {
+  const urls = [];
+  let baseHost = "";
+
+  try {
+    baseHost = new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    return urls;
+  }
+
+  for (const match of String(html ?? "").matchAll(/<link\b[^>]*>/gi)) {
+    const attributes = extractHtmlAttributes(match[0]);
+    const rel = String(attributes.rel ?? "").toLowerCase();
+    const type = String(attributes.type ?? "").toLowerCase();
+    const href = attributes.href ?? "";
+
+    if (!href || !/\bsearch\b/.test(rel) || !/opensearchdescription\+xml/.test(type)) {
+      continue;
+    }
+
+    const resolved = resolveHttpUrlReference(href, baseUrl);
+
+    if (!resolved || resolved.hostname.toLowerCase() !== baseHost || !isSafePublicHttpUrl(resolved.toString())) {
+      continue;
+    }
+
+    urls.push(resolved.toString());
+  }
+
+  return urls;
+}
+
+function buildDiscoverySearchRequestsFromOpenSearchXml(xml, descriptionUrl) {
+  const requests = [];
+  const seenTemplates = new Set();
+  let descriptionHost = "";
+
+  try {
+    descriptionHost = new URL(descriptionUrl).hostname.toLowerCase();
+  } catch {
+    return requests;
+  }
+
+  for (const match of String(xml ?? "").matchAll(/<Url\b[^>]*>/gi)) {
+    const attributes = extractHtmlAttributes(match[0]);
+    const type = String(attributes.type ?? "text/html").toLowerCase();
+    const template = attributes.template ?? "";
+
+    if (!template || !/html|xhtml/.test(type) || !/\{searchTerms\??\}/i.test(template)) {
+      continue;
+    }
+
+    if (seenTemplates.has(template)) {
+      continue;
+    }
+
+    seenTemplates.add(template);
+
+    for (const term of discoverySearchTerms) {
+      const searchUrl = template
+        .replace(/\{searchTerms\??\}/gi, encodeURIComponent(term))
+        .replace(/\{[^}]+\}/g, "");
+
+      const resolved = resolveHttpUrlReference(searchUrl, descriptionUrl);
+
+      if (!resolved || resolved.hostname.toLowerCase() !== descriptionHost || !isSafePublicHttpUrl(resolved.toString())) {
+        continue;
+      }
+
+      requests.push({
+        url: resolved.toString(),
+        method: "GET",
+        body: new URLSearchParams()
+      });
+    }
+  }
+
+  return requests;
+}
+
+async function buildDiscoverySearchRequestsFromOpenSearchLinks(html, baseUrl, fetchImpl, requestTimeoutMs) {
+  const requests = [];
+
+  for (const descriptionUrl of collectOpenSearchDescriptionUrlsFromHtml(html, baseUrl)) {
+    try {
+      const response = await fetchWithTimeout(
+        fetchImpl,
+        descriptionUrl,
+        { headers: { Accept: "application/opensearchdescription+xml,application/xml,text/xml" } },
+        requestTimeoutMs
+      );
+
+      if (!response.ok) {
+        continue;
+      }
+
+      requests.push(...buildDiscoverySearchRequestsFromOpenSearchXml(await response.text(), descriptionUrl));
+    } catch {
+      // OpenSearch is optional; regular site search still runs below.
+    }
+  }
+
+  return requests;
+}
+
+function buildFallbackDiscoverySearchRequests(rootUrl) {
+  const requests = [];
+  const queryNames = [
+    "q",
+    "query",
+    "search",
+    "s",
+    "term",
+    "tx_kesearch_pi1[sword]",
+    "tx_indexedsearch_pi2[search][sword]"
+  ];
+
+  for (const path of discoverySearchPaths) {
+    let actionUrl = "";
+
+    try {
+      actionUrl = new URL(path, rootUrl).toString();
+    } catch {
+      continue;
+    }
+
+    for (const queryName of queryNames) {
+      for (const term of discoverySearchTerms) {
+        const body = new URLSearchParams();
+        body.set(queryName, term);
+        requests.push({
+          url: actionUrl,
+          method: "GET",
+          body
+        });
+      }
+    }
+  }
+
+  return requests;
+}
+
+function buildDiscoverySearchRequestUrl(request) {
+  const query = request.body?.toString?.() ?? "";
+
+  if (request.method !== "GET" || !query) {
+    return request.url;
+  }
+
+  return `${request.url}${request.url.includes("?") ? "&" : "?"}${query}`;
+}
+
+async function collectDiscoveryCandidatesFromSiteSearch(rootUrl, fetchImpl, requestTimeoutMs, candidates) {
+  let root;
+
+  try {
+    root = new URL(rootUrl);
+  } catch {
+    return;
+  }
+
+  const searchPageUrls = [
+    rootUrl,
+    ...discoverySearchPaths.map((path) => `${root.protocol}//${root.host}${path}`)
+  ];
+  const seenSearchPages = new Set();
+  const seenRequests = new Set();
+
+  for (const searchPageUrl of searchPageUrls) {
+    const normalizedSearchPageUrl = normalizeMunicipalityResolvedUrl(searchPageUrl);
+
+    if (seenSearchPages.has(normalizedSearchPageUrl) || !isSafePublicHttpUrl(searchPageUrl)) {
+      continue;
+    }
+
+    seenSearchPages.add(normalizedSearchPageUrl);
+
+    try {
+      const pageResponse = await fetchWithTimeout(
+        fetchImpl,
+        searchPageUrl,
+        { headers: { Accept: "text/html,application/xhtml+xml" } },
+        requestTimeoutMs
+      );
+
+      if (!pageResponse.ok) {
+        continue;
+      }
+
+      const pageHtml = await pageResponse.text();
+      const searchRequests = [
+        ...(await buildDiscoverySearchRequestsFromOpenSearchLinks(pageHtml, searchPageUrl, fetchImpl, requestTimeoutMs)),
+        ...buildDiscoverySearchRequestsFromHtml(pageHtml, searchPageUrl),
+        ...(normalizedSearchPageUrl === normalizeMunicipalityResolvedUrl(rootUrl)
+          ? []
+          : buildFallbackDiscoverySearchRequests(searchPageUrl).slice(0, discoverySearchTerms.length * 2))
+      ];
+
+      for (const request of searchRequests) {
+        const requestKey = `${request.method}:${request.url}:${request.body.toString()}`;
+
+        if (seenRequests.has(requestKey)) {
+          continue;
+        }
+
+        seenRequests.add(requestKey);
+
+        try {
+          const response = await fetchWithTimeout(
+            fetchImpl,
+            request.method === "GET" ? buildDiscoverySearchRequestUrl(request) : request.url,
+            request.method === "GET"
+              ? { headers: { Accept: "text/html,application/xhtml+xml" } }
+              : {
+                  method: "POST",
+                  headers: {
+                    Accept: "text/html,application/xhtml+xml",
+                    "Content-Type": "application/x-www-form-urlencoded"
+                  },
+                  body: request.body
+                },
+            requestTimeoutMs
+          );
+
+          if (!response.ok) {
+            continue;
+          }
+
+          const resultHtml = await response.text();
+
+          for (const [url, score] of collectDiscoveryCandidatesFromHtml(resultHtml, request.url)) {
+            mergeDiscoveryCandidate(candidates, url, score + 4);
+          }
+        } catch {
+          // Site search is optional; keep discovery best-effort.
+        }
+      }
+    } catch {
+      // Some municipalities have no searchable page.
+    }
+  }
 }
 
 function collectDiscoveryCandidatesFromHtml(html, baseUrl) {
@@ -3850,30 +4349,14 @@ function collectDiscoveryCandidatesFromHtml(html, baseUrl) {
 
   while ((match = anchorRegex.exec(html)) !== null) {
     const href = match[1] ?? match[2] ?? match[3] ?? "";
+    const resolved = resolveHttpUrlReference(href, baseUrl);
 
-    if (
-      !href ||
-      href.startsWith("#") ||
-      href.startsWith("mailto:") ||
-      href.startsWith("tel:") ||
-      href.startsWith("javascript:")
-    ) {
-      continue;
-    }
-
-    let resolved;
-
-    try {
-      resolved = new URL(decodeHtmlEntities(href), baseUrl);
-    } catch {
-      continue;
-    }
-
-    if (resolved.hostname.toLowerCase() !== baseHost || !isSafePublicHttpUrl(resolved.toString())) {
+    if (!resolved || resolved.hostname.toLowerCase() !== baseHost || !isSafePublicHttpUrl(resolved.toString())) {
       continue;
     }
 
     const anchorText = normalizeWhitespace(stripHtml(match[4]));
+    const contextText = normalizeWhitespace(stripHtml(extractEnclosingBlockHtml(html, match.index)));
     let pathText = "";
 
     try {
@@ -3887,6 +4370,7 @@ function collectDiscoveryCandidatesFromHtml(html, baseUrl) {
     }
 
     let score = 0;
+    const candidateText = `${anchorText} ${contextText}`.trim();
 
     if (/baugesuch|baupublikation|baugesuchspublikation|auflage-baugesuch|auflagebaugesuche/.test(pathText)) {
       score += 6;
@@ -3896,14 +4380,22 @@ function collectDiscoveryCandidatesFromHtml(html, baseUrl) {
       score += 2;
     }
 
-    if (/baugesuch|baupublikation|baugesuchspublikation/i.test(anchorText)) {
+    if (/baugesuch|baupublikation|baugesuchspublikation/i.test(candidateText)) {
       score += 5;
-    } else if (/öffentliche auflage|öffentliche auflage/i.test(anchorText)) {
+    } else if (/öffentliche auflage|öffentliche auflage/i.test(candidateText)) {
       score += 4;
-    } else if (/amtliche publikation|amtliches publikationsorgan/i.test(anchorText)) {
+    } else if (/amtliche publikation|amtliches publikationsorgan/i.test(candidateText)) {
       score += 3;
-    } else if (/publikation/i.test(anchorText)) {
+    } else if (/publikation/i.test(candidateText)) {
       score += 1;
+    }
+
+    if (discoveryResultListingTextPattern.test(contextText)) {
+      score += 3;
+    }
+
+    if (discoverySinglePublicationPathPattern.test(pathText)) {
+      score -= 4;
     }
 
     if (score <= 0) {
@@ -3917,11 +4409,230 @@ function collectDiscoveryCandidatesFromHtml(html, baseUrl) {
   return candidates;
 }
 
+function mergeDiscoveryCandidate(target, url, score) {
+  if (!url || !isSafePublicHttpUrl(url)) {
+    return;
+  }
+
+  const normalized = normalizeMunicipalityResolvedUrl(url) || url;
+  target.set(normalized, {
+    url,
+    score: Math.max(target.get(normalized)?.score ?? 0, score)
+  });
+}
+
+function scoreDiscoveryCandidateContent(url, html, baseScore = 0) {
+  let score = baseScore;
+  const text = normalizeWhitespace(stripHtml(extractRelevantHtmlFragment(html) || html));
+  const urlText = (() => {
+    try {
+      return decodeURIComponent(new URL(url).pathname).toLowerCase();
+    } catch {
+      return String(url ?? "").toLowerCase();
+    }
+  })();
+  const scoringText = `${urlText} ${text}`;
+  const pageHasPublicationText = discoveryPublicationTextPattern.test(text);
+  const urlHasPublicationText = discoveryPublicationTextPattern.test(urlText);
+  const buildingTermCount = (scoringText.match(/baugesuch|baugesuche|baupublikation|baugesuchspublikation/gi) ?? [])
+    .length;
+  const pageBuildingTermCount = (text.match(/baugesuch|baugesuche|baupublikation|baugesuchspublikation/gi) ?? [])
+    .length;
+  const linkedBuildingTermCount = (String(html ?? "").match(/<a\b[^>]*>[\s\S]*?(?:baugesuch|baugesuche|baupublikation|baugesuchspublikation)[\s\S]*?<\/a>/gi) ?? [])
+    .length;
+
+  if (!pageHasPublicationText && !urlHasPublicationText) {
+    return -1;
+  }
+
+  if (
+    !pageHasPublicationText &&
+    urlHasPublicationText &&
+    linkedBuildingTermCount === 0 &&
+    !discoveryConcretePublicationPattern.test(text) &&
+    !discoveryResultListingTextPattern.test(text)
+  ) {
+    return -1;
+  }
+
+  if (/baugesuch|baugesuche|baupublikation|baugesuchspublikation|auflage-baugesuch|auflagebaugesuche/.test(urlText)) {
+    score += 10;
+  } else if (/öffentliche-auflage|öffentliche-auflage/.test(urlText)) {
+    score += 7;
+  } else if (/amtliche-publikation|publikation/.test(urlText)) {
+    score += 4;
+  }
+
+  if (/baugesuch|baugesuche|baupublikation|baugesuchspublikation/i.test(text)) {
+    score += 8;
+  }
+
+  if (/öffentliche auflage|öffentliche auflage/i.test(text)) {
+    score += 5;
+  }
+
+  if (/amtliche publikation|amtliches publikationsorgan/i.test(text)) {
+    score += 3;
+  }
+
+  if (discoveryConcretePublicationPattern.test(text)) {
+    score += 5;
+  }
+
+  if (discoveryListingPagePattern.test(urlText)) {
+    score += 7;
+  }
+
+  if (discoveryResultListingTextPattern.test(text)) {
+    score += 5;
+  }
+
+  if (pageBuildingTermCount >= 2) {
+    score += 3;
+  }
+
+  if (buildingTermCount >= 3) {
+    score += 5;
+  }
+
+  if (linkedBuildingTermCount >= 2) {
+    score += 8;
+  }
+
+  if (/ebauportal\.ag\.ch|gesuch\.rbv-wsw\.ch|login-geschützt|login geschützt/i.test(scoringText)) {
+    score -= 6;
+  }
+
+  if (nonPendingPermitPattern.test(scoringText)) {
+    score -= 18;
+  }
+
+  if (discoverySinglePublicationPathPattern.test(urlText)) {
+    score -= 22;
+  }
+
+  return score;
+}
+
+async function collectDiscoveryCandidatesFromSitemap(rootUrl, fetchImpl, requestTimeoutMs, candidates) {
+  let root;
+
+  try {
+    root = new URL(rootUrl);
+  } catch {
+    return;
+  }
+
+  const sitemapUrls = [
+    `${root.protocol}//${root.host}/sitemap.xml`,
+    `${root.protocol}//${root.host}/sitemap_index.xml`
+  ];
+
+  for (const sitemapUrl of sitemapUrls) {
+    try {
+      const response = await fetchWithTimeout(
+        fetchImpl,
+        sitemapUrl,
+        { headers: { Accept: "application/xml,text/xml,application/rss+xml,application/atom+xml" } },
+        requestTimeoutMs
+      );
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const xml = await response.text();
+      const urls = await resolveSitemapUrls(
+        xml,
+        { sourceUrl: sitemapUrl },
+        fetchImpl,
+        requestTimeoutMs
+      );
+
+      for (const candidateUrl of urls.slice(0, defaultDiscoverySitemapProbeLimit)) {
+        let candidate;
+
+        try {
+          candidate = new URL(candidateUrl);
+        } catch {
+          continue;
+        }
+
+        if (candidate.hostname.toLowerCase() !== root.hostname.toLowerCase()) {
+          continue;
+        }
+
+        const decodedPath = (() => {
+          try {
+            return decodeURIComponent(`${candidate.pathname}${candidate.search}`).toLowerCase();
+          } catch {
+            return `${candidate.pathname}${candidate.search}`.toLowerCase();
+          }
+        })();
+
+        if (discoveryWrongTopicPattern.test(decodedPath)) {
+          continue;
+        }
+
+        if (!discoveryPublicationTextPattern.test(decodedPath)) {
+          continue;
+        }
+
+        mergeDiscoveryCandidate(
+          candidates,
+          candidate.toString(),
+          /baugesuch|baupublikation|baugesuchspublikation/.test(decodedPath) ? 8 : 4
+        );
+      }
+    } catch {
+      // Sitemap discovery is optional and must not break a municipality sync.
+    }
+  }
+}
+
+async function chooseBestDiscoveryCandidate(candidates, baseUrl, fetchImpl, requestTimeoutMs) {
+  const baseKey = normalizeMunicipalityResolvedUrl(baseUrl);
+  const sortedCandidates = [...candidates.values()]
+    .filter((candidate) => normalizeMunicipalityResolvedUrl(candidate.url) !== baseKey)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, defaultDiscoveryCandidateProbeLimit);
+  let bestUrl = "";
+  let bestScore = 0;
+
+  for (const candidate of sortedCandidates) {
+    try {
+      const response = await fetchWithTimeout(
+        fetchImpl,
+        candidate.url,
+        { headers: { Accept: "text/html,application/xhtml+xml" } },
+        requestTimeoutMs
+      );
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const score = scoreDiscoveryCandidateContent(candidate.url, await response.text(), candidate.score);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestUrl = candidate.url;
+      }
+    } catch {
+      // Candidate probing is best-effort.
+    }
+  }
+
+  return bestScore >= 8 ? bestUrl : "";
+}
+
 // Tries to locate an official building-application / publication page for a
-// municipality whose configured source is only the homepage. Strategy:
-//   1) scan the homepage for strongly matching links (same host only),
-//   2) probe a small set of common publication paths on the same host,
-//   3) fall back to the cantonal "amtliche-nachrichten.ch" notice aggregator.
+// municipality whose configured source may be stale or only the homepage.
+// Strategy:
+//   1) scan the configured page and homepage for strongly matching links,
+//   2) inspect sitemap entries that look like building-publication pages,
+//   3) probe a small set of common publication paths on the same host,
+//   4) fall back to the cantonal "amtliche-nachrichten.ch" notice aggregator.
 // Every network call is timeout-bounded, SSRF-guarded and best-effort.
 async function discoverMunicipalityPublicationUrl(html, source, fetchImpl, requestTimeoutMs) {
   const baseUrl = String(source.sourceUrl ?? "").trim();
@@ -3930,31 +4641,69 @@ async function discoverMunicipalityPublicationUrl(html, source, fetchImpl, reque
     return "";
   }
 
-  const candidates = collectDiscoveryCandidatesFromHtml(html, baseUrl);
-  let bestUrl = "";
-  let bestScore = 0;
+  const candidates = new Map();
+  const scannedPages = new Set();
+  const rootUrl = getRootMunicipalityUrl(baseUrl);
 
-  for (const [url, score] of candidates) {
-    if (score > bestScore) {
-      bestScore = score;
-      bestUrl = url;
+  const addHtmlCandidates = (pageHtml, pageUrl) => {
+    if (!pageHtml || scannedPages.has(normalizeMunicipalityResolvedUrl(pageUrl))) {
+      return;
     }
-  }
 
-  if (
-    bestUrl &&
-    bestScore >= 4 &&
-    normalizeMunicipalityResolvedUrl(bestUrl) !== normalizeMunicipalityResolvedUrl(baseUrl)
-  ) {
-    return bestUrl;
+    scannedPages.add(normalizeMunicipalityResolvedUrl(pageUrl));
+
+    for (const [url, score] of collectDiscoveryCandidatesFromHtml(pageHtml, pageUrl)) {
+      mergeDiscoveryCandidate(candidates, url, score);
+    }
+  };
+
+  addHtmlCandidates(String(html ?? ""), baseUrl);
+
+  if (rootUrl && normalizeMunicipalityResolvedUrl(rootUrl) !== normalizeMunicipalityResolvedUrl(baseUrl)) {
+    try {
+      const rootResponse = await fetchWithTimeout(
+        fetchImpl,
+        rootUrl,
+        { headers: { Accept: "text/html,application/xhtml+xml" } },
+        requestTimeoutMs
+      );
+
+      if (rootResponse.ok) {
+        addHtmlCandidates(await rootResponse.text(), rootUrl);
+      }
+    } catch {
+      // Homepage fallback is optional.
+    }
   }
 
   let root;
 
   try {
-    root = new URL(baseUrl);
+    root = new URL(rootUrl || baseUrl);
   } catch {
     return "";
+  }
+
+  const bestLinkedCandidate = await chooseBestDiscoveryCandidate(candidates, baseUrl, fetchImpl, requestTimeoutMs);
+
+  if (bestLinkedCandidate) {
+    return bestLinkedCandidate;
+  }
+
+  await collectDiscoveryCandidatesFromSiteSearch(`${root.protocol}//${root.host}/`, fetchImpl, requestTimeoutMs, candidates);
+
+  const bestSearchCandidate = await chooseBestDiscoveryCandidate(candidates, baseUrl, fetchImpl, requestTimeoutMs);
+
+  if (bestSearchCandidate) {
+    return bestSearchCandidate;
+  }
+
+  await collectDiscoveryCandidatesFromSitemap(`${root.protocol}//${root.host}/`, fetchImpl, requestTimeoutMs, candidates);
+
+  const bestSitemapCandidate = await chooseBestDiscoveryCandidate(candidates, baseUrl, fetchImpl, requestTimeoutMs);
+
+  if (bestSitemapCandidate) {
+    return bestSitemapCandidate;
   }
 
   for (const path of discoveryCommonPaths) {
@@ -3972,7 +4721,7 @@ async function discoverMunicipalityPublicationUrl(html, source, fetchImpl, reque
         requestTimeoutMs
       );
 
-      if (response.ok && discoveryPublicationTextPattern.test(await response.text())) {
+      if (response.ok && scoreDiscoveryCandidateContent(probeUrl, await response.text(), 5) >= 8) {
         return probeUrl;
       }
     } catch {
@@ -3993,7 +4742,7 @@ async function discoverMunicipalityPublicationUrl(html, source, fetchImpl, reque
         requestTimeoutMs
       );
 
-      if (response.ok && discoveryPublicationTextPattern.test(await response.text())) {
+      if (response.ok && scoreDiscoveryCandidateContent(aggregatorUrl, await response.text(), 2) >= 8) {
         return aggregatorUrl;
       }
     } catch {
@@ -4302,7 +5051,7 @@ async function enrichAmtsblattEntryFromDetail(entry, origin, fetchImpl, requestT
     }
 
     const streetMatch = detailText.match(
-      /([A-ZÄÖÜ][A-Za-zÄÖÜäöüss.\-]*(?:strasse|strasse|weg|gasse|platz|allee|ring|rain|halde|steig|matte|acker|feld|quai|ufer)\s*\d{0,4}\s*[a-z]?)/i
+      /([A-ZÄÖÜ][A-Za-zÄÖÜäöüss.-]*(?:strasse|strasse|weg|gasse|platz|allee|ring|rain|halde|steig|matte|acker|feld|quai|ufer)\s*\d{0,4}\s*[a-z]?)/i
     );
     const bodyStreet = streetMatch ? normalizeWhitespace(streetMatch[1]) : "";
 
@@ -4412,6 +5161,59 @@ async function buildAmtsblattImportedItems(
   };
 }
 
+async function buildDiscoveredMunicipalityImportedItems(
+  html,
+  sourceConfig,
+  fetchImpl,
+  requestTimeoutMs,
+  geocodeFetchImpl,
+  pdfTextExtractImpl
+) {
+  if (sourceConfig.allowDiscovery === false) {
+    return [];
+  }
+
+  const sourceUrl = String(sourceConfig.sourceUrl ?? "").trim();
+  const discoveredUrl = await discoverMunicipalityPublicationUrl(
+    html,
+    sourceConfig,
+    fetchImpl,
+    requestTimeoutMs
+  );
+
+  if (
+    !discoveredUrl ||
+    !isSafePublicHttpUrl(discoveredUrl) ||
+    normalizeMunicipalityResolvedUrl(discoveredUrl) === normalizeMunicipalityResolvedUrl(sourceUrl)
+  ) {
+    return [];
+  }
+
+  try {
+    const discoveredResponse = await fetchWithTimeout(
+      fetchImpl,
+      discoveredUrl,
+      { headers: { Accept: "text/html,application/xhtml+xml" } },
+      requestTimeoutMs
+    );
+
+    if (!discoveredResponse.ok) {
+      return [];
+    }
+
+    return buildHtmlImportedItems(
+      await discoveredResponse.text(),
+      { ...sourceConfig, sourceUrl: discoveredUrl },
+      fetchImpl,
+      requestTimeoutMs,
+      geocodeFetchImpl,
+      pdfTextExtractImpl
+    );
+  } catch {
+    return [];
+  }
+}
+
 async function fetchNormalizedItemsFromSource(
   sourceConfig,
   fetchImpl,
@@ -4433,18 +5235,56 @@ async function fetchNormalizedItemsFromSource(
   }
 
   if (sourceType === "html") {
-    const response = await fetchWithTimeout(
-      fetchImpl,
-      sourceUrl,
-      {
-      headers: {
-        Accept: "text/html,application/xhtml+xml"
+    let response;
+
+    try {
+      response = await fetchWithTimeout(
+        fetchImpl,
+        sourceUrl,
+        {
+          headers: {
+            Accept: "text/html,application/xhtml+xml"
+          }
+        },
+        requestTimeoutMs
+      );
+    } catch (error) {
+      const discoveredItems = await buildDiscoveredMunicipalityImportedItems(
+        "",
+        sourceConfig,
+        fetchImpl,
+        requestTimeoutMs,
+        geocodeFetchImpl,
+        pdfTextExtractImpl
+      );
+
+      if (discoveredItems.length > 0) {
+        return {
+          rawCount: discoveredItems.length,
+          items: discoveredItems
+        };
       }
-      },
-      requestTimeoutMs
-    );
+
+      throw error;
+    }
 
     if (!response.ok) {
+      const discoveredItems = await buildDiscoveredMunicipalityImportedItems(
+        "",
+        sourceConfig,
+        fetchImpl,
+        requestTimeoutMs,
+        geocodeFetchImpl,
+        pdfTextExtractImpl
+      );
+
+      if (discoveredItems.length > 0) {
+        return {
+          rawCount: discoveredItems.length,
+          items: discoveredItems
+        };
+      }
+
       throw new Error(`Gemeindequelle konnte nicht geladen werden (${response.status}).`);
     }
 
@@ -4458,46 +5298,20 @@ async function fetchNormalizedItemsFromSource(
       pdfTextExtractImpl
     );
 
-    // Auto-discovery: if a municipality only has its homepage configured and the
-    // homepage itself yields nothing, try to find the real publication page.
-    if (items.length === 0 && sourceConfig.allowDiscovery !== false && isRootLikeMunicipalityUrl(sourceUrl)) {
-      const discoveredUrl = await discoverMunicipalityPublicationUrl(
+    // Auto-discovery: if the configured municipality source yields nothing, try
+    // to find the current publication page from links, sitemaps and common paths.
+    if (items.length === 0) {
+      const discoveredItems = await buildDiscoveredMunicipalityImportedItems(
         html,
         sourceConfig,
         fetchImpl,
-        requestTimeoutMs
+        requestTimeoutMs,
+        geocodeFetchImpl,
+        pdfTextExtractImpl
       );
 
-      if (
-        discoveredUrl &&
-        isSafePublicHttpUrl(discoveredUrl) &&
-        normalizeMunicipalityResolvedUrl(discoveredUrl) !== normalizeMunicipalityResolvedUrl(sourceUrl)
-      ) {
-        try {
-          const discoveredResponse = await fetchWithTimeout(
-            fetchImpl,
-            discoveredUrl,
-            { headers: { Accept: "text/html,application/xhtml+xml" } },
-            requestTimeoutMs
-          );
-
-          if (discoveredResponse.ok) {
-            const discoveredItems = await buildHtmlImportedItems(
-              await discoveredResponse.text(),
-              { ...sourceConfig, sourceUrl: discoveredUrl },
-              fetchImpl,
-              requestTimeoutMs,
-              geocodeFetchImpl,
-              pdfTextExtractImpl
-            );
-
-            if (discoveredItems.length > 0) {
-              items = discoveredItems;
-            }
-          }
-        } catch {
-          // Discovery is a best-effort enhancement; never fail the sync over it.
-        }
+      if (discoveredItems.length > 0) {
+        items = discoveredItems;
       }
     }
 

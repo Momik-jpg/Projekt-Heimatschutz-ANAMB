@@ -3,7 +3,10 @@ data/
 coverage/
 .playwright-cli/
 .playwright-mcp/
+.codex/config.toml
+.mcp.json
 output/
+.tool-playground/
 .server-port.txt
 server.out.log
 server.err.log
@@ -18,6 +21,15 @@ data-local.sqlite
 data-local.sqlite-shm
 data-local.sqlite-wal
 backup/
+
+# Lokale KI-/Dev-Tool-Artefakte (nicht ins Repo)
+.claude/
+.claude-flow/
+.agents/
+.codex/
+.serena/
+graphify-out/
+
 docs/screenshots/
 docs/*.docx
 *-check.png

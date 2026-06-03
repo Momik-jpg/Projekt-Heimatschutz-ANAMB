@@ -133,11 +133,6 @@ body.large-text {
   font-size: 1rem;
 }
 
-body:has(#authShell:not(.hidden)) {
-  background-color: #11332c;
-  background-image: linear-gradient(155deg, #11332c 0%, #0f3b34 42%, #143f37 100%);
-}
-
 a {
   color: var(--brand-600);
   text-underline-offset: 2px;

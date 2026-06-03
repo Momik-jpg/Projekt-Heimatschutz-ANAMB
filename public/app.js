@@ -1,127 +1,40 @@
-import {
-  buildReadableAddress,
-  escapeHtml,
-  formatDate,
-  formatDateTime,
-  normalizeWhitespace,
-  truncateText
-} from "./format.js";
-import {
-  municipalityDigitalStatusLabels,
-  municipalitySourceTypeLabels,
-  protectionStatusLabels,
-  quickFilterLabels,
-  quickFilterNames,
-  workflowStatusLabels
-} from "./labels.js";
-import { elements, mapState, state } from "./dom.js";
-import {
-  setLoginError,
-  setRegisterError,
-  setMasterSetupError,
-  setMasterSetupSuccess,
-  setForgotPasswordError,
-  setForgotPasswordSuccess,
-  setResetPasswordError,
-  setResetPasswordSuccess,
-  showToast,
-  focusWithoutScroll,
-  withBusyState,
-  setTwoFactorError,
-  setTwoFactorSuccess,
-  closeConfirmDialog,
-  openConfirmDialog
-} from "./ui.js";
+/* Heimatschutz Aargau — betriebsbereite Arbeitsoberfläche */
 
-const DEFAULT_STALE_DEADLINE_DAYS = 30;
-const DEFAULT_STALE_PUBLICATION_DAYS = 45;
-const DEFAULT_AMBIGUOUS_INCLUDE_DAYS = 3;
-const globalScrapingSourceTypes = new Set(["html", "xml", "pdf"]);
+const PROTECTION = {
+  "combined-hit": { label: "Gebäude + Gebiet", cls: "danger" },
+  "protected-point": { label: "Gebäude geschützt", cls: "danger" },
+  "protected-zone": { label: "Gebiet geschützt", cls: "warning" },
+  "manual-review": { label: "Manuell prüfen", cls: "warning" },
+  "no-hit": { label: "Kein Schutz", cls: "ok" }
+};
 
-// --- Cloudflare Turnstile (Bot-Schutz) ---------------------------------------
-// Wird nur aktiv, wenn der Server in /api/auth/config einen Site-Key meldet.
-let turnstileConfig = { enabled: false, siteKey: "" };
-let turnstileScriptPromise = null;
-const turnstileWidgets = {}; // slotId -> { widgetId, token }
+const WORKFLOW = {
+  new: { label: "Offen", cls: "new" },
+  "under-review": { label: "Im Team", cls: "review" },
+  escalated: { label: "Im Team", cls: "review" },
+  cleared: { label: "Erledigt", cls: "cleared" },
+  archived: { label: "Abgelegt", cls: "archived" }
+};
 
-function loadTurnstileScript() {
-  if (turnstileScriptPromise) {
-    return turnstileScriptPromise;
-  }
+const SOURCE_TYPE = {
+  manual: "Manuell",
+  html: "Gemeindeportal",
+  xml: "RSS / XML",
+  json: "JSON",
+  arcgis: "AGIS / ArcGIS",
+  pdf: "PDF-Auflage"
+};
 
-  turnstileScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-    script.async = true;
-    script.defer = true;
-    script.addEventListener("load", () => resolve());
-    script.addEventListener("error", () => reject(new Error("Turnstile konnte nicht geladen werden.")));
-    document.head.appendChild(script);
-  });
-
-  return turnstileScriptPromise;
-}
-
-async function ensureTurnstileWidget(slotElement) {
-  if (!turnstileConfig.enabled || !slotElement) {
-    return;
-  }
-
-  try {
-    await loadTurnstileScript();
-  } catch {
-    return;
-  }
-
-  if (!window.turnstile) {
-    return;
-  }
-
-  slotElement.classList.remove("hidden");
-  const slotId = slotElement.id;
-  const existing = turnstileWidgets[slotId];
-
-  if (existing && existing.widgetId !== undefined) {
-    window.turnstile.reset(existing.widgetId);
-    existing.token = "";
-    return;
-  }
-
-  const entry = { widgetId: undefined, token: "" };
-  entry.widgetId = window.turnstile.render(slotElement, {
-    sitekey: turnstileConfig.siteKey,
-    callback: (token) => {
-      entry.token = token;
-    },
-    "expired-callback": () => {
-      entry.token = "";
-    },
-    "error-callback": () => {
-      entry.token = "";
-    }
-  });
-  turnstileWidgets[slotId] = entry;
-}
-
-function turnstileToken(slotId) {
-  return turnstileWidgets[slotId]?.token ?? "";
-}
-
-async function loadAuthConfig() {
-  try {
-    const config = await requestJson("/api/auth/config", { skipSessionReset: true });
-
-    if (config?.turnstile?.enabled && config.turnstile.siteKey) {
-      turnstileConfig = { enabled: true, siteKey: config.turnstile.siteKey };
-    }
-  } catch {
-    // Ohne Config laeuft die App wie bisher (kein Bot-Schutz im Frontend).
-  }
-}
+const TAB_SUB = {
+  all: "Aktuell: offene und laufende Fälle.",
+  important: "Aktuell: Fälle mit Schutztreffer.",
+  manual: "Aktuell: Fälle mit offener Klärung.",
+  open: "Aktuell: offene Fälle.",
+  "due-soon": "Aktuell: nahe Fristen.",
+  archive: "Aktuell: alle erfassten Baugesuche inkl. Archiv."
+};
 
 const ONLINEKARTEN_URL = "https://www.ag.ch/geoportal/apps/onlinekarten/";
-const ONLINEKARTEN_OVERVIEW_URL =
-  "https://www.ag.ch/de/themen/planen-bauen/raumentwicklung/grundlagen-und-kantonalplanung/online-karten";
 const ONLINEKARTEN_BASEMAP = "base_landeskarten_sw::topicmaps.geo.ag.ch,1,true";
 const ONLINEKARTEN_LAYERS = {
   area: "are_isos::topicmaps.geo.ag.ch;1;true",
@@ -129,773 +42,579 @@ const ONLINEKARTEN_LAYERS = {
 };
 const ONLINEKARTEN_IDENTIFY_TOLERANCE = 50;
 const rememberedUsernameStorageKey = "heimatschutz-remembered-username";
-const defaultRequestTimeoutMs = 60000;
 
+const state = {
+  currentUser: null,
+  dashboard: null,
+  items: [],
+  selectedId: null,
+  comments: [],
+  activeTab: "all",
+  filters: { search: "", municipality: "", protection: "", workflow: "" },
+  sortKey: "dueDays",
+  sortDir: 1,
+  municipalitySources: [],
+  sourceCatalog: [],
+  sourceReport: null,
+  sourceSummary: null,
+  sourceSearch: "",
+  registrationKeys: [],
+  adminUsers: [],
+  syncStatus: null,
+  authConfig: { turnstile: { enabled: false, siteKey: "" } },
+  turnstileWidgets: {}
+};
 
+const mapState = {
+  instance: null,
+  marker: null,
+  overlayGroup: null,
+  projectionReady: false,
+  requestToken: 0
+};
 
-let searchTimeoutId = null;
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
+const el = {};
 
-function isMasterUser(user = state.currentUser) {
-  return user?.role === "Master";
+function collectElements() {
+  Object.assign(el, {
+    authShell: $("#authShell"),
+    appShell: $("#appShell"),
+    loginForm: $("#loginForm"),
+    loginUsername: $("#loginUsername"),
+    loginPassword: $("#loginPassword"),
+    loginTotpField: $("#loginTotpField"),
+    loginTotp: $("#loginTotp"),
+    loginButton: $("#loginButton"),
+    loginError: $("#loginError"),
+    loginTurnstile: $("#loginTurnstile"),
+    registerForm: $("#registerForm"),
+    registerDisplayName: $("#registerDisplayName"),
+    registerUsername: $("#registerUsername"),
+    registerEmail: $("#registerEmail"),
+    registerPassword: $("#registerPassword"),
+    registerAccessKey: $("#registerAccessKey"),
+    registerButton: $("#registerButton"),
+    registerError: $("#registerError"),
+    registerTurnstile: $("#registerTurnstile"),
+    forgotPasswordForm: $("#forgotPasswordForm"),
+    forgotPasswordEmail: $("#forgotPasswordEmail"),
+    forgotPasswordButton: $("#forgotPasswordButton"),
+    forgotPasswordError: $("#forgotPasswordError"),
+    forgotPasswordSuccess: $("#forgotPasswordSuccess"),
+    forgotTurnstile: $("#forgotTurnstile"),
+    resetPasswordForm: $("#resetPasswordForm"),
+    resetPasswordKey: $("#resetPasswordKey"),
+    resetPasswordValue: $("#resetPasswordValue"),
+    resetPasswordButton: $("#resetPasswordButton"),
+    resetPasswordError: $("#resetPasswordError"),
+    resetPasswordSuccess: $("#resetPasswordSuccess"),
+    masterSetupForm: $("#masterSetupForm"),
+    masterSetupKey: $("#masterSetupKey"),
+    masterSetupPassword: $("#masterSetupPassword"),
+    masterSetupButton: $("#masterSetupButton"),
+    masterSetupError: $("#masterSetupError"),
+    masterSetupSuccess: $("#masterSetupSuccess"),
+    sessionUserName: $("#sessionUserName"),
+    sessionUserRole: $("#sessionUserRole"),
+    logoutButton: $("#logoutButton"),
+    mastSearch: $("#mastSearch"),
+    themeToggle: $("#themeToggle"),
+    fontToggle: $("#fontToggle"),
+    navWorkCount: $("#navWorkCount"),
+    activeFilterText: $("#activeFilterText"),
+    syncBtn: $("#syncBtn"),
+    resultCount: $("#resultCount"),
+    fltSearch: $("#fltSearch"),
+    fltMun: $("#fltMun"),
+    fltProt: $("#fltProt"),
+    fltWf: $("#fltWf"),
+    resetFilters: $("#resetFilters"),
+    tbody: $("#tbody"),
+    detailHelper: $("#detailHelper"),
+    detailStatusBadge: $("#detailStatusBadge"),
+    detailEmpty: $("#detailEmpty"),
+    detailBody: $("#detailBody"),
+    fMun: $("#fMun"),
+    fAddr: $("#fAddr"),
+    fParcel: $("#fParcel"),
+    fPub: $("#fPub"),
+    fDue: $("#fDue"),
+    fAgis: $("#fAgis"),
+    fProject: $("#fProject"),
+    agisLink: $("#agisLink"),
+    mapStatus: $("#mapStatus"),
+    detailMap: $("#detailMap"),
+    mapFallback: $("#mapFallback"),
+    mapLegend: $("#mapLegend"),
+    mapSymbolHint: $("#mapSymbolHint"),
+    recTitle: $("#recTitle"),
+    recText: $("#recText"),
+    recBadge: $("#recBadge"),
+    dueBadge: $("#dueBadge"),
+    srcMeta: $("#srcMeta"),
+    timeline: $("#timeline"),
+    fWorkflow: $("#fWorkflow"),
+    fAssignee: $("#fAssignee"),
+    fNote: $("#fNote"),
+    saveBtn: $("#saveBtn"),
+    clearBtn: $("#clearBtn"),
+    nextOpen: $("#nextOpen"),
+    printBtn: $("#printBtn"),
+    commentCount: $("#commentCount"),
+    commentsList: $("#commentsList"),
+    commentInput: $("#commentInput"),
+    commentSubmit: $("#commentSubmit"),
+    srcSearch: $("#srcSearch"),
+    srcBody: $("#srcBody"),
+    runImport: $("#runImport"),
+    runList: $("#runList"),
+    keysBody: $("#keysBody"),
+    toast: $("#toast"),
+    printArea: $("#printArea"),
+    paId: $("#paId"),
+    paTitle: $("#paTitle"),
+    paSub: $("#paSub"),
+    paMun: $("#paMun"),
+    paAddr: $("#paAddr"),
+    paParcel: $("#paParcel"),
+    paPub: $("#paPub"),
+    paDue: $("#paDue"),
+    paAgis: $("#paAgis"),
+    paProject: $("#paProject"),
+    paRec: $("#paRec"),
+    paSource: $("#paSource"),
+    paFoot: $("#paFoot")
+  });
 }
 
-function updateMasterUi() {
-  const masterVisible = isMasterUser();
-  elements.toggleAdminPanelButton.classList.toggle("hidden", !masterVisible);
-  elements.masterAccessPanel.classList.toggle("hidden", !masterVisible || !state.adminPanelExpanded);
-  elements.toggleAdminPanelButton.textContent = state.adminPanelExpanded ? "Verwaltung ausblenden" : "Verwaltung einblenden";
-  elements.toggleAdminPanelButton.setAttribute("aria-pressed", String(state.adminPanelExpanded));
-}
-
-function setAuthenticatedUser(user) {
-  state.currentUser = user;
-  elements.authShell.classList.toggle("hidden", Boolean(user));
-  elements.appShell.classList.toggle("hidden", !user);
-  elements.sessionUserName.textContent = user?.displayName ?? "-";
-  elements.sessionUserRole.textContent = user?.role ?? "-";
-  updateMasterUi();
-
-  if (user) {
-    setLoginError("");
-    setRegisterError("");
-  } else {
-    state.dashboard = null;
-    state.loadedItems = [];
-    state.items = [];
-    state.comments = [];
-    state.registrationKeys = [];
-    state.adminUsers = [];
-    state.municipalitySources = [];
-    state.municipalitySourceCatalog = [];
-    state.municipalitySourceReport = null;
-    state.sharedPublicationSources = [];
-    state.municipalitySourceSummary = null;
-    state.municipalitySourceSearch = "";
-    state.selectedMunicipalitySourceId = null;
-    state.syncSettings = null;
-    state.selectedId = null;
-    state.adminPanelExpanded = false;
-    elements.loginPassword.value = "";
-    clearRegisterForm();
-    elements.manualImportJsonInput.value = "";
-    elements.syncSourceTypeSelect.value = "";
-    elements.syncSourceMunicipalityInput.value = "";
-    elements.syncSourceUrlInput.value = "";
-    elements.syncSourceTokenInput.value = "";
-    elements.syncSettingsStatus.textContent = "Noch keine automatische Import-Quelle gespeichert.";
-    elements.municipalitySourceSearchInput.value = "";
-    renderRegistrationKeys([]);
-    renderAdminUsers([]);
-    renderMunicipalitySources();
+class ApiError extends Error {
+  constructor(message, status, payload) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.payload = payload;
   }
 }
 
-function getAssigneeValue() {
-  return elements.detailAssignee.value.trim() || state.currentUser?.displayName || "";
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
-function loadRememberedUsername() {
-  const rememberedUsername = localStorage.getItem(rememberedUsernameStorageKey) ?? "";
-  elements.loginUsername.value = rememberedUsername;
-  elements.rememberUsernameCheckbox.checked = Boolean(rememberedUsername);
+function normalizeText(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
-function persistRememberedUsername() {
-  if (!elements.rememberUsernameCheckbox.checked) {
-    localStorage.removeItem(rememberedUsernameStorageKey);
+function truncate(value, max = 96) {
+  const text = normalizeText(value);
+  return text.length > max ? `${text.slice(0, Math.max(0, max - 1)).trimEnd()}...` : text;
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("de-CH", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function daysUntil(value) {
+  if (!value) return Number.POSITIVE_INFINITY;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return Number.POSITIVE_INFINITY;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - today.getTime()) / 86400000);
+}
+
+function busy(button, on, label) {
+  if (!button) return;
+  if (on) {
+    button.dataset.originalText = button.textContent;
+    button.disabled = true;
+    if (label) button.textContent = label;
+  } else {
+    button.disabled = false;
+    if (button.dataset.originalText) button.textContent = button.dataset.originalText;
+  }
+}
+
+let toastTimer;
+function toast(message) {
+  if (!el.toast) return;
+  el.toast.textContent = message;
+  el.toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.toast.classList.remove("show"), 2600);
+}
+
+function setMessage(node, message, ok = false) {
+  if (!node) return;
+  node.textContent = message;
+  node.classList.toggle("hidden", !message);
+  node.classList.toggle("ok", ok);
+  node.classList.toggle("error", !ok);
+}
+
+async function requestJson(url, options = {}) {
+  const { method = "GET", body, skipSessionReset = false } = options;
+  const headers = { Accept: "application/json" };
+  const requestOptions = { method, headers, credentials: "same-origin" };
+
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    requestOptions.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url, requestOptions);
+  const contentType = response.headers.get("content-type") ?? "";
+  const payload = contentType.includes("application/json") ? await response.json() : await response.text();
+
+  if (!response.ok) {
+    const message = typeof payload === "object" && payload?.error ? payload.error : `Request fehlgeschlagen (${response.status})`;
+    if (response.status === 401 && !skipSessionReset) {
+      showLoggedOut();
+    }
+    throw new ApiError(message, response.status, payload);
+  }
+
+  return payload;
+}
+
+let turnstileScriptPromise = null;
+function loadTurnstileScript() {
+  if (turnstileScriptPromise) return turnstileScriptPromise;
+  turnstileScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.addEventListener("load", resolve);
+    script.addEventListener("error", () => reject(new Error("Turnstile konnte nicht geladen werden.")));
+    document.head.appendChild(script);
+  });
+  return turnstileScriptPromise;
+}
+
+async function ensureTurnstile(slot) {
+  if (!state.authConfig.turnstile?.enabled || !state.authConfig.turnstile?.siteKey || !slot) return;
+  slot.classList.remove("hidden");
+  try {
+    await loadTurnstileScript();
+  } catch {
+    return;
+  }
+  if (!window.turnstile) return;
+  const existing = state.turnstileWidgets[slot.id];
+  if (existing?.widgetId !== undefined) {
+    window.turnstile.reset(existing.widgetId);
+    existing.token = "";
+    return;
+  }
+  const entry = { widgetId: undefined, token: "" };
+  entry.widgetId = window.turnstile.render(slot, {
+    sitekey: state.authConfig.turnstile.siteKey,
+    callback: (token) => { entry.token = token; },
+    "expired-callback": () => { entry.token = ""; },
+    "error-callback": () => { entry.token = ""; }
+  });
+  state.turnstileWidgets[slot.id] = entry;
+}
+
+function turnstileToken(slotId) {
+  return state.turnstileWidgets[slotId]?.token ?? "";
+}
+
+async function loadAuthConfig() {
+  try {
+    const config = await requestJson("/api/auth/config", { skipSessionReset: true });
+    state.authConfig = config ?? state.authConfig;
+  } catch {
+    state.authConfig = { turnstile: { enabled: false, siteKey: "" } };
+  }
+}
+
+function showAuthPanel(name) {
+  const forms = {
+    login: el.loginForm,
+    register: el.registerForm,
+    forgot: el.forgotPasswordForm,
+    reset: el.resetPasswordForm,
+    master: el.masterSetupForm
+  };
+  Object.entries(forms).forEach(([key, form]) => form?.classList.toggle("hidden", key !== name));
+  if (name === "login") {
+    ensureTurnstile(el.loginTurnstile);
+    setTimeout(() => el.loginUsername?.focus(), 0);
+  }
+  if (name === "register") ensureTurnstile(el.registerTurnstile);
+  if (name === "forgot") ensureTurnstile(el.forgotTurnstile);
+}
+
+function showLoggedOut() {
+  state.currentUser = null;
+  state.items = [];
+  state.selectedId = null;
+  if (el.loginPassword) el.loginPassword.value = "";
+  if (el.loginTotp) el.loginTotp.value = "";
+  el.loginTotpField?.classList.add("hidden");
+  el.appShell?.classList.add("hidden");
+  el.authShell?.classList.remove("hidden");
+  showAuthPanel("login");
+}
+
+function showAuthenticated(user) {
+  state.currentUser = user;
+  if (el.loginPassword) el.loginPassword.value = "";
+  if (el.loginTotp) el.loginTotp.value = "";
+  el.sessionUserName.textContent = user?.displayName ?? "-";
+  el.sessionUserRole.textContent = user?.role ?? "-";
+  el.authShell?.classList.add("hidden");
+  el.appShell?.classList.remove("hidden");
+  document.body.classList.add("zebra");
+}
+
+function isMaster() {
+  return state.currentUser?.role === "Master";
+}
+
+function itemTitle(item) {
+  return truncate(item.projectType || item.description || "Baugesuch", 74);
+}
+
+function readableAddress(item) {
+  const address = normalizeText(item.address)
+    .replace(/\.{2,}\s*\[mehr\].*$/i, "")
+    .replace(/\s*\[mehr\].*$/i, "")
+    .replace(/\s*(?:Bauherr(?:schaft)?|Grundeigentümer(?:in)?|Projektverfasser|Bauprojekt|Bauvorhaben|Lage):.*$/i, "");
+  return address || "Adresse prüfen";
+}
+
+function dueMeta(item) {
+  const workflow = item.workflowStatus;
+  const days = daysUntil(item.deadlineDate);
+  if (workflow === "cleared" || workflow === "archived") return { cls: "due-ok", txt: "abgeschlossen", days };
+  if (!Number.isFinite(days)) return { cls: "due-soon", txt: "Frist prüfen", days };
+  if (days < 0) return { cls: "due-over", txt: `${Math.abs(days)} T. überfällig`, days };
+  if (days === 0) return { cls: "due-over", txt: "heute fällig", days };
+  if (days <= 5) return { cls: "due-soon", txt: `in ${days} Tagen`, days };
+  return { cls: "due-ok", txt: `in ${days} Tagen`, days };
+}
+
+function isOverdue(item) {
+  // Überfällig = offener Fall mit Frist in der Vergangenheit.
+  // Abgeschlossene/archivierte Fälle gelten nicht als überfällig.
+  if (item.workflowStatus === "cleared" || item.workflowStatus === "archived") return false;
+  const days = daysUntil(item.deadlineDate);
+  return Number.isFinite(days) && days < 0;
+}
+
+function protectionMeta(item) {
+  return PROTECTION[item.protectionStatus] ?? { label: item.protectionStatus || "Unklar", cls: "neutral" };
+}
+
+function workflowMeta(item) {
+  return WORKFLOW[item.workflowStatus] ?? { label: item.workflowStatus || "Offen", cls: "new" };
+}
+
+function matchesTab(item) {
+  switch (state.activeTab) {
+    case "important":
+      return ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus);
+    case "manual":
+      return item.protectionStatus === "manual-review" || Boolean(item.ambiguousAddress);
+    case "open":
+      return ["new", "under-review", "escalated"].includes(item.workflowStatus);
+    case "due-soon":
+      return dueMeta(item).days <= 5 && !["cleared", "archived"].includes(item.workflowStatus);
+    case "archive":
+      return true;
+    case "all":
+    default:
+      // Standard-Arbeitsliste: ohne Archiv und ohne überfällige Fälle.
+      // Überfällige bleiben unter "Alle / Archiv" sichtbar.
+      return item.workflowStatus !== "archived" && !isOverdue(item);
+  }
+}
+
+function matchesFilters(item) {
+  if (state.filters.municipality && item.municipality !== state.filters.municipality) return false;
+  if (state.filters.protection && item.protectionStatus !== state.filters.protection) return false;
+  if (state.filters.workflow && item.workflowStatus !== state.filters.workflow) return false;
+  const q = state.filters.search.toLowerCase();
+  if (!q) return true;
+  const hay = [item.id, item.municipality, readableAddress(item), item.projectType, item.description, item.source]
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(q);
+}
+
+function sortableValue(item, key) {
+  if (key === "dueDays") return dueMeta(item).days;
+  return String(item[key] ?? "").toLowerCase();
+}
+
+function visibleItems() {
+  return state.items
+    .filter((item) => matchesTab(item) && matchesFilters(item))
+    .slice()
+    .sort((a, b) => {
+      const av = sortableValue(a, state.sortKey);
+      const bv = sortableValue(b, state.sortKey);
+      if (av < bv) return -1 * state.sortDir;
+      if (av > bv) return 1 * state.sortDir;
+      return String(a.id).localeCompare(String(b.id));
+    });
+}
+
+function updateTabCounts() {
+  const count = (fn) => state.items.filter(fn).length;
+  const setCount = (key, value) => {
+    const node = $(`[data-count="${key}"]`);
+    if (node) node.textContent = String(value);
+  };
+  setCount("all", count((item) => item.workflowStatus !== "archived" && !isOverdue(item)));
+  setCount("important", count((item) => ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus)));
+  setCount("manual", count((item) => item.protectionStatus === "manual-review" || Boolean(item.ambiguousAddress)));
+  setCount("due-soon", count((item) => dueMeta(item).days <= 5 && !["cleared", "archived"].includes(item.workflowStatus)));
+  el.navWorkCount.textContent = String(count((item) => item.workflowStatus !== "archived" && !isOverdue(item)));
+}
+
+function renderMunicipalityOptions() {
+  const selected = state.filters.municipality;
+  const municipalities = new Set(state.dashboard?.municipalities ?? []);
+  state.items.forEach((item) => municipalities.add(item.municipality));
+  const options = [...municipalities].filter(Boolean).sort((a, b) => a.localeCompare(b, "de-CH"));
+  el.fltMun.innerHTML = `<option value="">Alle Gemeinden</option>${options
+    .map((municipality) => `<option value="${escapeHtml(municipality)}">${escapeHtml(municipality)}</option>`)
+    .join("")}`;
+  el.fltMun.value = selected;
+}
+
+function renderTable() {
+  const rows = visibleItems();
+  el.activeFilterText.textContent = TAB_SUB[state.activeTab] ?? TAB_SUB.all;
+  el.resultCount.textContent = `${rows.length} Baugesuch${rows.length === 1 ? "" : "e"}`;
+
+  if (!rows.length) {
+    el.tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">
+      <h4>Keine Baugesuche gefunden</h4>
+      <p>Filter zurücksetzen oder einen anderen Reiter wählen.</p>
+      <button class="btn ghost" type="button" data-reset-empty>Filter zurücksetzen</button>
+    </div></td></tr>`;
     return;
   }
 
-  const username = elements.loginUsername.value.trim().toLowerCase();
+  el.tbody.innerHTML = rows
+    .map((item) => {
+      const protection = protectionMeta(item);
+      const workflow = workflowMeta(item);
+      const due = dueMeta(item);
+      const selected = item.id === state.selectedId ? " selected" : "";
+      const urgency = due.cls === "due-over" ? " urg-over" : due.cls === "due-soon" ? " urg-soon" : "";
+      return `<tr tabindex="0" data-id="${escapeHtml(item.id)}" class="${selected}${urgency}">
+        <td><span class="cell-mun">${escapeHtml(item.municipality || "-")}</span><span class="cell-mun-sub">${escapeHtml(item.source || "Baugesuch")}</span></td>
+        <td><span class="cell-app-title">${escapeHtml(itemTitle(item))}</span><span class="cell-app-sub">${escapeHtml(readableAddress(item))}</span></td>
+        <td><span class="hit ${protection.cls}">${escapeHtml(protection.label)}</span></td>
+        <td><span class="cell-due">${escapeHtml(formatDate(item.deadlineDate))}</span><span class="cell-due-meta ${due.cls}">${escapeHtml(due.txt)}</span></td>
+        <td><span class="cell-status-wrap"><span class="wf ${workflow.cls}">${escapeHtml(workflow.label)}</span><span class="row-go"><svg class="row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span></td>
+      </tr>`;
+    })
+    .join("");
+}
 
-  if (username) {
-    localStorage.setItem(rememberedUsernameStorageKey, username);
+function recommendationTitle(item) {
+  switch (item.protectionStatus) {
+    case "combined-hit":
+      return "Eingehende Prüfung erforderlich";
+    case "protected-point":
+      return "Geschütztes Einzelobjekt betroffen";
+    case "protected-zone":
+      return "Lage in Schutzzone";
+    case "manual-review":
+      return "Manuelle Klärung nötig";
+    case "no-hit":
+      return "Keine denkmalrechtliche Betroffenheit";
+    default:
+      return "Prüfung vorbereiten";
   }
 }
 
-
-
-function clearRegisterForm() {
-  elements.registerDisplayName.value = "";
-  elements.registerUsername.value = "";
-  elements.registerEmail.value = "";
-  elements.registerPassword.value = "";
-  elements.registerAccessKey.value = "";
-}
-
-function clearAdminPasswordResetForm() {
-  elements.adminUserSelect.value = "";
-  elements.adminPasswordResetInput.value = "";
-}
-
-function clearMunicipalitySourceForm() {
-  elements.municipalitySourceCurrentLabel.textContent = "Bitte links eine Gemeinde auswählen.";
-  elements.municipalityOfficialWebsiteLabel.textContent = "-";
-  elements.municipalityPrimarySourceLabel.textContent = "-";
-  elements.municipalityRatingBadge.textContent = "-";
-  elements.municipalityRatingBadge.className = "badge neutral";
-  elements.municipalityRatingRationale.textContent = "-";
-  elements.municipalitySharedSourceLabel.textContent = "-";
-  elements.municipalitySupplementalSourcesLabel.textContent = "-";
-  elements.municipalityOfficialWebsiteLink.href = "#";
-  elements.municipalityPrimarySourceLink.href = "#";
-  elements.municipalityOfficialWebsiteLink.classList.add("hidden");
-  elements.municipalityPrimarySourceLink.classList.add("hidden");
-  elements.municipalitySourceTypeSelect.value = "manual";
-  elements.municipalitySourceDigitalStatusSelect.value = "unknown";
-  elements.municipalitySourceEnabledCheckbox.checked = false;
-  elements.municipalitySourceUrlInput.value = "";
-  elements.municipalitySourceTokenInput.value = "";
-  elements.municipalitySourceIncludePatternInput.value = "";
-  elements.municipalitySourceExcludePatternInput.value = "";
-  elements.municipalitySourceNotesInput.value = "";
-  elements.saveMunicipalitySourceButton.disabled = true;
-}
-
-function extractProjectFromDescription(description) {
-  const normalized = normalizeWhitespace(description);
-
-  if (!normalized) {
-    return "";
+function recommendationText(item) {
+  if (item.automatedAssessment) return item.automatedAssessment;
+  if (item.protectionStatus === "no-hit") {
+    return "Die automatische Prüfung hat keinen Schutztreffer gefunden. Bei unvollständigen Adressdaten kurz plausibilisieren.";
   }
-
-  const patterns = [
-    /Bauobjekt:\s*(.+?)(?:\s+Bauplatz:|$)/i,
-    /Bauvorhaben:\s*(.+?)(?:\s+Bauplatz:|$)/i,
-    /Projekt:\s*(.+?)(?:\s+Bauplatz:|$)/i
-  ];
-
-  for (const pattern of patterns) {
-    const match = normalized.match(pattern);
-
-    if (match?.[1]) {
-      return normalizeWhitespace(match[1]);
-    }
+  if (item.protectionStatus === "manual-review") {
+    return "Die Adresse oder Quelle ist nicht eindeutig genug für eine automatische Zuordnung. Unterlagen und Gemeindequelle manuell prüfen.";
   }
-
-  return "";
-}
-
-function buildReadableProjectType(item, { forList = false } = {}) {
-  const address = normalizeWhitespace(item.address);
-  const addressLower = address.toLowerCase();
-  let value = normalizeWhitespace(item.projectType);
-
-  if (!value) {
-    value = extractProjectFromDescription(item.description);
-  }
-
-  if (!value) {
-    return "";
-  }
-
-  value = value
-    .replace(/\bVorlesen\b/gi, "")
-    .replace(/\bHerunterladen\b/gi, "")
-    .replace(/\S+\.pdf\b/gi, "")
-    .replace(/\s+Auflagefrist.+$/i, "")
-    .replace(/\(\s*\)/g, "")
-    .replace(/["“”']/g, "")
-    .replace(/\s*[(),;:\-]+\s*$/g, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-
-  if (/\\|\/|\.(?:pln|dwg|dxf|ifc|pdf)\b/i.test(value)) {
-    const projectKeywordMatch = value.match(/\b(?:Bauprojekt|Bauvorhaben)\b\s+(.+)/i);
-
-    if (projectKeywordMatch?.[1]) {
-      value = projectKeywordMatch[1];
-    }
-
-    value = value
-      .replace(/\b\d{4}\s+[A-ZÄÖÜ][\wÄÖÜäöüéèà .'-]+?\s+1:\d+\s+\d{1,2}\.\d{1,2}\.20\d{2}.*$/i, "")
-      .replace(/\b1:\d+\s+\d{1,2}\.\d{1,2}\.20\d{2}.*$/i, "")
-      .replace(/\b\d{1,2}\.\d{1,2}\.20\d{2}\s+[A-Z]{2,}.*$/i, "")
-      .replace(/^[\\/\w.-]+\.(?:pln|dwg|dxf|ifc|pdf)\b\s*/i, "")
-      .replace(/\s*[,;:\-]+\s*$/g, "")
-      .trim();
-  }
-
-  if (address && value.toLowerCase().startsWith(`${addressLower} `)) {
-    value = value.slice(address.length).trim();
-  }
-
-  if (/BG \d{4}\.\d{3}/i.test(value) && item.description) {
-    const extracted = extractProjectFromDescription(item.description);
-    if (extracted) {
-      value = extracted;
-    }
-  }
-
-  if ((value.match(/BG \d{4}\.\d{3}/gi) ?? []).length > 1) {
-    const extracted = extractProjectFromDescription(item.description);
-    value = extracted || "";
-  }
-
-  if (/Baugesuch, /i.test(value) && address) {
-    value = value.replace(/^Baugesuch,\s*/i, "");
-  }
-
-  // Kein echtes Bauvorhaben, sondern ein Behörden-/Seitentitel aus dem Scrape
-  // (z. B. "Gemeinderat Birmenstorf", "Amtliche Publikationen") -> verwerfen.
-  const headingNoisePattern =
-    /^(?:gemeinderat|gemeinde(?:rat|kanzlei|verwaltung)?|stadt(?:rat|kanzlei|verwaltung)?|einwohnergemeinde|ortsb[üu]rgergemeinde|amtliche publikation(?:en)?|publikation(?:en)?|aktuelles|news|baugesuche?|baupublikation(?:en)?)\b/i;
-  const municipalityName = normalizeWhitespace(item.municipality ?? "");
-
-  if (
-    headingNoisePattern.test(value) ||
-    (municipalityName && value.toLowerCase().includes(municipalityName.toLowerCase()) && value.length <= municipalityName.length + 14)
-  ) {
-    value = extractProjectFromDescription(item.description) || "";
-  }
-
-  // Einzelnes kurzes Wortfragment ohne Projektbezug (z. B. ein Name aus URL/Titel
-  // wie "Testuz") ist kein Bauvorhaben -> verwerfen.
-  if (
-    /^[^\s]{1,14}$/.test(value) &&
-    !/\d/.test(value) &&
-    !/(bau|umbau|neubau|anbau|sanierung|umnutzung|abbruch|ersatz|garage|carport|pool|dach|fenster|fassade|wärmepumpe|wärmepumpe|photovoltaik|\bpv\b|gestaltungsplan|reklame|installation|terrasse|balkon|zaun|mauer|heizung)/i.test(value)
-  ) {
-    value = extractProjectFromDescription(item.description) || "";
-  }
-
-  if (!value || value.toLowerCase() === addressLower) {
-    value = extractProjectFromDescription(item.description);
-  }
-
-  value = normalizeWhitespace(value);
-
-  if (!value || value.toLowerCase() === addressLower) {
-    return "";
-  }
-
-  return forList ? truncateText(value, 92) : value;
-}
-
-function formatNaturalList(values) {
-  if (!values.length) {
-    return "";
-  }
-
-  if (values.length === 1) {
-    return values[0];
-  }
-
-  if (values.length === 2) {
-    return `${values[0]} und ${values[1]}`;
-  }
-
-  return `${values.slice(0, -1).join(", ")} und ${values[values.length - 1]}`;
-}
-
-function protectionStatusClass(status) {
-  if (status === "no-hit") {
-    return "ok";
-  }
-
-  if (status === "manual-review") {
-    return "danger";
-  }
-
-  return "alert";
-}
-
-function isExactAddressReview(item) {
-  return Boolean(item?.ambiguousAddress) && hasStreetLikeAddress(item);
-}
-
-function buildProtectionBadgeLabel(item) {
-  if (isExactAddressReview(item)) {
-    return "Adresse prüfen";
-  }
-
-  if (item?.ambiguousAddress) {
-    return "Standort prüfen";
-  }
-
-  return humanizeAgisMatch(item?.agisMatch, false);
-}
-
-function buildProtectionBadgeClass(item) {
-  if (isExactAddressReview(item)) {
-    return "alert";
-  }
-
-  if (item?.ambiguousAddress) {
-    return "danger";
-  }
-
-  return protectionStatusClass(item?.protectionStatus);
-}
-
-function workflowClass(status) {
-  if (status === "cleared") {
-    return "ok";
-  }
-
-  if (status === "archived") {
-    return "neutral";
-  }
-
-  return "neutral";
-}
-
-function markerTone(status) {
-  if (status === "neutral") {
-    return "neutral";
-  }
-
-  if (status === "manual-review") {
-    return "danger";
-  }
-
-  if (status === "no-hit") {
-    return "ok";
-  }
-
-  return "alert";
+  return "Schutztreffer vorhanden. Eingriff, Sichtbarkeit und Schutzumfang vor Bewilligung fachlich prüfen.";
 }
 
 function normalizeLayerName(value) {
-  return String(value)
-    .toLowerCase()
-    .replaceAll("ä", "a")
-    .replaceAll("ö", "o")
-    .replaceAll("ü", "u")
-    .replaceAll("é", "e")
-    .replaceAll("è", "e")
-    .replaceAll("à", "a");
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replaceAll("\u00df", "ss")
+    .toLowerCase();
 }
 
-function isOpenWorkflow(status) {
-  return status !== "cleared" && status !== "archived";
-}
+function parseSwissCoordinates(value) {
+  const text = normalizeText(value).replace(/[']/g, "");
+  const numbers = text.match(/\d{6,7}(?:\.\d+)?/g)?.map(Number) ?? [];
 
-function humanizeAgisMatch(match, ambiguousAddress) {
-  if (ambiguousAddress) {
-    return "Manuell prüfen";
-  }
-
-  if (match === "Kein Schutztreffer") {
-    return "Kein Schutz";
-  }
-
-  if (match === "ISOS-Fläche und Gebäude im Inventar" || match === "ISOS-Fläche und Gebäude im Inventar") {
-    return "Gebäude + Gebiet";
-  }
-
-  if (match === "Treffer im Gebäudeinventar" || match === "Treffer im Gebäudeinventar") {
-    return "Gebäude geschützt";
-  }
-
-  if (match === "Treffer in ISOS-Fläche" || match === "Treffer in ISOS-Fläche") {
-    return "Gebiet geschützt";
-  }
-
-  if (match === "Noch nicht eindeutig zugeordnet" || match === "Zuordnung offen") {
-    return "Manuell prüfen";
-  }
-
-  return match;
-}
-
-function humanizeAgisLayer(layer) {
-  if (layer === "Gebäude im Inventar" || layer === "Gebäude im Inventar") {
-    return "Geschütztes Gebäude";
-  }
-
-  if (layer === "ISOS-Fläche" || layer === "ISOS-Fläche") {
-    return "Geschützte Umgebung";
-  }
-
-  return layer;
-}
-
-function humanizeSourceLabel(source) {
-  if (!source) {
-    return "Quelle offen";
-  }
-
-  if (source === "Gemeinde-Webseite") {
-    return "Gemeindequelle";
-  }
-
-  if (source === "Gemeinde-Import") {
-    return "Gemeindeimport";
-  }
-
-  if (source === "JSON-Datei" || source === "JSON-Import") {
-    return "JSON-Import";
-  }
-
-  if (source === "ArcGIS / AGIS") {
-    return "AGIS";
-  }
-
-  return source;
-}
-
-function getCssVariable(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-  function startOfDay(dateValue) {
-    const date = new Date(dateValue);
-    date.setHours(0, 0, 0, 0);
-    return date;
-  }
-
-  function getReferenceDate() {
-    return startOfDay(new Date());
-  }
-
-function getDaysUntilDeadline(deadlineDate) {
-  if (!deadlineDate) {
+  if (numbers.length < 2 || !Number.isFinite(numbers[0]) || !Number.isFinite(numbers[1])) {
     return null;
   }
 
-  const deadline = startOfDay(deadlineDate);
-  const referenceDate = getReferenceDate();
-  return Math.round((deadline - referenceDate) / 86400000);
-}
+  const [firstValue, secondValue] = numbers;
+  const looksLikeLv95East = (entry) => entry >= 2400000 && entry <= 2900000;
+  const looksLikeLv95North = (entry) => entry >= 1000000 && entry <= 1400000;
 
-function buildDeadlineHint(item) {
-  const daysUntilDeadline = getDaysUntilDeadline(item.deadlineDate);
-
-  if (daysUntilDeadline === null) {
-    return {
-      text: "Keine Frist vorhanden",
-      tone: "neutral"
-    };
+  if (looksLikeLv95East(firstValue) && looksLikeLv95North(secondValue)) {
+    return { east: firstValue, north: secondValue };
   }
 
-  if (item.workflowStatus === "cleared" || item.workflowStatus === "archived") {
-    return {
-      text: `Frist: ${formatDate(item.deadlineDate)}`,
-      tone: "neutral"
-    };
+  if (looksLikeLv95North(firstValue) && looksLikeLv95East(secondValue)) {
+    return { east: secondValue, north: firstValue };
   }
 
-  if (daysUntilDeadline < 0) {
-    return {
-      text: `Frist abgelaufen seit ${Math.abs(daysUntilDeadline)} Tag${Math.abs(daysUntilDeadline) === 1 ? "" : "en"}`,
-      tone: "danger"
-    };
-  }
-
-  if (daysUntilDeadline === 0) {
-    return {
-      text: "Frist endet heute",
-      tone: "danger"
-    };
-  }
-
-  if (daysUntilDeadline <= 3) {
-    return {
-      text: `Frist in ${daysUntilDeadline} Tag${daysUntilDeadline === 1 ? "" : "en"}`,
-      tone: "danger"
-    };
-  }
-
-  if (daysUntilDeadline <= 7) {
-    return {
-      text: `Frist in ${daysUntilDeadline} Tag${daysUntilDeadline === 1 ? "" : "en"}`,
-      tone: "alert"
-    };
-  }
-
-  return {
-    text: `Frist am ${formatDate(item.deadlineDate)}`,
-    tone: "ok"
-  };
-}
-
-function buildRecommendation(item) {
-  if (item.ambiguousAddress || item.protectionStatus === "manual-review") {
-    if (hasExactAddressWithoutCoordinates(item)) {
-      return {
-        title: "Standort kurz prüfen",
-        text: "Die Adresse ist vorhanden, konnte aber nicht automatisch einem amtlichen Koordinatenpunkt zugeordnet werden."
-      };
-    }
-
-    return {
-      title: "Standort klären",
-      text: "Die automatische Zuordnung war nicht eindeutig. Bitte Adresse oder Parzelle prüfen."
-    };
-  }
-
-  if (item.protectionStatus === "combined-hit") {
-    return {
-      title: "Punkt und Fläche erkannt",
-      text: "Der Standort liegt bei einem geschützten Objekt und gleichzeitig in einer geschützten Fläche."
-    };
-  }
-
-  if (item.protectionStatus === "protected-point") {
-    return {
-      title: "Geschützter Punkt erkannt",
-      text: "Der Standort liegt bei einem geschützten Punkt beziehungsweise Inventarobjekt."
-    };
-  }
-
-  if (item.protectionStatus === "protected-zone") {
-    return {
-      title: "Geschützte Fläche erkannt",
-      text: "Der Standort liegt in einer geschützten Fläche beziehungsweise in einem geschützten Bereich."
-    };
-  }
-
-  return {
-    title: "Kein Treffer erkannt",
-    text: "Aktuell liegt der Standort weder bei einem geschützten Punkt noch in einer geschützten Fläche."
-  };
-}
-
-function isImportantCase(item) {
-  return (
-    item.protectionStatus === "protected-point" ||
-    item.protectionStatus === "protected-zone" ||
-    item.protectionStatus === "combined-hit"
-  );
-}
-
-function isManualCase(item) {
-  return item.ambiguousAddress || item.protectionStatus === "manual-review";
-}
-
-function isDueSoonCase(item) {
-  const daysUntilDeadline = getDaysUntilDeadline(item.deadlineDate);
-  return isOpenWorkflow(item.workflowStatus) && daysUntilDeadline !== null && daysUntilDeadline >= 0 && daysUntilDeadline <= 7;
-}
-
-function getDaysSinceDate(dateValue) {
-  if (!dateValue) {
-    return null;
-  }
-
-  const date = new Date(dateValue);
-
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function isStaleWorklistCase(item) {
-  if (!isOpenWorkflow(item.workflowStatus)) {
-    return true;
-  }
-
-  const daysUntilDeadline = getDaysUntilDeadline(item.deadlineDate);
-
-  if (daysUntilDeadline !== null) {
-    return daysUntilDeadline < -DEFAULT_STALE_DEADLINE_DAYS;
-  }
-
-  const daysSincePublication = getDaysSinceDate(item.publicationDate);
-
-  return daysSincePublication !== null && daysSincePublication > DEFAULT_STALE_PUBLICATION_DAYS;
-}
-
-function hasExplicitFieldFilters() {
-  return Object.values(state.filters).some((value) => Boolean(value));
-}
-
-function shouldUseDefaultWorklistScope() {
-  return !hasExplicitFieldFilters() && getActiveQuickFilters().includes("all");
+  return { east: firstValue, north: secondValue };
 }
 
 function hasStreetLikeAddress(item) {
-  const value = normalizeWhitespace(item.address ?? "");
-
-  if (!value || /^parzelle\b/i.test(value)) {
-    return false;
-  }
-
-  return /\d/.test(value);
+  const value = normalizeText(item?.address ?? "");
+  if (!value || /^parzelle\b/i.test(value)) return false;
+  return /\d/.test(value) || /\b(strasse|weg|gasse|platz|rain|hof|dorf|allee|ring|matt|halde)\b/i.test(value);
 }
 
 function hasExactAddressWithoutCoordinates(item) {
   return Boolean(item?.ambiguousAddress) && hasStreetLikeAddress(item) && !parseSwissCoordinates(item?.coordinates ?? "");
 }
 
-function isNearDeadline(item, days = DEFAULT_AMBIGUOUS_INCLUDE_DAYS) {
-  const daysUntilDeadline = getDaysUntilDeadline(item?.deadlineDate);
-  return Number.isFinite(daysUntilDeadline) && daysUntilDeadline >= 0 && daysUntilDeadline <= days;
-}
-
-function isCurrentWorklistCase(item) {
-  if (isStaleWorklistCase(item) || !isOpenWorkflow(item.workflowStatus)) {
-    return false;
-  }
-
-  const daysUntilDeadline = getDaysUntilDeadline(item.deadlineDate);
-  if (Number.isFinite(daysUntilDeadline) && daysUntilDeadline < 0) {
-    return false;
-  }
-
-  if (item.protectionStatus !== "manual-review" && !item.ambiguousAddress) {
-    return true;
-  }
-
-  if (item.protectionStatus !== "manual-review") {
-    return true;
-  }
-
-  if (isNearDeadline(item)) {
-    return true;
-  }
-
-  if (item.workflowStatus !== "new") {
-    return true;
-  }
-
-  return hasStreetLikeAddress(item);
-}
-
-function isWorklistEligibleCase(item) {
-  if (isStaleWorklistCase(item) || !isOpenWorkflow(item.workflowStatus)) {
-    return false;
-  }
-
-  const daysUntilDeadline = getDaysUntilDeadline(item.deadlineDate);
-
-  return !(Number.isFinite(daysUntilDeadline) && daysUntilDeadline < 0);
-}
-
-function buildVisibleItems(items) {
-  // "Alle / Archiv" zeigt jeden erfassten Fall, auch überfällige und aeltere,
-  // ohne die Arbeitslisten-Eingrenzung.
-  if (getActiveQuickFilters().includes("archive")) {
-    return applyQuickFilter(items);
-  }
-
-  const activeItems = items.filter((item) => isWorklistEligibleCase(item));
-  const baseItems = shouldUseDefaultWorklistScope()
-    ? activeItems.filter((item) => isCurrentWorklistCase(item))
-    : activeItems;
-
-  return applyQuickFilter(baseItems);
-}
-
-function normalizeQuickFilters(filters) {
-  const normalized = [...new Set((Array.isArray(filters) ? filters : [filters]).filter(Boolean))];
-
-  if (!normalized.length || normalized.includes("all")) {
-    return ["all"];
-  }
-
-  return normalized;
-}
-
-function getActiveQuickFilters() {
-  return normalizeQuickFilters(state.quickFilters);
-}
-
-function setQuickFilters(filters) {
-  state.quickFilters = normalizeQuickFilters(filters);
-}
-
-function toggleQuickFilter(filterKey) {
-  if (filterKey === "all") {
-    setQuickFilters(["all"]);
-    return;
-  }
-
-  const currentFilters = getActiveQuickFilters().filter((filter) => filter !== "all");
-  const nextFilters = currentFilters.includes(filterKey)
-    ? currentFilters.filter((filter) => filter !== filterKey)
-    : [...currentFilters, filterKey];
-
-  setQuickFilters(nextFilters);
-}
-
-function buildActiveQuickFilterText() {
-    const activeFilters = getActiveQuickFilters();
-
-    if (activeFilters.includes("all")) {
-      return shouldUseDefaultWorklistScope()
-        ? "Aktuell: offene und aktuelle Fälle."
-        : "Aktuell: gefilterte Baugesuche.";
-    }
-
-    const filterNames = activeFilters.map((filter) => quickFilterNames[filter]).filter(Boolean);
-
-    if (filterNames.length > 1) {
-      return `Aktiv: ${formatNaturalList(filterNames)}.`;
-    }
-
-    return `Aktiv: ${filterNames[0]}.`;
-  }
-
-function applyQuickFilter(items) {
-  const activeFilters = getActiveQuickFilters();
-
-  if (activeFilters.includes("all")) {
-    return items;
-  }
-
-  return items.filter((item) => {
-    if (activeFilters.includes("important") && !isImportantCase(item)) {
-      return false;
-    }
-
-    if (activeFilters.includes("manual") && !isManualCase(item)) {
-      return false;
-    }
-
-    if (activeFilters.includes("open") && !isOpenWorkflow(item.workflowStatus)) {
-      return false;
-    }
-
-    if (activeFilters.includes("due-soon") && !isDueSoonCase(item)) {
-      return false;
-    }
-
-    return true;
-  });
-}
-
-  function parseSwissCoordinates(coordinates) {
-    if (!coordinates) {
-      return null;
-    }
-
-    const [firstValue, secondValue] = coordinates.split(",").map((value) => Number(value.trim()));
-
-    if (!Number.isFinite(firstValue) || !Number.isFinite(secondValue)) {
-      return null;
-    }
-
-    const looksLikeLv95East = (value) => value >= 2400000 && value <= 2900000;
-    const looksLikeLv95North = (value) => value >= 1000000 && value <= 1400000;
-
-    if (looksLikeLv95East(firstValue) && looksLikeLv95North(secondValue)) {
-      return {
-        east: firstValue,
-        north: secondValue
-      };
-    }
-
-    if (looksLikeLv95North(firstValue) && looksLikeLv95East(secondValue)) {
-      return {
-        east: secondValue,
-        north: firstValue
-      };
-    }
-
-    return {
-      east: firstValue,
-      north: secondValue
-    };
-  }
-
 function hasProtectedBuilding(item) {
   const normalizedLayers = (item.agisLayers ?? []).map((layer) => normalizeLayerName(layer));
-
   return (
     item.protectionStatus === "protected-point" ||
     item.protectionStatus === "combined-hit" ||
@@ -905,7 +624,6 @@ function hasProtectedBuilding(item) {
 
 function hasProtectedArea(item) {
   const normalizedLayers = (item.agisLayers ?? []).map((layer) => normalizeLayerName(layer));
-
   return (
     item.protectionStatus === "protected-zone" ||
     item.protectionStatus === "combined-hit" ||
@@ -915,14 +633,10 @@ function hasProtectedArea(item) {
 
 function buildAgisDataLink(item) {
   const coordinates = parseSwissCoordinates(item.coordinates);
-
-  if (!coordinates) {
-    return null;
-  }
+  if (!coordinates) return null;
 
   const url = new URL(ONLINEKARTEN_URL);
   const activeLayers = [ONLINEKARTEN_LAYERS.area, ONLINEKARTEN_LAYERS.point].join("|");
-
   url.searchParams.set("layers", activeLayers);
   url.searchParams.set("basemap", ONLINEKARTEN_BASEMAP);
   url.searchParams.set("center", `${coordinates.east.toFixed(2)},${coordinates.north.toFixed(2)}`);
@@ -931,46 +645,13 @@ function buildAgisDataLink(item) {
     "info",
     `${coordinates.east.toFixed(2)},${coordinates.north.toFixed(2)},${ONLINEKARTEN_IDENTIFY_TOLERANCE}`
   );
-
   return url.toString();
 }
 
 function buildDataLinkLabel(item) {
-  if (hasProtectedBuilding(item)) {
-    return "Inventar-Karte mit Standort öffnen";
-  }
-
-  if (hasProtectedArea(item)) {
-    return "Ortsbild-Karte mit Standort öffnen";
-  }
-
+  if (hasProtectedBuilding(item)) return "Inventar-Karte mit Standort öffnen";
+  if (hasProtectedArea(item)) return "Ortsbild-Karte mit Standort öffnen";
   return "AGIS-Karte mit Standort öffnen";
-}
-
-function buildSourceLinkLabel(item) {
-  if (!item.sourceUrl) {
-    return "";
-  }
-
-  const sourceUrl = String(item.sourceUrl).toLowerCase();
-
-  if (item.source === "Amtsblatt" || sourceUrl.includes("amtsblatt.ag.ch")) {
-    return "Amtsblatt öffnen";
-  }
-
-  if (sourceUrl.includes("/geoportal") || sourceUrl.includes("/online-karten")) {
-    return "Übersichtsseite öffnen";
-  }
-
-  return "Quelle öffnen";
-}
-
-function buildSourceLink(item) {
-  if (item.source === "Gemeindeseite" || item.source === "Gemeinde-Webseite" || item.source === "Gemeinde-Import") {
-    return item.sourceUrl ?? ONLINEKARTEN_OVERVIEW_URL;
-  }
-
-  return item.sourceUrl ?? "";
 }
 
 function formatSwissCoordinates(coordinates) {
@@ -978,10 +659,8 @@ function formatSwissCoordinates(coordinates) {
   return `Koordinaten: ${numberFormatter.format(coordinates.east)} / ${numberFormatter.format(coordinates.north)}`;
 }
 
-  function swissToLatLng(coordinates) {
-  if (!window.proj4) {
-    return null;
-  }
+function swissToLatLng(coordinates) {
+  if (!window.proj4) return null;
 
   if (!mapState.projectionReady) {
     window.proj4.defs(
@@ -991,31 +670,17 @@ function formatSwissCoordinates(coordinates) {
     mapState.projectionReady = true;
   }
 
-    const [longitude, latitude] = window.proj4("EPSG:2056", "WGS84", [coordinates.east, coordinates.north]);
+  const [longitude, latitude] = window.proj4("EPSG:2056", "WGS84", [coordinates.east, coordinates.north]);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
 
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      return null;
-    }
-
-    const isInsideSwissBounds = latitude >= 45 && latitude <= 48.5 && longitude >= 5 && longitude <= 11;
-    if (!isInsideSwissBounds) {
-      return null;
-    }
-
-    return {
-      latitude,
-      longitude
-  };
+  const isInsideSwissBounds = latitude >= 45 && latitude <= 48.5 && longitude >= 5 && longitude <= 11;
+  return isInsideSwissBounds ? { latitude, longitude } : null;
 }
 
 function swissPairToLatLng(pair) {
   const east = Number(pair?.[0]);
   const north = Number(pair?.[1]);
-
-  if (!Number.isFinite(east) || !Number.isFinite(north)) {
-    return null;
-  }
-
+  if (!Number.isFinite(east) || !Number.isFinite(north)) return null;
   const position = swissToLatLng({ east, north });
   return position ? [position.latitude, position.longitude] : null;
 }
@@ -1033,84 +698,52 @@ function swissPolygonPartsToLatLngs(parts) {
 function buildAreaPopup(feature) {
   const title = feature.properties?.title?.trim();
   const lines = [];
-
-  if (feature.properties?.layerLabel) {
-    lines.push(`<strong>${escapeHtml(feature.properties.layerLabel)}</strong>`);
-  }
-
-  if (title) {
-    lines.push(escapeHtml(title));
-  }
-
-  if (feature.properties?.category) {
-    lines.push(`Kategorie: ${escapeHtml(feature.properties.category)}`);
-  }
-
-  if (feature.properties?.significance) {
-    lines.push(`Bedeutung: ${escapeHtml(feature.properties.significance)}`);
-  }
-
-  if (feature.properties?.preservationTarget) {
-    lines.push(`Erhaltungsziel: ${escapeHtml(feature.properties.preservationTarget)}`);
-  }
-
+  if (feature.properties?.layerLabel) lines.push(`<strong>${escapeHtml(feature.properties.layerLabel)}</strong>`);
+  if (title) lines.push(escapeHtml(title));
+  if (feature.properties?.category) lines.push(`Kategorie: ${escapeHtml(feature.properties.category)}`);
+  if (feature.properties?.significance) lines.push(`Bedeutung: ${escapeHtml(feature.properties.significance)}`);
+  if (feature.properties?.preservationTarget) lines.push(`Erhaltungsziel: ${escapeHtml(feature.properties.preservationTarget)}`);
   return lines.join("<br>");
 }
 
 function buildPointPopup(feature) {
   const title = feature.properties?.title?.trim();
   const lines = [];
-
-  if (feature.properties?.layerLabel) {
-    lines.push(`<strong>${escapeHtml(feature.properties.layerLabel)}</strong>`);
-  }
-
-  if (title) {
-    lines.push(escapeHtml(title));
-  }
-
+  if (feature.properties?.layerLabel) lines.push(`<strong>${escapeHtml(feature.properties.layerLabel)}</strong>`);
+  if (title) lines.push(escapeHtml(title));
   if (feature.properties?.municipality || feature.properties?.address) {
     const placeText = [feature.properties?.municipality, feature.properties?.address].filter(Boolean).join(", ");
     lines.push(escapeHtml(placeText));
   }
-
-  if (feature.properties?.reference) {
-    lines.push(`Referenz: ${escapeHtml(feature.properties.reference)}`);
-  }
-
+  if (feature.properties?.reference) lines.push(`Referenz: ${escapeHtml(feature.properties.reference)}`);
   return lines.join("<br>");
 }
 
-function ensureMap() {
-  if (mapState.instance || !elements.detailMap || !window.L) {
-    return mapState.instance;
-  }
+function getCssVariable(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
 
-  mapState.instance = window.L.map(elements.detailMap, {
+function ensureMap() {
+  if (mapState.instance || !el.detailMap || !window.L) return mapState.instance;
+
+  mapState.instance = window.L.map(el.detailMap, {
     zoomControl: false,
     scrollWheelZoom: false
   });
-
   window.L.control.zoom({ position: "bottomright" }).addTo(mapState.instance);
-
   window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: "&copy; OpenStreetMap"
   }).addTo(mapState.instance);
-
   mapState.marker = window.L.marker([47.3925, 8.0442], {
     icon: createLocationMarkerIcon()
   }).addTo(mapState.instance);
   mapState.overlayGroup = window.L.featureGroup().addTo(mapState.instance);
-
   return mapState.instance;
 }
 
 function createLocationMarkerIcon() {
-  if (!window.L) {
-    return null;
-  }
-
+  if (!window.L) return null;
   return window.L.divIcon({
     className: "custom-map-marker location-marker",
     html: '<span class="map-pin location"></span>',
@@ -1127,34 +760,13 @@ function clearMapOverlays() {
 function getAreaLayerStyle(layerKey) {
   switch (layerKey) {
     case "municipality-zone":
-      return {
-        color: "#4b8b58",
-        fillColor: "#8fd38e",
-        fillOpacity: 0.2,
-        weight: 1.6
-      };
+      return { color: "#4b8b58", fillColor: "#8fd38e", fillOpacity: 0.2, weight: 1.6 };
     case "zone-part":
-      return {
-        color: "#7e63a8",
-        fillColor: "#c6b3e8",
-        fillOpacity: 0.28,
-        weight: 1.8
-      };
+      return { color: "#7e63a8", fillColor: "#c6b3e8", fillOpacity: 0.28, weight: 1.8 };
     case "hint-zone":
-      return {
-        color: "#5d2d82",
-        fillColor: "#8a52b4",
-        fillOpacity: 0.36,
-        weight: 1.8
-      };
+      return { color: "#5d2d82", fillColor: "#8a52b4", fillOpacity: 0.36, weight: 1.8 };
     case "perimeter-zone":
-      return {
-        color: "#8a7b63",
-        fillColor: "#d8cfbc",
-        fillOpacity: 0.18,
-        weight: 1.4,
-        dashArray: "6 4"
-      };
+      return { color: "#8a7b63", fillColor: "#d8cfbc", fillOpacity: 0.18, weight: 1.4, dashArray: "6 4" };
     default:
       return {
         color: getCssVariable("--map-area-stroke"),
@@ -1196,12 +808,11 @@ function getLegendSwatchClass(layerKey) {
 }
 
 function renderMapLegend(features) {
+  if (!el.mapLegend) return;
   const items = ['<span class="map-legend-item"><span class="map-legend-swatch location"></span><span>Standort</span></span>'];
 
   if (features.points) {
-    items.push(
-      '<span class="map-legend-item"><span class="map-legend-swatch point"></span><span>Inventarobjekte</span></span>'
-    );
+    items.push('<span class="map-legend-item"><span class="map-legend-swatch point"></span><span>Inventarobjekte</span></span>');
   }
 
   for (const layerKey of features.areaLayerKeys) {
@@ -1212,21 +823,27 @@ function renderMapLegend(features) {
     );
   }
 
-  elements.mapLegend.innerHTML = items.join("");
-  elements.mapLegend.classList.toggle("hidden", items.length === 0);
+  el.mapLegend.innerHTML = items.join("");
+  el.mapLegend.classList.toggle("hidden", items.length === 0);
 }
 
 function buildMapOverlays(officialFeatures, markerLatLng) {
   const map = ensureMap();
+  const areaFeatures = Array.isArray(officialFeatures.areaFeatures) ? officialFeatures.areaFeatures : [];
+  const pointFeatures = Array.isArray(officialFeatures.pointFeatures) ? officialFeatures.pointFeatures : [];
   const displayAreaFeatures =
-    officialFeatures.displayAreaFeatures?.length > 0 ? officialFeatures.displayAreaFeatures : officialFeatures.areaFeatures;
+    Array.isArray(officialFeatures.displayAreaFeatures) && officialFeatures.displayAreaFeatures.length > 0
+      ? officialFeatures.displayAreaFeatures
+      : areaFeatures;
   const displayPointFeatures =
-    officialFeatures.displayPointFeatures?.length > 0 ? officialFeatures.displayPointFeatures : officialFeatures.pointFeatures;
+    Array.isArray(officialFeatures.displayPointFeatures) && officialFeatures.displayPointFeatures.length > 0
+      ? officialFeatures.displayPointFeatures
+      : pointFeatures;
   const features = {
     area: displayAreaFeatures.length > 0,
     points: displayPointFeatures.length > 0,
-    matchedArea: officialFeatures.areaFeatures.length > 0,
-    matchedPoints: officialFeatures.pointFeatures.length > 0,
+    matchedArea: areaFeatures.length > 0,
+    matchedPoints: pointFeatures.length > 0,
     areaLayerKeys: [...new Set(displayAreaFeatures.map((feature) => feature.properties?.layerKey).filter(Boolean))]
   };
   const layersForBounds = [mapState.marker];
@@ -1235,35 +852,24 @@ function buildMapOverlays(officialFeatures, markerLatLng) {
 
   for (const areaFeature of displayAreaFeatures) {
     const latLngParts = swissPolygonPartsToLatLngs(areaFeature.parts);
-
-    if (latLngParts.length === 0) {
-      continue;
-    }
+    if (latLngParts.length === 0) continue;
 
     const polygon = window.L.polygon(
       latLngParts.length === 1 ? latLngParts[0] : latLngParts,
       getAreaLayerStyle(areaFeature.properties?.layerKey)
     );
-
     const popup = buildAreaPopup(areaFeature);
-
-    if (popup) {
-      polygon.bindPopup(popup);
-    }
-
+    if (popup) polygon.bindPopup(popup);
     mapState.overlayGroup.addLayer(polygon);
     layersForBounds.push(polygon);
   }
 
   for (const pointFeature of displayPointFeatures) {
     const position = swissToLatLng({
-      east: pointFeature.coordinates[0],
-      north: pointFeature.coordinates[1]
+      east: pointFeature.coordinates?.[0],
+      north: pointFeature.coordinates?.[1]
     });
-
-    if (!position) {
-      continue;
-    }
+    if (!position) continue;
 
     const point = window.L.circleMarker([position.latitude, position.longitude], {
       radius: 7,
@@ -1272,19 +878,13 @@ function buildMapOverlays(officialFeatures, markerLatLng) {
       fillOpacity: 0.92,
       weight: 2
     });
-
     const popup = buildPointPopup(pointFeature);
-
-    if (popup) {
-      point.bindPopup(popup);
-    }
-
+    if (popup) point.bindPopup(popup);
     mapState.overlayGroup.addLayer(point);
     layersForBounds.push(point);
   }
 
   const boundsGroup = window.L.featureGroup(layersForBounds);
-
   if (boundsGroup.getBounds().isValid()) {
     map.fitBounds(boundsGroup.getBounds(), {
       padding: [28, 28],
@@ -1292,46 +892,33 @@ function buildMapOverlays(officialFeatures, markerLatLng) {
       maxZoom: 17
     });
   } else {
-    map.setView(markerLatLng, 17, {
-      animate: false
-    });
+    map.setView(markerLatLng, 17, { animate: false });
   }
 
   return features;
 }
 
 function describeMapFeatures(features) {
-  if (features.matchedArea && features.matchedPoints) {
-    return "Direkter AGIS-Treffer: Zonen und Inventarobjekte markiert";
-  }
-
-  if (features.matchedArea) {
-    return "Direkter AGIS-Zonentreffer markiert";
-  }
-
-  if (features.matchedPoints) {
-    return "Direkter Inventartreffer markiert";
-  }
-
-  if (features.area || features.points) {
-    return "Amtliche Schutzlayer in der Umgebung eingeblendet";
-  }
-
+  if (features.matchedArea && features.matchedPoints) return "Direkter AGIS-Treffer: Zonen und Inventarobjekte markiert";
+  if (features.matchedArea) return "Direkter AGIS-Zonentreffer markiert";
+  if (features.matchedPoints) return "Direkter Inventartreffer markiert";
+  if (features.area || features.points) return "Amtliche Schutzlayer in der Umgebung eingeblendet";
   return "Auf der Karte wurde kein AGIS-Treffer gefunden";
 }
 
-function updateMapNote(officialFeatures, features) {
+function updateMapNote(_officialFeatures, features) {
+  if (!el.mapSymbolHint) return;
   if (!features.area && !features.points) {
-    elements.mapSymbolHint.classList.add("hidden");
-    elements.mapSymbolHint.textContent = "";
+    el.mapSymbolHint.classList.add("hidden");
+    el.mapSymbolHint.textContent = "";
     return;
   }
 
   const areaNote = features.areaLayerKeys.length > 0 ? "Grün/Lila = amtliche Schutzzonen" : "";
   const pointNote = features.points ? "Rot = Inventarobjekte" : "";
   const parts = ["Blau = Baugesuch", pointNote, areaNote].filter(Boolean);
-  elements.mapSymbolHint.textContent = parts.join(" · ");
-  elements.mapSymbolHint.classList.remove("hidden");
+  el.mapSymbolHint.textContent = parts.join(" · ");
+  el.mapSymbolHint.classList.remove("hidden");
 }
 
 async function requestOfficialMapFeatures(coordinates) {
@@ -1339,20 +926,24 @@ async function requestOfficialMapFeatures(coordinates) {
     east: String(coordinates.east),
     north: String(coordinates.north)
   });
-
   return requestJson(`/api/agis/features?${params.toString()}`);
 }
 
-function showMapFallback(message, status, coordinates = "") {
-  elements.mapStatusLabel.textContent = status;
-  elements.detailCoordinates.textContent = "";
-  elements.detailMap.classList.add("hidden");
-  elements.mapFallback.textContent = message;
-  elements.mapFallback.classList.remove("hidden");
-  elements.mapLegend.classList.add("hidden");
-  elements.mapLegend.innerHTML = "";
-  elements.mapSymbolHint.classList.add("hidden");
-  elements.mapSymbolHint.textContent = "";
+function showMapFallback(message, status) {
+  el.mapStatus.textContent = status;
+  el.detailMap?.classList.add("hidden");
+  if (el.mapFallback) {
+    el.mapFallback.textContent = message;
+    el.mapFallback.classList.remove("hidden");
+  }
+  if (el.mapLegend) {
+    el.mapLegend.classList.add("hidden");
+    el.mapLegend.innerHTML = "";
+  }
+  if (el.mapSymbolHint) {
+    el.mapSymbolHint.classList.add("hidden");
+    el.mapSymbolHint.textContent = "";
+  }
   clearMapOverlays();
 }
 
@@ -1366,7 +957,6 @@ async function updateMap(item) {
   }
 
   const parsedCoordinates = parseSwissCoordinates(item.coordinates);
-
   if (item.ambiguousAddress || !parsedCoordinates) {
     const hasExactAddress = hasExactAddressWithoutCoordinates(item);
     showMapFallback(
@@ -1379,1879 +969,866 @@ async function updateMap(item) {
   }
 
   const position = swissToLatLng(parsedCoordinates);
-
   if (!position) {
     showMapFallback(
       "Die Karte konnte im Moment nicht geladen werden. Die restlichen Angaben stehen trotzdem bereit.",
-      "Karte vorübergehend nicht verfügbar",
-      formatSwissCoordinates(parsedCoordinates)
+      "Karte vorübergehend nicht verfügbar"
     );
     return;
   }
 
   const map = ensureMap();
-
   if (!map || !mapState.marker) {
     showMapFallback(
       "Die Karte konnte im Moment nicht geladen werden. Die restlichen Angaben stehen trotzdem bereit.",
-      "Karte vorübergehend nicht verfügbar",
-      formatSwissCoordinates(parsedCoordinates)
+      "Karte vorübergehend nicht verfügbar"
     );
     return;
   }
 
-  elements.mapStatusLabel.textContent = "Standort wird auf der Karte angezeigt";
-  elements.detailCoordinates.textContent = "";
-  elements.mapFallback.classList.add("hidden");
-  elements.detailMap.classList.remove("hidden");
-
   const latLng = [position.latitude, position.longitude];
+  el.mapStatus.textContent = `Standort wird angezeigt · ${formatSwissCoordinates(parsedCoordinates)}`;
+  el.mapFallback?.classList.add("hidden");
+  el.detailMap?.classList.remove("hidden");
   mapState.marker.setIcon(createLocationMarkerIcon());
   mapState.marker.setLatLng(latLng).bindPopup(`<strong>${escapeHtml(item.municipality)}</strong><br>${escapeHtml(item.address)}`);
-  map.setView(latLng, 17, {
-    animate: false
-  });
+  map.setView(latLng, 17, { animate: false });
   clearMapOverlays();
-  elements.mapLegend.classList.add("hidden");
-  elements.mapLegend.innerHTML = "";
-  elements.mapSymbolHint.classList.add("hidden");
-  elements.mapSymbolHint.textContent = "";
-  elements.mapStatusLabel.textContent = "AGIS-Treffer werden geladen";
+  el.mapLegend?.classList.add("hidden");
+  if (el.mapLegend) el.mapLegend.innerHTML = "";
+  el.mapSymbolHint?.classList.add("hidden");
+  if (el.mapSymbolHint) el.mapSymbolHint.textContent = "";
+  el.mapStatus.textContent = "AGIS-Treffer werden geladen";
 
   try {
     const officialFeatures = await requestOfficialMapFeatures(parsedCoordinates);
-
-    if (requestToken !== mapState.requestToken) {
-      return;
-    }
+    if (requestToken !== mapState.requestToken) return;
 
     const features = buildMapOverlays(officialFeatures, latLng);
-    elements.mapStatusLabel.textContent = describeMapFeatures(features);
+    el.mapStatus.textContent = describeMapFeatures(features);
     renderMapLegend(features);
     updateMapNote(officialFeatures, features);
-  } catch (error) {
-    if (requestToken !== mapState.requestToken) {
-      return;
-    }
-
+  } catch {
+    if (requestToken !== mapState.requestToken) return;
     clearMapOverlays();
-    elements.mapLegend.classList.add("hidden");
-    elements.mapLegend.innerHTML = "";
-    elements.mapStatusLabel.textContent = "AGIS-Daten momentan nicht verfügbar";
-    elements.mapSymbolHint.textContent = "";
-    elements.mapSymbolHint.classList.add("hidden");
-  }
-
-  requestAnimationFrame(() => {
-    map.invalidateSize();
-  });
-}
-
-async function requestJson(url, options = {}) {
-  const { skipSessionReset = false, headers, timeoutMs = defaultRequestTimeoutMs, ...fetchOptions } = options;
-  const timeoutController = timeoutMs > 0 && !fetchOptions.signal ? new AbortController() : null;
-  const timeoutId = timeoutController
-    ? setTimeout(() => timeoutController.abort(), timeoutMs)
-    : null;
-  let response;
-
-  try {
-    response = await fetch(url, {
-      headers: {
-        "Content-Type": "application/json",
-        ...headers
-      },
-      signal: timeoutController?.signal ?? fetchOptions.signal,
-      ...fetchOptions
-    });
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      throw new Error("Die Anfrage dauert zu lange. Bitte Verbindung prüfen und erneut versuchen.");
+    el.mapLegend?.classList.add("hidden");
+    if (el.mapLegend) el.mapLegend.innerHTML = "";
+    el.mapStatus.textContent = "AGIS-Daten momentan nicht verfügbar";
+    if (el.mapSymbolHint) {
+      el.mapSymbolHint.textContent = "";
+      el.mapSymbolHint.classList.add("hidden");
     }
-
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
   }
 
-  if (!response.ok) {
-    let message = "Request failed";
-    let payload = null;
-
-    try {
-      payload = await response.json();
-      message = payload.error ?? message;
-    } catch {
-      message = await response.text();
-    }
-
-    if (response.status === 401 && !skipSessionReset) {
-      setAuthenticatedUser(null);
-      setLoginError("Ihre Sitzung ist abgelaufen. Bitte erneut anmelden.");
-      focusWithoutScroll(elements.loginUsername);
-    }
-
-    const requestError = new Error(message);
-    requestError.status = response.status;
-    requestError.payload = payload;
-    throw requestError;
-  }
-
-  return response.json();
+  requestAnimationFrame(() => map.invalidateSize());
 }
 
-function updateFilterOptions(dashboard) {
-  const municipalityOptions = dashboard.municipalities
-    .map((municipality) => `<option value="${escapeHtml(municipality)}">${escapeHtml(municipality)}</option>`)
-    .join("");
-  const protectionOptions = dashboard.protectionStatuses
-    .map(
-      (status) =>
-        `<option value="${escapeHtml(status)}">${escapeHtml(protectionStatusLabels[status] ?? status)}</option>`
-    )
-    .join("");
-  const workflowOptions = dashboard.workflowStatuses
-    .map(
-      (status) =>
-        `<option value="${escapeHtml(status)}">${escapeHtml(workflowStatusLabels[status] ?? status)}</option>`
-    )
-    .join("");
-
-  elements.municipalitySelect.innerHTML = `<option value="">Alle Gemeinden</option>${municipalityOptions}`;
-  elements.protectionStatusSelect.innerHTML = `<option value="">Alle AGIS-Treffer</option>${protectionOptions}`;
-  elements.workflowStatusSelect.innerHTML = `<option value="">Alle Team-Status</option>${workflowOptions}`;
-  elements.detailWorkflowStatus.innerHTML = workflowOptions;
-
-  elements.municipalitySelect.value = state.filters.municipality;
-  elements.protectionStatusSelect.value = state.filters.protectionStatus;
-  elements.workflowStatusSelect.value = state.filters.workflowStatus;
+function agisHref(item) {
+  return buildAgisDataLink(item) || ONLINEKARTEN_URL;
 }
 
-function updateQuickFilterButtons() {
-  const activeFilters = getActiveQuickFilters();
-
-  for (const button of elements.quickFilterButtons) {
-    const isActive = activeFilters.includes(button.dataset.quickFilter);
-    button.classList.toggle("active", isActive);
-    button.setAttribute("aria-pressed", String(isActive));
-  }
-
-  elements.activeFilterText.textContent = buildActiveQuickFilterText();
-}
-
-function updateFontSizeUi() {
-  document.documentElement.classList.toggle("large-text", state.largeTextEnabled);
-  document.body.classList.toggle("large-text", state.largeTextEnabled);
-  elements.fontSizeToggleButton.textContent = state.largeTextEnabled ? "Normale Schrift" : "Grössere Schrift";
-  elements.fontSizeToggleButton.setAttribute("aria-pressed", String(state.largeTextEnabled));
-}
-
-function updateThemeUi() {
-  document.body.classList.toggle("dark", state.darkModeEnabled);
-  if (elements.themeToggleButton) {
-    elements.themeToggleButton.textContent = state.darkModeEnabled ? "Hellmodus" : "Dunkelmodus";
-    elements.themeToggleButton.setAttribute("aria-pressed", String(state.darkModeEnabled));
-  }
-  document
-    .querySelector('meta[name="color-scheme"]')
-    ?.setAttribute("content", state.darkModeEnabled ? "dark" : "light");
-}
-
-function findNextOpenItem() {
-  const openItems = state.items.filter((item) => isOpenWorkflow(item.workflowStatus));
-
-  if (openItems.length === 0) {
-    return null;
-  }
-
-  const currentIndex = openItems.findIndex((item) => item.id === state.selectedId);
-
-  if (currentIndex === -1) {
-    return openItems[0];
-  }
-
-  return openItems[(currentIndex + 1) % openItems.length];
-}
-
-function updateNavigationUi() {
-  const openItems = state.items.filter((item) => isOpenWorkflow(item.workflowStatus));
-  const nextOpenItem = findNextOpenItem();
-  const currentItemIsOpen = openItems.some((item) => item.id === state.selectedId);
-  const canGoNext = Boolean(nextOpenItem) && (openItems.length > 1 || !currentItemIsOpen);
-  elements.nextOpenButton.disabled = !canGoNext;
-  elements.nextOpenButton.textContent = canGoNext ? "Nächstes offenes Gesuch" : "Kein weiteres offenes Gesuch";
-}
-
-function scrollDetailIntoView() {
-  if (window.innerWidth <= 1280) {
-    document.querySelector("#detail")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-}
-
-function selectApplication(id, options = {}) {
-  state.selectedId = id;
-  renderApplications();
-
-  if (options.scrollToDetail) {
-    scrollDetailIntoView();
-  }
-}
-
-function renderDashboard() {
-  const dashboard = state.dashboard;
-
-  if (!dashboard) {
-    return;
-  }
-
-  elements.statTotal.textContent = dashboard.stats.totalApplications;
-  elements.statRelevant.textContent = dashboard.stats.relevantApplications;
-  elements.statManual.textContent = dashboard.stats.manualReview;
-  elements.statDueSoon.textContent = dashboard.stats.dueSoon;
-  state.municipalitySourceSummary = dashboard.municipalitySourcesSummary ?? state.municipalitySourceSummary;
-  elements.workspaceLastSyncChip.textContent = `Letzter Sync: ${dashboard.lastSyncAt ? formatDateTime(dashboard.lastSyncAt) : "Noch keiner"}`;
-  elements.workspaceSyncModeChip.textContent = `Import: ${dashboard.syncStatus?.configured ? dashboard.syncStatus.sourceLabel : "Demo / manuell"}`;
-  elements.workspaceCoverageChip.textContent = `Gemeindequellen: ${dashboard.municipalitySourcesSummary?.enabledCount ?? 0} aktiv`;
-  renderNotifications(dashboard.notifications ?? []);
-}
-
-function getTotalApplicationCount() {
-  return state.dashboard?.stats?.totalApplications ?? state.loadedItems.length;
-}
-
-function buildResultCountLabel() {
-  const totalCount = getTotalApplicationCount();
-
-  if (shouldUseDefaultWorklistScope()) {
-    return `${state.items.length} Arbeitsfälle · ${totalCount} gesamt`;
-  }
-
-  if (state.items.length !== totalCount) {
-    return `${state.items.length} Treffer · ${totalCount} gesamt`;
-  }
-
-  return `${state.items.length} gesamt`;
-}
-
-function buildListLocationMeta(item) {
-  const details = [];
-
-  if (item.publicationDate) {
-    details.push(`Publiziert ${formatDate(item.publicationDate)}`);
-  }
-
-  return details.join(" · ");
-}
-
-function buildListSourceBadge(item) {
-  const label = humanizeSourceLabel(item.source);
-  return label === "Gemeindequelle" ? "" : label;
-}
-
-function buildListAddressMeta(item) {
-  return buildReadableProjectType(item, { forList: true });
-}
-
-function buildListAgisMeta(item) {
-  if (item.ambiguousAddress && !shouldUseDefaultWorklistScope()) {
-    return "Adresse oder Parzelle prüfen";
-  }
-
-  if (Array.isArray(item.agisLayers) && item.agisLayers.length) {
-    return item.agisLayers.map(humanizeAgisLayer).slice(0, 2).join(" · ");
-  }
-
-  return "";
-}
-
-function buildListDeadlineMeta(item) {
-    const deadlineHint = buildDeadlineHint(item);
-    let secondary = "";
-    let tone = deadlineHint.tone;
-
-    if (deadlineHint.tone === "danger") {
-      const overdueMatch = deadlineHint.text.match(/(\d+)\s+Tagen?/i);
-      secondary = overdueMatch ? `${overdueMatch[1]} Tage überfällig` : deadlineHint.text.replace(/^Frist\s+/i, "");
-      tone = "overdue";
-    } else if (deadlineHint.tone === "alert") {
-      secondary = deadlineHint.text.replace(/^Frist\s+/i, "");
-    }
-
-    return {
-      primary: item.deadlineDate ? formatDate(item.deadlineDate) : "Keine Frist",
-      secondary,
-      tone
-    };
-  }
-
-function buildListTeamMeta(item) {
-  const assignee = item.assignee?.trim();
-
-  if (assignee) {
-    return `Zuständig: ${assignee}`;
-  }
-
-  return "";
-}
-
-function buildDetailSourceMeta(item) {
-  const details = [humanizeSourceLabel(item.source)];
-
-  if (item.publicationDate) {
-    details.push(`publiziert ${formatDate(item.publicationDate)}`);
-  }
-
-  if (item.sourceUrl) {
-    details.push("Quelle verlinkt");
-  }
-
-  return details.join(" · ");
-}
-
-function buildEmptyStateMessage() {
-  if (state.loadedItems.length === 0) {
-    if (isMasterUser()) {
-      return "Noch keine Baugesuche geladen. Bitte zuerst synchronisieren oder einen Import starten.";
-    }
-
-    return "Zurzeit sind noch keine Baugesuche geladen.";
-  }
-
-  return "Keine Baugesuche für die aktuellen Filter gefunden.";
-}
-
-function renderApplications() {
-  updateQuickFilterButtons();
-  elements.resultCount.textContent = buildResultCountLabel();
-
-  if (state.items.length === 0) {
-    elements.applicationsTableBody.innerHTML = `
-      <tr>
-        <td colspan="5">
-          <div class="empty-row empty-list-state">${escapeHtml(buildEmptyStateMessage())}</div>
-        </td>
-      </tr>
-    `;
-    renderDetail(null);
-    updateNavigationUi();
-    return;
-  }
-
-  if (!state.selectedId || !state.items.find((item) => item.id === state.selectedId)) {
-    state.selectedId = state.items[0].id;
-  }
-
-  elements.applicationsTableBody.innerHTML = state.items
-    .map((item) => {
-      const agisLabel = buildProtectionBadgeLabel(item);
-      const deadlineMeta = buildListDeadlineMeta(item);
-      const locationMeta = buildListLocationMeta(item);
-      const addressLabel = buildReadableAddress(item, { forList: true });
-      const addressMeta = buildListAddressMeta(item);
-      const teamMeta = buildListTeamMeta(item);
-
-      return `
-        <tr
-          class="${[
-            item.id === state.selectedId ? "selected-row" : "",
-            ["protected-point", "protected-zone", "combined-hit"].includes(item.protectionStatus) ? "protected-row" : ""
-          ]
-            .filter(Boolean)
-            .join(" ")}"
-          data-id="${escapeHtml(item.id)}"
-          tabindex="0"
-          aria-label="${escapeHtml(`${item.municipality}, ${addressLabel}`)}"
-        >
-          <td data-label="Gemeinde">
-            <div class="list-cell-stack">
-              <span class="cell-location">${escapeHtml(item.municipality)}</span>
-              ${locationMeta ? `<span class="cell-secondary cell-subtle">${escapeHtml(locationMeta)}</span>` : ""}
-            </div>
-          </td>
-          <td data-label="Baugesuch">
-            <div class="list-cell-stack">
-              <span class="cell-address" title="${escapeHtml(buildReadableAddress(item))}">${escapeHtml(addressLabel)}</span>
-              ${addressMeta ? `<span class="cell-secondary">${escapeHtml(addressMeta)}</span>` : ""}
-            </div>
-          </td>
-          <td data-label="Treffer">
-            <div class="list-cell-stack">
-              <span class="badge ${buildProtectionBadgeClass(item)}">
-                ${escapeHtml(agisLabel)}
-              </span>
-            </div>
-          </td>
-          <td data-label="Frist">
-            <div class="list-cell-stack">
-              <span class="cell-date cell-date-strong">${escapeHtml(deadlineMeta.primary)}</span>
-              ${deadlineMeta.secondary ? `<span class="deadline-meta ${deadlineMeta.tone}">${escapeHtml(deadlineMeta.secondary)}</span>` : ""}
-            </div>
-          </td>
-          <td data-label="Bearbeitung">
-            <div class="list-cell-stack list-cell-team">
-              <span class="badge ${workflowClass(item.workflowStatus)}">
-                ${escapeHtml(workflowStatusLabels[item.workflowStatus] ?? item.workflowStatus)}
-              </span>
-              ${teamMeta ? `<span class="cell-secondary cell-subtle">${escapeHtml(teamMeta)}</span>` : ""}
-            </div>
-          </td>
-        </tr>
-      `
+function renderTimeline(item) {
+  const rankMap = { new: 2, "under-review": 2, escalated: 2, cleared: 4, archived: 4 };
+  const rank = rankMap[item.workflowStatus] ?? 1;
+  const due = dueMeta(item);
+  const steps = [
+    { title: "Eingegangen", meta: `Publiziert ${formatDate(item.publicationDate)}` },
+    { title: "AGIS-Prüfung", meta: item.agisMatch || protectionMeta(item).label },
+    { title: "Fachprüfung", meta: item.workflowStatus === "new" ? "Zuständigkeit offen" : (item.assignee || "im Team") },
+    { title: "Entscheiden", meta: due.txt }
+  ];
+  el.timeline.innerHTML = steps
+    .map((step, index) => {
+      let cls = "pending";
+      if (index + 1 < rank) cls = "done";
+      else if (index + 1 === rank) cls = "current";
+      return `<div class="tl-step ${cls}"><div class="tl-rail"><span class="tl-node"></span><span class="tl-line"></span></div>
+        <div class="tl-body"><div class="tl-t">${escapeHtml(step.title)}</div><div class="tl-m">${escapeHtml(step.meta)}</div></div></div>`;
     })
     .join("");
-
-  const selectedItem = state.items.find((item) => item.id === state.selectedId) ?? null;
-  renderDetail(selectedItem);
-  updateNavigationUi();
 }
 
-function renderDetail(item) {
-  if (!item) {
-    elements.emptyDetailState.classList.remove("hidden");
-    elements.detailContent.classList.add("hidden");
-    elements.commentsSection?.classList.add("hidden");
-    elements.detailStatusBadge.textContent = "Keine Auswahl";
-    elements.detailStatusBadge.className = "tag";
-    elements.detailHelperText.textContent = "Hier stehen die wichtigsten Angaben und Ihre Bearbeitung.";
-    elements.detailSourceLabel.textContent = "-";
-    elements.detailSourceMeta.textContent = "-";
-    elements.detailAssessmentLabel.textContent = "-";
-    elements.detailRecommendationCompact.textContent = "-";
-    elements.detailDeadlineCompact.textContent = "-";
-    elements.detailDataLink.classList.add("hidden");
-    elements.detailSourceLink.classList.add("hidden");
-    renderComments([]);
-    updateMap(null);
+function renderComments() {
+  el.commentCount.textContent = String(state.comments.length);
+  if (!state.comments.length) {
+    el.commentsList.innerHTML = `<p class="src-meta">Noch keine Team-Kommentare.</p>`;
     return;
   }
-
-  elements.emptyDetailState.classList.add("hidden");
-  elements.detailContent.classList.remove("hidden");
-  elements.commentsSection?.classList.remove("hidden");
-  elements.detailStatusBadge.textContent = buildProtectionBadgeLabel(item);
-  elements.detailStatusBadge.className = `tag ${buildProtectionBadgeClass(item)}`;
-  elements.detailHelperText.textContent = "Hier stehen die wichtigsten Angaben und Ihre Bearbeitung.";
-  elements.detailMunicipality.textContent = item.municipality;
-  elements.detailAddress.textContent = buildReadableAddress(item);
-  elements.detailParcelFact.textContent = item.parcel ? item.parcel : "–";
-  elements.detailPublishedFact.textContent = item.publicationDate ? formatDate(item.publicationDate) : "–";
-  elements.detailProjectType.textContent = buildReadableProjectType(item) || "Nicht näher beschrieben";
-  elements.detailPublicationDate.textContent = formatDate(item.publicationDate);
-  elements.detailLastSyncAt.textContent = item.lastSyncAt ? formatDateTime(item.lastSyncAt) : "-";
-  elements.detailDeadlineDate.textContent = formatDate(item.deadlineDate);
-  elements.detailAgisMatch.textContent = buildProtectionBadgeLabel(item);
-  elements.detailAgisFact.textContent = buildProtectionBadgeLabel(item);
-  elements.detailDescription.textContent = item.description;
-  elements.detailAutomatedAssessment.textContent = item.automatedAssessment;
-  elements.detailWorkflowStatus.value = item.workflowStatus;
-  elements.detailAssignee.value = item.assignee?.trim() || state.currentUser?.displayName || "";
-  elements.detailNote.value = item.note ?? "";
-  elements.detailAssignee.placeholder = state.currentUser?.displayName ?? "Name oder Team";
-  elements.commentInput.placeholder = `Zum Beispiel: ${state.currentUser?.displayName ?? "Ich"} habe die Karte geprüft, bitte noch die Unterlagen vergleichen.`;
-  const recommendation = buildRecommendation(item);
-  const deadlineHint = buildDeadlineHint(item);
-
-  elements.detailRecommendationTitle.textContent = recommendation.title;
-  elements.detailRecommendationText.textContent = recommendation.text;
-  elements.detailRecommendationCompact.textContent = recommendation.title;
-  elements.detailDeadlineCompact.textContent = deadlineHint.text;
-  elements.detailDeadlineHint.textContent = deadlineHint.text;
-  elements.detailDeadlineHint.className = `badge ${deadlineHint.tone}`;
-  elements.detailSourceLabel.textContent = humanizeSourceLabel(item.source);
-  elements.detailSourceMeta.textContent = buildDetailSourceMeta(item);
-  elements.detailAssessmentLabel.textContent = buildProtectionBadgeLabel(item);
-  const dataLink = buildAgisDataLink(item);
-  const sourceLink = buildSourceLink(item);
-  elements.detailDataLink.href = dataLink ?? "#";
-  elements.detailDataLink.textContent = buildDataLinkLabel(item);
-  elements.detailDataLink.classList.toggle("hidden", !dataLink);
-  elements.detailSourceLink.href = sourceLink || "#";
-  elements.detailSourceLink.textContent = buildSourceLinkLabel(item);
-  elements.detailSourceLink.classList.toggle("hidden", !sourceLink);
-
-  const badges = [...item.agisLayers];
-
-  if (item.ambiguousAddress) {
-    badges.push(hasExactAddressWithoutCoordinates(item) ? "Adresse nicht automatisch gefunden" : "Adresse unklar");
-  }
-
-  elements.detailAgisLayers.textContent = badges.map((layer) => humanizeAgisLayer(layer)).join(" · ");
-  elements.detailAgisLayers.classList.add("hidden");
-
-  updateMap(item);
-  loadComments(item.id).catch((error) => showToast(error.message));
-}
-
-function renderComments(comments) {
-  state.comments = comments;
-
-  if (!comments.length) {
-    elements.commentsList.innerHTML = "";
-    elements.commentsEmptyState.classList.remove("hidden");
-    elements.commentsSection?.removeAttribute("open");
-    return;
-  }
-
-  elements.commentsEmptyState.classList.add("hidden");
-  elements.commentsSection?.setAttribute("open", "");
-  elements.commentsList.innerHTML = comments
+  el.commentsList.innerHTML = state.comments
     .map((comment) => {
-      const isOwnComment = comment.userId === state.currentUser?.id;
-
-      return `
-        <article class="comment-card ${isOwnComment ? "own-comment" : ""}">
-          <div class="comment-meta">
-            <div>
-              <strong>${escapeHtml(comment.userDisplayName)}</strong>
-              <span class="comment-role">${escapeHtml(comment.userRole ?? "")}</span>
-            </div>
-            <time datetime="${escapeHtml(comment.createdAt)}">${escapeHtml(formatDateTime(comment.createdAt))}</time>
-          </div>
-          <p class="comment-message">${escapeHtml(comment.message)}</p>
-        </article>
-      `;
+      const own = comment.userId === state.currentUser?.id ? " own" : "";
+      return `<div class="comment${own}">
+        <div class="comment-meta"><span><strong>${escapeHtml(comment.userDisplayName || "Team")}</strong><span class="role">${escapeHtml(comment.userRole || "")}</span></span><time>${escapeHtml(formatDateTime(comment.createdAt))}</time></div>
+        <p>${escapeHtml(comment.message)}</p>
+      </div>`;
     })
     .join("");
 }
 
-function renderRegistrationKeys(keys) {
-  state.registrationKeys = keys;
-
-  if (!isMasterUser()) {
-    elements.registrationKeysList.innerHTML = "";
-    elements.registrationKeysEmptyState.classList.add("hidden");
+function renderDetail() {
+  const item = state.items.find((entry) => entry.id === state.selectedId) ?? null;
+  if (!item) {
+    el.detailEmpty.classList.remove("hidden");
+    el.detailBody.classList.add("hidden");
+    el.detailStatusBadge.textContent = "Keine Auswahl";
+    el.detailHelper.textContent = "Entscheidung, Karte und interne Bearbeitung.";
     return;
   }
 
-  if (!keys.length) {
-    elements.registrationKeysList.innerHTML = "";
-    elements.registrationKeysEmptyState.classList.remove("hidden");
-    return;
-  }
-
-  elements.registrationKeysEmptyState.classList.add("hidden");
-  elements.registrationKeysList.innerHTML = keys
-      .map((key) => {
-        const isAvailable = key.isAvailable && !key.usedAt;
-        const statusLabel = isAvailable ? "Offen" : "Verwendet";
-        const statusClass = isAvailable ? "ok" : "neutral";
-        const noteMarkup = key.note ? `<p class="registration-key-note">${escapeHtml(key.note)}</p>` : "";
-        const actionMarkup = isAvailable
-          ? `<button class="ghost compact-button registration-key-delete-button" type="button" data-registration-key-id="${escapeHtml(key.id)}">Löschen</button>`
-          : "";
-        const usageMarkup = key.usedAt
-          ? `<p class="registration-key-meta">Bereits verwendet</p>`
-          : `<p class="registration-key-meta">Gültig bis ${escapeHtml(formatDateTime(key.expiresAt))}</p>`;
-
-      return `
-        <article class="registration-key-card ${isAvailable ? "available" : "used"}">
-          <div class="registration-key-header">
-            <div>
-              <p class="panel-title">Registrierungsschlüssel</p>
-              <code class="registration-key-code">${escapeHtml(key.keyCode)}</code>
-            </div>
-            <span class="badge ${statusClass}">${escapeHtml(statusLabel)}</span>
-          </div>
-            ${noteMarkup}
-            ${usageMarkup}
-            ${actionMarkup}
-          </article>
-        `;
-      })
-      .join("");
-}
-
-function renderAdminUsers(users) {
-  state.adminUsers = users;
-
-  if (!isMasterUser()) {
-    elements.adminUserSelect.innerHTML = `<option value="">Person auswählen</option>`;
-    return;
-  }
-
-  const options = users
-    .map(
-      (user) =>
-        `<option value="${escapeHtml(user.id)}">${escapeHtml(`${user.displayName} (${user.username})`)}</option>`
-    )
-    .join("");
-
-  elements.adminUserSelect.innerHTML = `<option value="">Person auswählen</option>${options}`;
-}
-
-function shortenUrlForDisplay(value) {
-  const text = String(value ?? "").trim();
-
-  if (text.length <= 42) {
-    return text;
-  }
-
-  return `${text.slice(0, 39)}…`;
-}
-
-function getRatingBadgeClass(rating) {
-  switch (rating) {
-    case "A":
-      return "ok";
-    case "B":
-      return "neutral";
-    case "C":
-      return "alert";
-    case "D":
-      return "danger";
-    default:
-      return "neutral";
-  }
-}
-
-function buildSharedPrimaryText(source) {
-  if (!source?.primaryShared) {
-    return "Primärquelle ist dieser Gemeinde eindeutig zugeordnet.";
-  }
-
-  if (source.primarySharedCount > 1) {
-    return `Primärquelle wird von ${source.primarySharedCount} Gemeinden gemeinsam genutzt.`;
-  }
-
-  return "Primärquelle wird gemeinsam genutzt.";
-}
-
-function buildSupplementalSourcesText(source) {
-  if (!source?.supplementalSources?.length) {
-    return "Keine zusätzlichen Quellen hinterlegt.";
-  }
-
-  return source.supplementalSources
-    .map((entry) => `${entry.name} (${entry.sourceKind})`)
-    .join(" · ");
-}
-
-function getFilteredMunicipalitySources() {
-  const search = state.municipalitySourceSearch.trim().toLowerCase();
-
-  if (!search) {
-    return state.municipalitySourceCatalog;
-  }
-
-  return state.municipalitySourceCatalog.filter((source) =>
-    [
-      source.municipality,
-      source.officialWebsite,
-      source.primarySourceName,
-      source.primarySourceCanonicalUrl,
-      source.primaryDirectUrl,
-      source.rating,
-      source.rationale,
-      source.sharedSourceNote,
-      buildSupplementalSourcesText(source),
-      source.notes
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(search)
-  );
-}
-
-function populateMunicipalitySourceInsights(source) {
-  if (!source) {
-    elements.municipalityOfficialWebsiteLabel.textContent = "-";
-    elements.municipalityPrimarySourceLabel.textContent = "-";
-    elements.municipalityRatingBadge.textContent = "-";
-    elements.municipalityRatingBadge.className = "badge neutral";
-    elements.municipalityRatingRationale.textContent = "-";
-    elements.municipalitySharedSourceLabel.textContent = "-";
-    elements.municipalitySupplementalSourcesLabel.textContent = "-";
-    elements.municipalityOfficialWebsiteLink.href = "#";
-    elements.municipalityPrimarySourceLink.href = "#";
-    elements.municipalityOfficialWebsiteLink.classList.add("hidden");
-    elements.municipalityPrimarySourceLink.classList.add("hidden");
-    return;
-  }
-
-  elements.municipalityOfficialWebsiteLabel.textContent = source.officialWebsite || "Keine offizielle Website hinterlegt";
-  elements.municipalityOfficialWebsiteLink.href = source.officialWebsite || "#";
-  elements.municipalityOfficialWebsiteLink.classList.toggle("hidden", !source.officialWebsite);
-
-  const primarySourceLabel = source.primarySourceCanonicalUrl
-    ? `${source.primarySourceName} · ${shortenUrlForDisplay(source.primarySourceCanonicalUrl)}`
-    : source.primarySourceName || "Keine Primärquelle hinterlegt";
-  elements.municipalityPrimarySourceLabel.textContent = primarySourceLabel;
-  elements.municipalityPrimarySourceLink.href = source.primaryDirectUrl || source.primarySourceCanonicalUrl || "#";
-  elements.municipalityPrimarySourceLink.classList.toggle(
-    "hidden",
-    !(source.primaryDirectUrl || source.primarySourceCanonicalUrl)
-  );
-
-  elements.municipalityRatingBadge.textContent = source.rating ? `Rating ${source.rating}` : "Ohne Rating";
-  elements.municipalityRatingBadge.className = `badge ${getRatingBadgeClass(source.rating)}`;
-  elements.municipalityRatingRationale.textContent = source.rationale || "Noch keine Begründung hinterlegt.";
-  elements.municipalitySharedSourceLabel.textContent = source.sharedSourceNote || buildSharedPrimaryText(source);
-  elements.municipalitySupplementalSourcesLabel.textContent = buildSupplementalSourcesText(source);
-}
-
-function renderMunicipalityCoverageReport(report = null) {
-  const safeReport = report ?? {
-    totalMunicipalities: 0,
-    totalUniqueSources: 0,
-    municipalitiesWithSharedPrimary: 0,
-    ratings: { A: 0, B: 0, C: 0, D: 0 }
-  };
-
-  elements.municipalitySourcesTotalChip.textContent = `${safeReport.totalMunicipalities ?? 0} Gemeinden`;
-  elements.municipalitySourcesConfiguredChip.textContent = `${safeReport.totalUniqueSources ?? 0} eindeutige Quellen`;
-  elements.municipalityRatingAChip.textContent = `A: ${safeReport.ratings?.A ?? 0}`;
-  elements.municipalityRatingBChip.textContent = `B: ${safeReport.ratings?.B ?? 0}`;
-  elements.municipalityRatingCChip.textContent = `C: ${safeReport.ratings?.C ?? 0}`;
-  elements.municipalityRatingDChip.textContent = `D: ${safeReport.ratings?.D ?? 0}`;
-  elements.municipalitySharedSourcesChip.textContent = `${safeReport.municipalitiesWithSharedPrimary ?? 0} geteilte Primärquellen`;
-  elements.municipalityCoverageReportText.textContent =
-    `${safeReport.totalMunicipalities ?? 0} Gemeinden, ${safeReport.totalUniqueSources ?? 0} eindeutige Quellen, ` +
-    `${safeReport.uncertainMunicipalities ?? 0} unsichere Bewertungen.`;
-}
-
-function renderSharedSources(sharedSources = []) {
-  if (!sharedSources.length) {
-    elements.sharedSourcesList.innerHTML = "";
-    elements.sharedSourcesEmptyState.classList.remove("hidden");
-    return;
-  }
-
-  elements.sharedSourcesEmptyState.classList.add("hidden");
-  elements.sharedSourcesList.innerHTML = sharedSources
-    .map(
-      (source) => `
-        <li class="shared-source-item">
-          <div>
-            <strong>${escapeHtml(source.name)}</strong>
-            <span class="municipality-source-row-meta">${escapeHtml(source.sourceKind)} · ${source.municipalityCount} Gemeinden</span>
-          </div>
-          <a href="${escapeHtml(source.canonicalUrl || "#")}" target="_blank" rel="noreferrer">
-            ${escapeHtml(shortenUrlForDisplay(source.canonicalUrl || ""))}
-          </a>
-        </li>
-      `
-    )
-    .join("");
-}
-
-function populateMunicipalitySourceForm(source) {
-  if (!source) {
-    clearMunicipalitySourceForm();
-    return;
-  }
-
-  elements.municipalitySourceCurrentLabel.textContent = `${source.municipality} wird jetzt bearbeitet.`;
-  populateMunicipalitySourceInsights(source);
-  elements.municipalitySourceTypeSelect.value = source.sourceType;
-  elements.municipalitySourceDigitalStatusSelect.value = source.digitalStatus;
-  elements.municipalitySourceEnabledCheckbox.checked = Boolean(source.enabled);
-  elements.municipalitySourceUrlInput.value = source.sourceUrl ?? "";
-  elements.municipalitySourceTokenInput.value = source.sourceToken ?? "";
-  elements.municipalitySourceIncludePatternInput.value = source.includePattern ?? "";
-  elements.municipalitySourceExcludePatternInput.value = source.excludePattern ?? "";
-  elements.municipalitySourceNotesInput.value = source.notes ?? "";
-  elements.saveMunicipalitySourceButton.disabled = false;
-}
-
-function renderMunicipalitySources(payload = null) {
-  if (payload) {
-    state.municipalitySources = payload.items ?? [];
-    state.municipalitySourceSummary = payload.summary ?? null;
-    state.municipalitySourceCatalog = payload.catalogItems ?? state.municipalitySourceCatalog;
-    state.municipalitySourceReport = payload.report ?? state.municipalitySourceReport;
-    state.sharedPublicationSources = payload.sharedSources ?? state.sharedPublicationSources;
-  }
-
-  if (!isMasterUser()) {
-    elements.municipalitySourcesList.innerHTML = "";
-    elements.municipalitySourcesEmptyState.classList.add("hidden");
-    renderSharedSources([]);
-    renderMunicipalityCoverageReport(null);
-    clearMunicipalitySourceForm();
-    return;
-  }
-
-  const summary = state.municipalitySourceSummary ?? {
-    totalCount: 0,
-    configuredCount: 0,
-    enabledCount: 0
-  };
-  const filteredSources = getFilteredMunicipalitySources();
-
-  renderMunicipalityCoverageReport(state.municipalitySourceReport);
-  renderSharedSources(state.sharedPublicationSources);
-  elements.municipalitySourcesEnabledChip.textContent = `${summary.enabledCount ?? 0} automatisch aktiv`;
-
-  if (!filteredSources.length) {
-    elements.municipalitySourcesList.innerHTML = "";
-    elements.municipalitySourcesEmptyState.classList.remove("hidden");
-    state.selectedMunicipalitySourceId = null;
-    clearMunicipalitySourceForm();
-    return;
-  }
-
-  elements.municipalitySourcesEmptyState.classList.add("hidden");
-
-  if (
-    !state.selectedMunicipalitySourceId ||
-    !filteredSources.some((source) => source.operationalId === state.selectedMunicipalitySourceId)
-  ) {
-    state.selectedMunicipalitySourceId = filteredSources[0].operationalId;
-  }
-
-  elements.municipalitySourcesList.innerHTML = filteredSources
-    .map((source) => {
-      const configured = Boolean(source.primaryDirectUrl || source.primarySourceCanonicalUrl || source.officialWebsite);
-      const selected = source.operationalId === state.selectedMunicipalitySourceId;
-      const sourceBadgeClass = source.enabled ? "ok" : configured ? "alert" : "neutral";
-      const sourceBadgeLabel = source.enabled ? "Automatisch" : configured ? "Bereit" : "Offen";
-      const sourceHint = configured
-        ? shortenUrlForDisplay(source.primaryDirectUrl || source.primarySourceCanonicalUrl || source.officialWebsite)
-        : "Noch keine URL hinterlegt";
-      const sharedText = source.primaryShared ? ` · geteilt mit ${source.primarySharedCount} Gemeinden` : "";
-
-      return `
-        <button
-          class="municipality-source-row ${selected ? "selected" : ""}"
-          type="button"
-          data-municipality-source-id="${escapeHtml(source.operationalId)}"
-        >
-          <span class="municipality-source-row-main">
-            <strong>${escapeHtml(source.municipality)}</strong>
-            <span class="municipality-source-row-meta">${escapeHtml(source.primarySourceName || "Keine Primärquelle")} · ${escapeHtml(sourceHint)}</span>
-            <span class="municipality-source-row-meta">${escapeHtml(source.rationale || "")}</span>
-          </span>
-          <span class="municipality-source-row-side">
-            <span class="badge ${getRatingBadgeClass(source.rating)}">Rating ${escapeHtml(source.rating || "-")}</span>
-            <span class="badge ${sourceBadgeClass}">${escapeHtml(sourceBadgeLabel)}</span>
-            <span class="municipality-source-row-meta">
-              ${escapeHtml(municipalitySourceTypeLabels[source.sourceType] ?? source.sourceType)}
-              ·
-              ${escapeHtml(municipalityDigitalStatusLabels[source.digitalStatus] ?? source.digitalStatus)}
-              ${escapeHtml(sharedText)}
-            </span>
-          </span>
-        </button>
-      `;
-    })
-    .join("");
-
-  const selectedSource =
-    state.municipalitySourceCatalog.find((source) => source.operationalId === state.selectedMunicipalitySourceId) ?? null;
-  populateMunicipalitySourceForm(selectedSource);
-}
-
-function renderSyncSettings(payload = null) {
-  state.syncSettings = payload;
-
-  if (!isMasterUser()) {
-    elements.syncSourceTypeSelect.value = "";
-    elements.syncSourceMunicipalityInput.value = "";
-    elements.syncSourceUrlInput.value = "";
-    elements.syncSourceTokenInput.value = "";
-    elements.syncSettingsStatus.textContent = "Noch keine automatische Import-Quelle gespeichert.";
-    return;
-  }
-
-  const sourceUrl = payload?.sourceUrl ?? "";
-  const sourceToken = payload?.sourceToken ?? "";
-  const sourceType = payload?.sourceType ?? "";
-  const sourceMunicipality = payload?.sourceMunicipality ?? "";
-  const municipalitySourcesSummary =
-    payload?.municipalitySourcesSummary ??
-    state.municipalitySourceSummary ??
-    state.dashboard?.municipalitySourcesSummary ??
-    null;
-  const syncStatus = payload?.syncStatus ?? state.dashboard?.syncStatus ?? null;
-  elements.syncSourceTypeSelect.value = sourceType;
-  elements.syncSourceMunicipalityInput.value = sourceMunicipality;
-  elements.syncSourceUrlInput.value = sourceUrl;
-  elements.syncSourceTokenInput.value = sourceToken;
-  updateSyncSourceUi();
-  if (municipalitySourcesSummary) {
-    state.municipalitySourceSummary = municipalitySourcesSummary;
-  }
-
-  if (!sourceUrl) {
-    elements.syncSettingsStatus.textContent =
-      `Noch keine globale Import-Quelle gespeichert. Aktivierte Gemeindequellen: ${municipalitySourcesSummary?.enabledCount ?? 0}.`;
-    return;
-  }
-
-  const intervalHours = syncStatus?.intervalHours ?? 168;
-  const nextRunAt = syncStatus?.job?.nextRunAt ? formatDateTime(syncStatus.job.nextRunAt) : "noch nicht geplant";
-  const typeLabel = sourceType
-    ? municipalitySourceTypeLabels[sourceType] ?? sourceType
-    : "automatische Erkennung";
-  const municipalityText = sourceMunicipality ? ` Gemeinde: ${sourceMunicipality}.` : "";
-  const sourceModeText = sourceToken
-    ? `Geschützte Quelle gespeichert (${typeLabel}). Der Zugriffsschlüssel wird beim Import mitverwendet.`
-    : `Öffentliche Quelle gespeichert (${typeLabel}).`;
-  elements.syncSettingsStatus.textContent = `${sourceModeText}${municipalityText} Aktivierte Gemeindequellen: ${municipalitySourcesSummary?.enabledCount ?? 0}. Die Quelle wird etwa alle ${intervalHours} Stunden geprüft. Nächster geplanter Lauf: ${nextRunAt}.`;
-}
-
-function updateSyncSourceUi() {
-  const sourceType = elements.syncSourceTypeSelect.value;
-  const municipalityRequired = globalScrapingSourceTypes.has(sourceType);
-
-  elements.syncSourceMunicipalityInput.required = municipalityRequired;
-  elements.syncSourceMunicipalityInput.placeholder = municipalityRequired
-    ? "Pflicht für Website-, RSS-/Sitemap- und PDF-Scraping"
-    : "Optional, zum Beispiel: Aarau";
-}
-
-function notificationHeadline(notification) {
-  if (notification.changeType === "imported") {
-    return "Neuer automatischer Treffer";
-  }
-
-  return "Automatisch aktualisiert";
-}
-
-function renderNotifications(notifications = []) {
-  if (!isMasterUser() || !state.adminPanelExpanded) {
-    elements.notificationsPanel.classList.add("hidden");
-    elements.notificationsList.innerHTML = "";
-    elements.notificationsEmptyState.classList.add("hidden");
-    return;
-  }
-
-  const items = Array.isArray(notifications)
-    ? notifications
-        .filter(
-          (notification) =>
-            notification.protectionStatus &&
-            notification.protectionStatus !== "manual-review" &&
-            notification.protectionStatus !== "no-hit"
-        )
-        .slice(0, 3)
-    : [];
-  elements.notificationsPanel.classList.toggle("hidden", items.length === 0);
-
-  if (!items.length) {
-    elements.notificationsList.innerHTML = "";
-    elements.notificationsEmptyState.classList.remove("hidden");
-    return;
-  }
-
-  elements.notificationsEmptyState.classList.add("hidden");
-  elements.notificationsList.innerHTML = items
-    .map(
-      (notification) => `
-        <article class="notification-card">
-          <div class="notification-copy">
-            <p class="panel-title">${escapeHtml(notificationHeadline(notification))}</p>
-            <strong>${escapeHtml(`${notification.municipality}, ${notification.address}`)}</strong>
-            <p class="muted notification-meta">
-              ${escapeHtml(protectionStatusLabels[notification.protectionStatus] ?? notification.protectionStatus)}
-              · ${escapeHtml(notification.sourceLabel || "Import")}
-              · ${escapeHtml(formatDateTime(notification.createdAt))}
-            </p>
-          </div>
-          <button
-            class="ghost compact-button"
-            type="button"
-            data-notification-application-id="${escapeHtml(notification.applicationId)}"
-          >
-            Öffnen
-          </button>
-        </article>
-      `
-    )
-    .join("");
+  const protection = protectionMeta(item);
+  const due = dueMeta(item);
+  el.detailEmpty.classList.add("hidden");
+  el.detailBody.classList.remove("hidden");
+  el.detailStatusBadge.innerHTML = `<span class="hit ${protection.cls}">${escapeHtml(protection.label)}</span>`;
+  el.detailHelper.textContent = `${item.id} · ${item.municipality || "-"}`;
+  el.fMun.textContent = item.municipality || "-";
+  el.fAddr.textContent = readableAddress(item);
+  el.fParcel.textContent = item.parcel || "-";
+  el.fPub.textContent = formatDate(item.publicationDate);
+  el.fDue.innerHTML = `${escapeHtml(formatDate(item.deadlineDate))} <span class="cell-due-meta ${due.cls}" style="display:inline">· ${escapeHtml(due.txt)}</span>`;
+  el.fAgis.textContent = item.agisMatch || protection.label;
+  el.fProject.textContent = normalizeText(item.description) || itemTitle(item);
+  el.agisLink.href = agisHref(item);
+  el.agisLink.textContent = buildDataLinkLabel(item);
+  el.recTitle.textContent = recommendationTitle(item);
+  el.recText.textContent = recommendationText(item);
+  el.recBadge.className = `badge ${protection.cls}`;
+  el.recBadge.textContent = protection.label;
+  el.dueBadge.className = `badge ${due.cls === "due-over" ? "danger" : due.cls === "due-soon" ? "warning" : "neutral"}`;
+  el.dueBadge.textContent = `Frist ${formatDate(item.deadlineDate)} · ${due.txt}`;
+  el.srcMeta.textContent = `Quelle: ${item.source || "unbekannt"}${item.sourceReference ? ` · ${item.sourceReference}` : ""}`;
+  el.fWorkflow.value = item.workflowStatus in WORKFLOW ? item.workflowStatus : "new";
+  el.fAssignee.value = item.assignee || "";
+  el.fNote.value = item.note || "";
+  renderTimeline(item);
+  updateMap(item);
 }
 
 async function loadComments(applicationId) {
-  state.commentsRequestToken += 1;
-  const requestToken = state.commentsRequestToken;
-  elements.commentsEmptyState.textContent = "Team-Kommentare werden geladen.";
-  elements.commentsEmptyState.classList.remove("hidden");
-  elements.commentsList.innerHTML = "";
-
-  const payload = await requestJson(`/api/applications/${applicationId}/comments`);
-
-  if (requestToken !== state.commentsRequestToken || state.selectedId !== applicationId) {
-    return;
-  }
-
-  elements.commentsEmptyState.textContent = "Noch keine Team-Kommentare vorhanden.";
-  renderComments(payload.items ?? []);
-}
-
-async function loadRegistrationKeys() {
-  if (!isMasterUser()) {
-    renderRegistrationKeys([]);
-    return;
-  }
-
-  elements.registrationKeysEmptyState.textContent = "Registrierungsschlüssel werden geladen.";
-  elements.registrationKeysEmptyState.classList.remove("hidden");
-  elements.registrationKeysList.innerHTML = "";
-
-  const payload = await requestJson("/api/admin/registration-keys");
-  elements.registrationKeysEmptyState.textContent = "Noch keine Registrierungsschlüssel vorhanden.";
-  renderRegistrationKeys(payload.items ?? []);
-}
-
-async function loadAdminUsers() {
-  if (!isMasterUser()) {
-    renderAdminUsers([]);
-    return;
-  }
-
-  const payload = await requestJson("/api/admin/users");
-  renderAdminUsers(payload.items ?? []);
-}
-
-async function loadSyncSettings() {
-  if (!isMasterUser()) {
-    renderSyncSettings(null);
-    return;
-  }
-
-  const payload = await requestJson("/api/admin/sync-settings");
-  renderSyncSettings(payload);
-}
-
-async function loadMunicipalitySources() {
-  if (!isMasterUser()) {
-    renderMunicipalitySources();
-    return;
-  }
-
-  const payload = await requestJson("/api/admin/municipality-sources");
-  renderMunicipalitySources(payload);
-}
-
-async function maybeRevealMasterSetup() {
+  if (!applicationId) return;
+  el.commentsList.innerHTML = `<p class="src-meta">Team-Kommentare werden geladen.</p>`;
   try {
-    const payload = await requestJson("/api/auth/master-setup-status", {
-      skipSessionReset: true
-    });
-
-    if (payload?.setupRequired) {
-      elements.masterSetupForm.classList.remove("hidden");
-    }
-  } catch {
-    // Status ist optional – bei Fehlern bleibt das Formular ausgeblendet.
+    const payload = await requestJson(`/api/applications/${encodeURIComponent(applicationId)}/comments`);
+    if (state.selectedId !== applicationId) return;
+    state.comments = payload.items ?? [];
+    renderComments();
+  } catch (error) {
+    el.commentsList.innerHTML = `<p class="src-meta">${escapeHtml(error.message)}</p>`;
   }
 }
 
-async function restoreSession() {
-  const payload = await requestJson("/api/auth/session", {
-    skipSessionReset: true
+function selectItem(id) {
+  state.selectedId = id;
+  renderTable();
+  renderDetail();
+  loadComments(id);
+}
+
+function renderDashboard() {
+  const dashboard = state.dashboard ?? {};
+  const summary = dashboard.municipalitySourcesSummary ?? state.sourceSummary ?? {};
+  const sync = dashboard.syncStatus ?? state.syncStatus ?? {};
+  const job = sync.job ?? {};
+  const lastSync = job.lastSuccessAt || job.lastRunAt;
+  const workMeta = $$("#view-work .titleband-meta .band-chip");
+  if (workMeta[0]) workMeta[0].innerHTML = `<span class="dot"></span>Letzter Sync: <b>${escapeHtml(lastSync ? formatDateTime(lastSync) : "noch offen")}</b>`;
+  if (workMeta[1]) workMeta[1].innerHTML = `Import: <b>${escapeHtml(sync.sourceLabel || "Gemeindequellen")}</b>`;
+  if (workMeta[2]) workMeta[2].innerHTML = `Gemeindequellen: <b>${escapeHtml(`${summary.enabledCount ?? 0}/${summary.totalCount ?? 0}`)}</b>`;
+
+  const adminMeta = $$("#view-admin .titleband-meta .band-chip");
+  if (adminMeta[0]) adminMeta[0].innerHTML = `<span class="dot"></span>${sync.enabled === false ? "System pausiert" : "System aktiv"}`;
+  if (adminMeta[1]) adminMeta[1].innerHTML = `Nächster Import: <b>${escapeHtml(job.nextRunAt ? formatDateTime(job.nextRunAt) : "noch nicht geplant")}</b>`;
+}
+
+function renderSourceStats() {
+  const summary = state.sourceSummary ?? state.dashboard?.municipalitySourcesSummary ?? {};
+  const report = state.sourceReport ?? {};
+  const total = report.totalMunicipalities ?? summary.totalCount ?? 0;
+  const enabled = summary.enabledCount ?? 0;
+  const high = report.ratings?.A ?? summary.digitalCount ?? 0;
+  const warn = report.uncertainMunicipalities ?? 0;
+  const missing = Math.max(0, total - (summary.configuredCount ?? 0));
+  const statRow = $("#pane-sources .stat-row");
+  if (!statRow) return;
+  const pct = total ? Math.round((enabled / total) * 100) : 0;
+  statRow.innerHTML = `
+    <div class="stat"><p class="k">Gemeinden total</p><p class="v">${escapeHtml(total)}</p><p class="d mut">Kanton Aargau</p></div>
+    <div class="stat"><p class="k">Quelle aktiv</p><p class="v">${escapeHtml(enabled)}<small> /${escapeHtml(total)}</small></p><div class="progress"><span style="width:${pct}%"></span></div></div>
+    <div class="stat"><p class="k">Datenqualität Ø</p><p class="v">${high ? "Hoch" : "Offen"}</p><p class="d up">${escapeHtml(high)} strukturiert</p></div>
+    <div class="stat"><p class="k">Wartung nötig</p><p class="v">${escapeHtml(warn)}</p><p class="d warn">Quelle prüfen</p></div>
+    <div class="stat"><p class="k">Ohne Quelle</p><p class="v">${escapeHtml(missing)}</p><p class="d mut">manuell erfassen</p></div>`;
+  const railCount = $('[data-pane="sources"] .rc');
+  if (railCount) railCount.textContent = String(total);
+}
+
+function qualityMeta(source) {
+  const rating = source.rating ?? (source.enabled ? "B" : "D");
+  if (rating === "A") return { level: 3, cls: "q-hi", label: "Hoch", note: source.rationale || "Strukturiert, vollständig" };
+  if (rating === "B") return { level: 2, cls: "q-mid", label: "Mittel", note: source.rationale || "Teilfelder fehlen" };
+  if (rating === "C") return { level: 1, cls: "q-low", label: "Gering", note: source.rationale || "Quelle prüfen" };
+  return { level: 0, cls: "q-none", label: "Keine", note: source.rationale || "Keine Quelle hinterlegt" };
+}
+
+function sourceRows() {
+  const byOperationalId = new Map(state.municipalitySources.map((source) => [source.id, source]));
+  const catalog = state.sourceCatalog.length
+    ? state.sourceCatalog
+    : state.municipalitySources.map((source) => ({
+        operationalId: source.id,
+        municipality: source.municipality,
+        sourceType: source.sourceType,
+        enabled: source.enabled,
+        digitalStatus: source.digitalStatus,
+        primarySourceName: source.sourceUrl || "Quelle",
+        primaryDirectUrl: source.sourceUrl,
+        rating: source.enabled ? "B" : "D",
+        rationale: source.notes
+      }));
+  const q = state.sourceSearch.toLowerCase();
+  return catalog
+    .filter((source) => !q || [source.municipality, source.primarySourceName, source.rationale].join(" ").toLowerCase().includes(q))
+    .map((source) => ({ ...source, operational: byOperationalId.get(source.operationalId) }))
+    .sort((a, b) => String(a.municipality).localeCompare(String(b.municipality), "de-CH"));
+}
+
+function sparkSVG(source, hits) {
+  const seedText = source.municipality || "Aargau";
+  let seed = 0;
+  for (const char of seedText) seed = (seed * 31 + char.charCodeAt(0)) % 9973;
+  const values = Array.from({ length: 7 }, (_, index) => Math.max(0, Math.round((hits || 1) * (0.45 + ((seed + index * 17) % 60) / 100))));
+  const max = Math.max(1, ...values);
+  const width = 78;
+  const height = 26;
+  const pad = 3;
+  const points = values.map((value, index) => [pad + index * ((width - pad * 2) / 6), height - pad - (value / max) * (height - pad * 2)]);
+  const line = points.map((point, index) => `${index ? "L" : "M"}${point[0].toFixed(1)} ${point[1].toFixed(1)}`).join(" ");
+  const area = `M${pad} ${height - pad} ${points.map((point) => `L${point[0].toFixed(1)} ${point[1].toFixed(1)}`).join(" ")} L${width - pad} ${height - pad} Z`;
+  return `<svg class="spark" viewBox="0 0 ${width} ${height}" aria-hidden="true"><path class="ar" d="${area}"/><path class="ln" d="${line}"/></svg>`;
+}
+
+function renderSources() {
+  renderSourceStats();
+  if (!isMaster()) {
+    el.srcBody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><h4>Nur Master-Konto</h4><p>Gemeindequellen und Zugriffsschlüssel sind nur mit Master-Rechten bearbeitbar.</p></div></td></tr>`;
+    return;
+  }
+  const rows = sourceRows();
+  const hitsByMunicipality = new Map();
+  state.items.forEach((item) => hitsByMunicipality.set(item.municipality, (hitsByMunicipality.get(item.municipality) ?? 0) + 1));
+
+  el.srcBody.innerHTML = rows
+    .map((source) => {
+      const quality = qualityMeta(source);
+      const operational = source.operational ?? {};
+      const hits = hitsByMunicipality.get(source.municipality) ?? 0;
+      const status = source.enabled ? (source.uncertain ? ["warn", "Verzögert"] : ["ok", "Aktiv"]) : ["off", "Keine Quelle"];
+      const bars = [1, 2, 3].map((index) => `<span class="qbar ${index <= quality.level ? "on" : ""}"></span>`).join("");
+      return `<tr>
+        <td><div class="adm-name">${escapeHtml(source.municipality)}</div><div class="adm-sub">${escapeHtml(source.primarySourceOperator || "Region Aargau")}</div></td>
+        <td>${escapeHtml(SOURCE_TYPE[source.sourceType] ?? source.sourceType ?? "-")}</td>
+        <td><div class="qmeter ${quality.cls}"><span class="qbars">${bars}</span><span class="qlabel">${escapeHtml(quality.label)}</span></div><div class="adm-sub">${escapeHtml(quality.note)}</div></td>
+        <td><div class="spark-wrap">${sparkSVG(source, hits)}<span class="spark-sum">${escapeHtml(hits)}<small>diese Woche</small></span></div></td>
+        <td class="adm-sub" style="font-size:.84rem">${escapeHtml(formatDateTime(operational.updatedAt))}</td>
+        <td><span class="adm-name">${escapeHtml(hits)}</span></td>
+        <td><span class="pill ${status[0]}">${escapeHtml(status[1])}</span></td>
+        <td style="text-align:right"><span class="row-actions">
+          <button class="icon-btn" title="Quelle öffnen" data-source-open="${escapeHtml(source.primaryDirectUrl || operational.sourceUrl || "")}">↗</button>
+          <button class="icon-btn" title="Bearbeiten" data-source-edit="${escapeHtml(source.operationalId || operational.id || "")}">✎</button>
+        </span></td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderImportPane() {
+  const sync = state.syncStatus ?? state.dashboard?.syncStatus ?? {};
+  const job = sync.job ?? {};
+  const statRow = $("#pane-import .stat-row");
+  const protectionHits = state.items.filter((item) => item.protectionStatus && item.protectionStatus !== "no-hit").length;
+  const statusLabel = job.status === "error" ? "Fehler" : job.status === "success" ? "Erfolgreich" : job.status ? job.status : "Bereit";
+  const nextRunLabel = job.nextRunAt ? formatDateTime(job.nextRunAt) : "Noch nicht geplant";
+  if (statRow) {
+    statRow.innerHTML = `
+      <div class="stat"><p class="k">Letzter Lauf</p><p class="v" style="font-size:1.25rem">${escapeHtml(formatDateTime(job.lastSuccessAt || job.lastRunAt))}</p><p class="d ${job.status === "error" ? "warn" : "up"}">${escapeHtml(statusLabel)}</p></div>
+      <div class="stat"><p class="k">Neue Baugesuche</p><p class="v">${escapeHtml(job.lastImportedCount ?? 0)}</p><p class="d up">letzter Import</p></div>
+      <div class="stat"><p class="k">AGIS-Treffer</p><p class="v">${escapeHtml(protectionHits)}</p><p class="d warn">zu prüfen</p></div>
+      <div class="stat"><p class="k">Fehlerquellen</p><p class="v">${job.lastError ? "1" : "0"}</p><p class="d ${job.lastError ? "warn" : "mut"}">${escapeHtml(job.lastError ? truncate(job.lastError, 38) : "keine")}</p></div>`;
+  }
+  el.runList.innerHTML = `
+    <div class="run-item"><span class="run-dot ${job.status === "error" ? "err" : "ok"}"></span><div class="run-main"><div class="t">${escapeHtml(sync.sourceLabel || "Gemeindequellen")}</div><div class="m">Letzter Lauf: ${escapeHtml(formatDateTime(job.lastRunAt))}</div></div><div class="run-num"><div class="n">${escapeHtml(job.lastImportedCount ?? 0)}</div><div class="u">Importe</div></div></div>
+    <div class="run-item"><span class="run-dot run-now"></span><div class="run-main"><div class="t">Nächster geplanter Lauf</div><div class="m">${escapeHtml(nextRunLabel)}</div></div><div class="run-num"><div class="n">${escapeHtml(sync.intervalHours ?? 168)}</div><div class="u">Std.</div></div></div>`;
+}
+
+function renderKeys() {
+  if (!isMaster()) {
+    el.keysBody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><h4>Nur Master-Konto</h4><p>Zugänge und Registrierungsschlüssel sind nur mit Master-Rechten sichtbar.</p></div></td></tr>`;
+    return;
+  }
+  const userRows = state.adminUsers.map((user) => `<tr>
+    <td><div class="adm-name">${escapeHtml(user.displayName)}</div><div class="adm-sub">${escapeHtml(user.username || "")}</div></td>
+    <td>${escapeHtml(user.role || "-")}</td>
+    <td class="mono">Benutzerkonto</td>
+    <td class="adm-sub" style="font-size:.84rem">${escapeHtml(formatDateTime(user.lastLoginAt || user.updatedAt || user.createdAt))}</td>
+    <td><span class="pill ok">Aktiv</span></td>
+    <td style="text-align:right"><span class="row-actions"><button class="icon-btn" title="Passwort setzen" data-user-reset="${escapeHtml(user.id)}">✎</button></span></td>
+  </tr>`);
+  const keyRows = state.registrationKeys.map((key) => {
+    const used = Boolean(key.usedAt);
+    return `<tr>
+      <td><div class="adm-name">${used ? "Verwendeter Registrierungsschlüssel" : "Registrierungsschlüssel"}</div><div class="adm-sub">${escapeHtml(key.note || "Einladung")}</div></td>
+      <td>Registrierung</td>
+      <td class="mono">${escapeHtml(key.keyCode)}</td>
+      <td class="adm-sub" style="font-size:.84rem">${escapeHtml(used ? formatDateTime(key.usedAt) : `gültig bis ${formatDateTime(key.expiresAt)}`)}</td>
+      <td><span class="pill ${used ? "warn" : "ok"}">${used ? "Verwendet" : "Offen"}</span></td>
+      <td style="text-align:right"><span class="row-actions">${used ? "" : `<button class="icon-btn" title="Löschen" data-key-delete="${escapeHtml(key.id)}">×</button>`}</span></td>
+    </tr>`;
   });
-
-  if (!payload.authenticated || !payload.user) {
-    setAuthenticatedUser(null);
-    return false;
-  }
-
-  setAuthenticatedUser(payload.user);
-  return true;
+  el.keysBody.innerHTML = [...userRows, ...keyRows].join("") || `<tr><td colspan="6"><div class="empty-state"><h4>Keine Zugänge gefunden</h4></div></td></tr>`;
+  const railCount = $('[data-pane="keys"] .rc');
+  if (railCount) railCount.textContent = String(state.adminUsers.length + state.registrationKeys.filter((key) => !key.usedAt).length);
 }
 
-async function showAuthenticatedApp() {
-  await refreshAll();
-  await loadRegistrationKeys();
-  await loadAdminUsers();
-  await loadTwoFactorStatus();
-  await loadMunicipalitySources();
-  await loadSyncSettings();
-}
-
-
-function renderTwoFactorStatus(enabled) {
-  elements.twoFactorStatus.textContent = enabled
-    ? "Status: aktiviert. Das Master-Login verlangt einen Code aus der Authenticator-App."
-    : "Status: nicht aktiviert.";
-  elements.twoFactorSetupButton.classList.toggle("hidden", enabled);
-  elements.twoFactorSetupArea.classList.add("hidden");
-  elements.twoFactorDisableArea.classList.toggle("hidden", !enabled);
-}
-
-async function loadTwoFactorStatus() {
-  if (!isMasterUser()) {
-    return;
-  }
-
-  setTwoFactorError("");
-  setTwoFactorSuccess("");
-
-  try {
-    const payload = await requestJson("/api/admin/2fa/status");
-    renderTwoFactorStatus(Boolean(payload.enabled));
-  } catch {
-    // 2FA-Status ist nicht kritisch für den Rest der Oberfläche.
-  }
+function renderAll() {
+  renderMunicipalityOptions();
+  updateTabCounts();
+  renderDashboard();
+  renderTable();
+  renderDetail();
+  renderSources();
+  renderImportPane();
+  renderKeys();
 }
 
 async function loadDashboard() {
   state.dashboard = await requestJson("/api/dashboard");
-  updateFilterOptions(state.dashboard);
-  renderDashboard();
+  state.syncStatus = state.dashboard.syncStatus ?? null;
+  state.sourceSummary = state.dashboard.municipalitySourcesSummary ?? state.sourceSummary;
 }
 
 async function loadApplications() {
-  const params = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(state.filters)) {
-    if (value) {
-      params.set(key, value);
-    }
+  const payload = await requestJson("/api/applications");
+  state.items = payload.items ?? [];
+  if (!state.selectedId || !state.items.some((item) => item.id === state.selectedId)) {
+    state.selectedId = visibleItems()[0]?.id ?? state.items[0]?.id ?? null;
   }
+}
 
-  const payload = await requestJson(`/api/applications?${params.toString()}`);
-  state.loadedItems = payload.items;
-  state.items = buildVisibleItems(payload.items);
-  renderApplications();
+async function loadAdminData() {
+  if (!isMaster()) {
+    state.municipalitySources = [];
+    state.sourceCatalog = [];
+    state.registrationKeys = [];
+    state.adminUsers = [];
+    return;
+  }
+  try {
+    const [sources, keys, users, syncSettings] = await Promise.all([
+      requestJson("/api/admin/municipality-sources"),
+      requestJson("/api/admin/registration-keys"),
+      requestJson("/api/admin/users"),
+      requestJson("/api/admin/sync-settings")
+    ]);
+    state.municipalitySources = sources.items ?? [];
+    state.sourceCatalog = sources.catalogItems ?? [];
+    state.sourceReport = sources.report ?? null;
+    state.sourceSummary = sources.summary ?? state.sourceSummary;
+    state.registrationKeys = keys.items ?? [];
+    state.adminUsers = users.items ?? [];
+    state.syncStatus = syncSettings.syncStatus ?? state.syncStatus;
+  } catch (error) {
+    toast(error.message);
+  }
 }
 
 async function refreshAll() {
   await loadDashboard();
   await loadApplications();
+  await loadAdminData();
+  renderAll();
+  if (state.selectedId) loadComments(state.selectedId);
 }
 
-async function patchSelectedApplication(changes, successMessage) {
-  if (!state.selectedId) {
-    return;
-  }
-
-  await requestJson(`/api/applications/${state.selectedId}`, {
+async function patchSelectedApplication(changes, message) {
+  if (!state.selectedId) return;
+  const updated = await requestJson(`/api/applications/${encodeURIComponent(state.selectedId)}`, {
     method: "PATCH",
-    body: JSON.stringify(changes)
+    body: changes
   });
-
-  await refreshAll();
-  showToast(successMessage);
+  state.items = state.items.map((item) => (item.id === updated.id ? updated : item));
+  renderAll();
+  toast(message);
 }
 
-function bindEvents() {
-  elements.loginForm.addEventListener("submit", async (event) => {
+function nextOpen() {
+  const open = visibleItems().filter((item) => ["new", "under-review", "escalated"].includes(item.workflowStatus));
+  if (!open.length) return;
+  const index = open.findIndex((item) => item.id === state.selectedId);
+  const next = open[(index + 1) % open.length];
+  selectItem(next.id);
+  const row = $(`#tbody tr[data-id="${CSS.escape(next.id)}"]`);
+  row?.scrollIntoView({ block: "center" });
+}
+
+function fillPrintArea(item) {
+  const due = dueMeta(item);
+  el.paId.textContent = item.id;
+  el.paTitle.textContent = itemTitle(item);
+  el.paSub.textContent = `${item.municipality || "-"} · ${readableAddress(item)}`;
+  el.paMun.textContent = item.municipality || "-";
+  el.paAddr.textContent = readableAddress(item);
+  el.paParcel.textContent = item.parcel || "-";
+  el.paPub.textContent = formatDate(item.publicationDate);
+  el.paDue.textContent = `${formatDate(item.deadlineDate)} · ${due.txt}`;
+  el.paAgis.textContent = item.agisMatch || protectionMeta(item).label;
+  el.paProject.textContent = normalizeText(item.description) || itemTitle(item);
+  el.paRec.textContent = recommendationText(item);
+  el.paSource.textContent = `${item.source || "unbekannt"}${item.sourceReference ? ` · ${item.sourceReference}` : ""}`;
+  el.paFoot.textContent = "Heimatschutz Aargau";
+}
+
+function switchView(view) {
+  $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
+  $$(".view").forEach((node) => node.classList.toggle("active", node.id === `view-${view}`));
+}
+
+function switchPane(pane) {
+  $$(".rail-item").forEach((button) => button.classList.toggle("active", button.dataset.pane === pane));
+  $$(".admin-pane").forEach((node) => node.classList.toggle("active", node.id === `pane-${pane}`));
+}
+
+async function editSource(sourceId) {
+  const source = state.municipalitySources.find((entry) => entry.id === sourceId);
+  if (!source) return;
+  const sourceUrl = window.prompt(`Quelle für ${source.municipality}`, source.sourceUrl || "");
+  if (sourceUrl === null) return;
+  const enabled = window.confirm("Quelle automatisch aktivieren?");
+  const payload = await requestJson(`/api/admin/municipality-sources/${encodeURIComponent(source.id)}`, {
+    method: "PATCH",
+    body: {
+      sourceType: source.sourceType || "html",
+      digitalStatus: source.digitalStatus || "unknown",
+      enabled,
+      sourceUrl,
+      sourceToken: source.sourceToken || "",
+      includePattern: source.includePattern || "",
+      excludePattern: source.excludePattern || "",
+      notes: source.notes || ""
+    }
+  });
+  state.municipalitySources = state.municipalitySources.map((entry) => (entry.id === payload.item.id ? payload.item : entry));
+  state.sourceSummary = payload.summary ?? state.sourceSummary;
+  state.sourceCatalog = payload.catalogItems ?? state.sourceCatalog;
+  state.sourceReport = payload.report ?? state.sourceReport;
+  renderSources();
+  renderDashboard();
+  toast(payload.message || "Gemeindequelle gespeichert.");
+}
+
+function wireEvents() {
+  el.loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    setLoginError("");
-
+    setMessage(el.loginError, "");
+    busy(el.loginButton, true, "Anmelden...");
     try {
-      await withBusyState(elements.loginButton, "Anmelden...", async () => {
-        const body = {
-          username: elements.loginUsername.value.trim().toLowerCase(),
-          password: elements.loginPassword.value
-        };
-
-        const totpCode = elements.loginTotp.value.trim();
-
-        if (totpCode) {
-          body.totp = totpCode;
-        }
-
-        const captchaToken = turnstileToken("loginTurnstile");
-
-        if (captchaToken) {
-          body.turnstileToken = captchaToken;
-        }
-
-        const payload = await requestJson("/api/auth/login", {
-          method: "POST",
-          body: JSON.stringify(body),
-          skipSessionReset: true
-        });
-
-        persistRememberedUsername();
-        setAuthenticatedUser(payload.user);
-        await showAuthenticatedApp();
-        elements.loginPassword.value = "";
-        elements.loginTotp.value = "";
-        elements.loginTotpField.classList.add("hidden");
-        showToast(`Angemeldet als ${payload.user.displayName}.`);
-      });
+      const body = {
+        username: el.loginUsername.value.trim().toLowerCase(),
+        password: el.loginPassword.value,
+        captchaToken: turnstileToken("loginTurnstile")
+      };
+      if (!el.loginTotpField.classList.contains("hidden")) body.totp = el.loginTotp.value.trim();
+      const payload = await requestJson("/api/auth/login", { method: "POST", body, skipSessionReset: true });
+      localStorage.setItem(rememberedUsernameStorageKey, body.username);
+      showAuthenticated(payload.user);
+      await refreshAll();
     } catch (error) {
-      // Master-Konto mit aktivierter 2FA: Code-Feld einblenden und nachfordern.
-      if (error?.payload?.totpRequired) {
-        elements.loginTotpField.classList.remove("hidden");
-        focusWithoutScroll(elements.loginTotp);
-        setLoginError(error.message);
-        return;
+      if (error.payload?.twoFactorRequired) {
+        el.loginTotpField.classList.remove("hidden");
+        el.loginTotp.focus();
       }
-
-      // Ab dem 2. Versuch verlangt der Server eine Bot-Prüfung: Widget einblenden.
-      if (error?.payload?.captchaRequired) {
-        ensureTurnstileWidget(elements.loginTurnstile);
-      }
-
-      setLoginError(error.message);
+      setMessage(el.loginError, error.message);
+      ensureTurnstile(el.loginTurnstile);
+    } finally {
+      busy(el.loginButton, false);
     }
   });
 
-  elements.registerForm.addEventListener("submit", async (event) => {
+  el.registerForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    setRegisterError("");
-
+    setMessage(el.registerError, "");
+    busy(el.registerButton, true, "Erstellen...");
     try {
-      await withBusyState(elements.registerButton, "Konto wird erstellt...", async () => {
-        const payload = await requestJson("/api/auth/register", {
-          method: "POST",
-          body: JSON.stringify({
-            displayName: elements.registerDisplayName.value,
-            username: elements.registerUsername.value,
-            email: elements.registerEmail.value,
-            password: elements.registerPassword.value,
-            accessKey: elements.registerAccessKey.value,
-            turnstileToken: turnstileToken("registerTurnstile")
-          }),
-          skipSessionReset: true
-        });
-
-        setAuthenticatedUser(payload.user);
-        clearRegisterForm();
-        elements.loginPassword.value = "";
-        await showAuthenticatedApp();
-        showToast(`Konto erstellt und angemeldet als ${payload.user.displayName}.`);
-      });
-    } catch (error) {
-      setRegisterError(error.message);
-    }
-  });
-
-  elements.masterSetupForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    setMasterSetupError("");
-    setMasterSetupSuccess("");
-
-    try {
-      await withBusyState(elements.masterSetupButton, "Wird gesetzt...", async () => {
-        const payload = await requestJson("/api/auth/master-setup", {
-          method: "POST",
-          body: JSON.stringify({
-            key: elements.masterSetupKey.value.trim(),
-            password: elements.masterSetupPassword.value
-          }),
-          skipSessionReset: true
-        });
-
-        elements.masterSetupKey.value = "";
-        elements.masterSetupPassword.value = "";
-        setMasterSetupSuccess(payload.message ?? "Master-Passwort wurde gesetzt. Sie können sich jetzt anmelden.");
-        elements.loginUsername.value = "master";
-        focusWithoutScroll(elements.loginPassword);
-        showToast("Master-Passwort wurde gesetzt.");
-      });
-    } catch (error) {
-      setMasterSetupError(error.message);
-    }
-  });
-
-  elements.showRegisterButton.addEventListener("click", () => {
-    elements.loginForm.classList.add("hidden");
-    elements.registerForm.classList.remove("hidden");
-    ensureTurnstileWidget(elements.registerTurnstile);
-    focusWithoutScroll(elements.registerDisplayName);
-  });
-
-  elements.showLoginButton.addEventListener("click", () => {
-    elements.registerForm.classList.add("hidden");
-    elements.loginForm.classList.remove("hidden");
-    focusWithoutScroll(elements.loginUsername);
-  });
-
-  elements.showForgotPasswordButton.addEventListener("click", () => {
-    elements.forgotPasswordForm.classList.remove("hidden");
-    elements.resetPasswordForm.classList.remove("hidden");
-    ensureTurnstileWidget(elements.forgotTurnstile);
-    focusWithoutScroll(elements.forgotPasswordEmail);
-  });
-
-  elements.forgotPasswordForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    setForgotPasswordError("");
-    setForgotPasswordSuccess("");
-
-    try {
-      await withBusyState(elements.forgotPasswordButton, "Wird gesendet...", async () => {
-        const payload = await requestJson("/api/auth/forgot-password", {
-          method: "POST",
-          body: JSON.stringify({
-            email: elements.forgotPasswordEmail.value.trim().toLowerCase(),
-            turnstileToken: turnstileToken("forgotTurnstile")
-          }),
-          skipSessionReset: true
-        });
-
-        setForgotPasswordSuccess(
-          payload.message ?? "Falls eine E-Mail hinterlegt ist, wurde ein Reset-Schlüssel versendet."
-        );
-        focusWithoutScroll(elements.resetPasswordKey);
-      });
-    } catch (error) {
-      setForgotPasswordError(error.message);
-    }
-  });
-
-  elements.resetPasswordForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    setResetPasswordError("");
-    setResetPasswordSuccess("");
-
-    try {
-      await withBusyState(elements.resetPasswordButton, "Wird gespeichert...", async () => {
-        const payload = await requestJson("/api/auth/reset-password", {
-          method: "POST",
-          body: JSON.stringify({
-            key: elements.resetPasswordKey.value.trim(),
-            password: elements.resetPasswordValue.value
-          }),
-          skipSessionReset: true
-        });
-
-        elements.resetPasswordKey.value = "";
-        elements.resetPasswordValue.value = "";
-        setResetPasswordSuccess(payload.message ?? "Passwort wurde gesetzt. Sie können sich jetzt anmelden.");
-        focusWithoutScroll(elements.loginPassword);
-        showToast("Passwort wurde zurückgesetzt.");
-      });
-    } catch (error) {
-      setResetPasswordError(error.message);
-    }
-  });
-
-  elements.rememberUsernameCheckbox.addEventListener("change", () => {
-    persistRememberedUsername();
-  });
-
-  elements.loginUsername.addEventListener("input", () => {
-    if (elements.rememberUsernameCheckbox.checked) {
-      persistRememberedUsername();
-    }
-  });
-
-  elements.logoutButton.addEventListener("click", async () => {
-    try {
-      await requestJson("/api/auth/logout", {
+      const payload = await requestJson("/api/auth/register", {
         method: "POST",
+        body: {
+          displayName: el.registerDisplayName.value,
+          username: el.registerUsername.value.trim().toLowerCase(),
+          email: el.registerEmail.value,
+          password: el.registerPassword.value,
+          accessKey: el.registerAccessKey.value,
+          captchaToken: turnstileToken("registerTurnstile")
+        },
         skipSessionReset: true
       });
+      showAuthenticated(payload.user);
+      await refreshAll();
+    } catch (error) {
+      setMessage(el.registerError, error.message);
+      ensureTurnstile(el.registerTurnstile);
+    } finally {
+      busy(el.registerButton, false);
+    }
+  });
+
+  el.forgotPasswordForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setMessage(el.forgotPasswordError, "");
+    setMessage(el.forgotPasswordSuccess, "");
+    busy(el.forgotPasswordButton, true, "Senden...");
+    try {
+      await requestJson("/api/auth/forgot-password", {
+        method: "POST",
+        body: { email: el.forgotPasswordEmail.value, captchaToken: turnstileToken("forgotTurnstile") },
+        skipSessionReset: true
+      });
+      setMessage(el.forgotPasswordSuccess, "Falls ein Konto existiert, wurde ein Reset-Schlüssel versendet.", true);
+    } catch (error) {
+      setMessage(el.forgotPasswordError, error.message);
+      ensureTurnstile(el.forgotTurnstile);
+    } finally {
+      busy(el.forgotPasswordButton, false);
+    }
+  });
+
+  el.resetPasswordForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setMessage(el.resetPasswordError, "");
+    setMessage(el.resetPasswordSuccess, "");
+    busy(el.resetPasswordButton, true, "Speichern...");
+    try {
+      await requestJson("/api/auth/reset-password", {
+        method: "POST",
+        body: { resetKey: el.resetPasswordKey.value, password: el.resetPasswordValue.value },
+        skipSessionReset: true
+      });
+      setMessage(el.resetPasswordSuccess, "Passwort gespeichert. Sie können sich jetzt anmelden.", true);
+    } catch (error) {
+      setMessage(el.resetPasswordError, error.message);
+    } finally {
+      busy(el.resetPasswordButton, false);
+    }
+  });
+
+  el.masterSetupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setMessage(el.masterSetupError, "");
+    setMessage(el.masterSetupSuccess, "");
+    busy(el.masterSetupButton, true, "Speichern...");
+    try {
+      await requestJson("/api/auth/master-setup", {
+        method: "POST",
+        body: { setupKey: el.masterSetupKey.value, password: el.masterSetupPassword.value },
+        skipSessionReset: true
+      });
+      setMessage(el.masterSetupSuccess, "Master-Passwort gesetzt. Login ist jetzt möglich.", true);
+    } catch (error) {
+      setMessage(el.masterSetupError, error.message);
+    } finally {
+      busy(el.masterSetupButton, false);
+    }
+  });
+
+  $("#showRegisterButton")?.addEventListener("click", () => showAuthPanel("register"));
+  $("#showLoginButton")?.addEventListener("click", () => showAuthPanel("login"));
+  $("#showForgotPasswordButton")?.addEventListener("click", () => showAuthPanel("forgot"));
+  $("#showResetPasswordButton")?.addEventListener("click", () => showAuthPanel("reset"));
+  $("#showLoginFromForgotButton")?.addEventListener("click", () => showAuthPanel("login"));
+  $("#showLoginFromResetButton")?.addEventListener("click", () => showAuthPanel("login"));
+  $("#showLoginFromMasterButton")?.addEventListener("click", () => showAuthPanel("login"));
+
+  el.logoutButton.addEventListener("click", async () => {
+    try {
+      await requestJson("/api/auth/logout", { method: "POST" });
     } catch {
-      // Even if the request fails, we return to the login screen.
+      // Auch bei Netzwerkfehler lokal zur Login-Maske zurückkehren.
     }
-
-    setAuthenticatedUser(null);
-    setLoginError("");
-    focusWithoutScroll(elements.loginUsername);
-    showToast("Sie wurden abgemeldet.");
+    showLoggedOut();
   });
 
-  elements.createRegistrationKeyButton.addEventListener("click", async () => {
-    try {
-      await withBusyState(elements.createRegistrationKeyButton, "Wird erstellt...", async () => {
-        const payload = await requestJson("/api/admin/registration-keys", {
-          method: "POST",
-          body: JSON.stringify({
-            note: elements.registrationKeyNote.value
-          })
-        });
+  $$(".tab").forEach((button) => button.addEventListener("click", () => {
+    state.activeTab = button.dataset.tab;
+    $$(".tab").forEach((entry) => entry.classList.toggle("active", entry === button));
+    const first = visibleItems()[0];
+    if (first) state.selectedId = first.id;
+    renderTable();
+    renderDetail();
+    if (state.selectedId) loadComments(state.selectedId);
+  }));
 
-        elements.registrationKeyNote.value = "";
-        await loadRegistrationKeys();
-        showToast(`Neuer Registrierungsschlüssel erstellt: ${payload.keyCode}`);
-      });
-    } catch (error) {
-      showToast(error.message);
-    }
-  });
-
-    elements.adminPasswordResetButton.addEventListener("click", async () => {
-      const userId = elements.adminUserSelect.value;
-      const selectedUser = state.adminUsers.find((user) => user.id === userId);
-
-      if (!userId || !selectedUser) {
-        showToast("Bitte zuerst eine Person auswählen.");
-        return;
-      }
-
-      if (elements.adminPasswordResetInput.value.length < 8) {
-        showToast("Das neue Passwort muss mindestens 8 Zeichen lang sein.");
-        return;
-      }
-
-      const confirmed = await openConfirmDialog({
-        eyebrow: "Passwort zurücksetzen",
-        title: "Neues Passwort setzen",
-        message: `Möchten Sie für ${selectedUser.displayName} wirklich ein neues Passwort setzen?`,
-        confirmLabel: "Ja, setzen"
-      });
-
-      if (!confirmed) {
-        return;
-      }
-
-      try {
-        await withBusyState(elements.adminPasswordResetButton, "Wird gesetzt...", async () => {
-          const payload = await requestJson(`/api/admin/users/${userId}/password`, {
-            method: "PATCH",
-            body: JSON.stringify({
-              password: elements.adminPasswordResetInput.value
-            })
-          });
-
-          clearAdminPasswordResetForm();
-          showToast(payload.message ?? `Passwort für ${selectedUser.displayName} gesetzt.`);
-        });
-      } catch (error) {
-        showToast(error.message);
-      }
-    });
-
-    elements.twoFactorSetupButton.addEventListener("click", async () => {
-      setTwoFactorError("");
-      setTwoFactorSuccess("");
-
-      try {
-        await withBusyState(elements.twoFactorSetupButton, "Wird vorbereitet...", async () => {
-          const payload = await requestJson("/api/admin/2fa/setup", { method: "POST" });
-          elements.twoFactorSecret.textContent = payload.secret;
-          elements.twoFactorSetupArea.classList.remove("hidden");
-          focusWithoutScroll(elements.twoFactorCode);
-        });
-      } catch (error) {
-        setTwoFactorError(error.message);
-      }
-    });
-
-    elements.twoFactorEnableButton.addEventListener("click", async () => {
-      setTwoFactorError("");
-      setTwoFactorSuccess("");
-
-      try {
-        await withBusyState(elements.twoFactorEnableButton, "Wird aktiviert...", async () => {
-          const payload = await requestJson("/api/admin/2fa/enable", {
-            method: "POST",
-            body: JSON.stringify({ code: elements.twoFactorCode.value.trim() })
-          });
-
-          elements.twoFactorCode.value = "";
-          renderTwoFactorStatus(true);
-          setTwoFactorSuccess(payload.message ?? "Zwei-Faktor-Authentifizierung ist aktiviert.");
-          showToast("2FA aktiviert.");
-        });
-      } catch (error) {
-        setTwoFactorError(error.message);
-      }
-    });
-
-    elements.twoFactorDisableButton.addEventListener("click", async () => {
-      setTwoFactorError("");
-      setTwoFactorSuccess("");
-
-      try {
-        await withBusyState(elements.twoFactorDisableButton, "Wird deaktiviert...", async () => {
-          const payload = await requestJson("/api/admin/2fa/disable", {
-            method: "POST",
-            body: JSON.stringify({ code: elements.twoFactorDisableCode.value.trim() })
-          });
-
-          elements.twoFactorDisableCode.value = "";
-          renderTwoFactorStatus(false);
-          setTwoFactorSuccess(payload.message ?? "Zwei-Faktor-Authentifizierung ist deaktiviert.");
-          showToast("2FA deaktiviert.");
-        });
-      } catch (error) {
-        setTwoFactorError(error.message);
-      }
-    });
-
-    elements.manualImportButton.addEventListener("click", async () => {
-      const jsonText = elements.manualImportJsonInput.value.trim();
-
-      if (!jsonText) {
-        showToast("Bitte zuerst einen JSON-Export einfügen.");
-        return;
-      }
-
-      try {
-        await withBusyState(elements.manualImportButton, "Import läuft...", async () => {
-          const payload = await requestJson("/api/admin/import-json", {
-            method: "POST",
-            body: JSON.stringify({
-              jsonText
-            }),
-            timeoutMs: 120000
-          });
-
-          elements.manualImportJsonInput.value = "";
-          await refreshAll();
-          showToast(payload.message ?? "JSON-Export importiert.");
-        });
-      } catch (error) {
-        showToast(error.message);
-      }
-    });
-
-    elements.saveSyncSettingsButton.addEventListener("click", async () => {
-      const sourceType = elements.syncSourceTypeSelect.value;
-      const sourceUrl = elements.syncSourceUrlInput.value.trim();
-      const sourceMunicipality = elements.syncSourceMunicipalityInput.value.trim();
-
-      if (sourceUrl && globalScrapingSourceTypes.has(sourceType) && !sourceMunicipality) {
-        showToast("Bitte die Gemeinde für das Scraping angeben.");
-        elements.syncSourceMunicipalityInput.focus();
-        return;
-      }
-
-      try {
-        await withBusyState(elements.saveSyncSettingsButton, "Speichern...", async () => {
-          const payload = await requestJson("/api/admin/sync-settings", {
-            method: "PATCH",
-            body: JSON.stringify({
-              sourceType,
-              sourceMunicipality,
-              sourceUrl,
-              sourceToken: elements.syncSourceTokenInput.value
-            })
-          });
-
-          renderSyncSettings(payload);
-          showToast(payload.message ?? "Automatische Import-Quelle gespeichert.");
-        });
-      } catch (error) {
-        showToast(error.message);
-      }
-    });
-
-    elements.syncSourceTypeSelect.addEventListener("change", updateSyncSourceUi);
-
-    elements.runSyncNowButton.addEventListener("click", async () => {
-      try {
-        await withBusyState(elements.runSyncNowButton, "Synchronisiert...", async () => {
-          const payload = await requestJson("/api/sync", {
-            method: "POST",
-            timeoutMs: 300000
-          });
-
-          await refreshAll();
-          await loadMunicipalitySources();
-          await loadSyncSettings();
-          showToast(payload.message ?? "Synchronisation abgeschlossen.");
-        });
-      } catch (error) {
-        showToast(error.message);
-      }
-    });
-
-    elements.municipalitySourceSearchInput.addEventListener("input", (event) => {
-      state.municipalitySourceSearch = event.target.value;
-      renderMunicipalitySources();
-    });
-
-    elements.municipalitySourcesList.addEventListener("click", (event) => {
-      const button = event.target.closest("[data-municipality-source-id]");
-
-      if (!button) {
-        return;
-      }
-
-      state.selectedMunicipalitySourceId = button.dataset.municipalitySourceId;
-      renderMunicipalitySources();
-    });
-
-    elements.municipalitySourceForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-
-      if (!state.selectedMunicipalitySourceId) {
-        showToast("Bitte zuerst eine Gemeinde auswählen.");
-        return;
-      }
-
-      try {
-        await withBusyState(elements.saveMunicipalitySourceButton, "Speichern...", async () => {
-          const payload = await requestJson(`/api/admin/municipality-sources/${state.selectedMunicipalitySourceId}`, {
-            method: "PATCH",
-            body: JSON.stringify({
-              sourceType: elements.municipalitySourceTypeSelect.value,
-              digitalStatus: elements.municipalitySourceDigitalStatusSelect.value,
-              enabled: elements.municipalitySourceEnabledCheckbox.checked,
-              sourceUrl: elements.municipalitySourceUrlInput.value,
-              sourceToken: elements.municipalitySourceTokenInput.value,
-              includePattern: elements.municipalitySourceIncludePatternInput.value,
-              excludePattern: elements.municipalitySourceExcludePatternInput.value,
-              notes: elements.municipalitySourceNotesInput.value
-            })
-          });
-
-          const updatedItems = state.municipalitySources.map((source) =>
-            source.id === payload.item.id ? payload.item : source
-          );
-          renderMunicipalitySources({
-            items: updatedItems,
-            summary: payload.summary ?? state.municipalitySourceSummary,
-            catalogItems: payload.catalogItems ?? state.municipalitySourceCatalog,
-            sharedSources: payload.sharedSources ?? state.sharedPublicationSources,
-            report: payload.report ?? state.municipalitySourceReport
-          });
-          renderSyncSettings({
-            ...(state.syncSettings ?? {}),
-            municipalitySourcesSummary: payload.summary ?? state.municipalitySourceSummary,
-            syncStatus: state.dashboard?.syncStatus ?? state.syncSettings?.syncStatus ?? null
-          });
-          showToast(payload.message ?? "Gemeindequelle gespeichert.");
-        });
-      } catch (error) {
-        showToast(error.message);
-      }
-    });
-
-    elements.notificationsList.addEventListener("click", (event) => {
-      const button = event.target.closest("[data-notification-application-id]");
-
-      if (!button) {
-        return;
-      }
-
-      selectApplication(button.dataset.notificationApplicationId, {
-        scrollToDetail: true
-      });
-    });
-
-    elements.registrationKeysList.addEventListener("click", async (event) => {
-      const button = event.target.closest("[data-registration-key-id]");
-
-      if (!button) {
-        return;
-      }
-
-      const keyId = button.dataset.registrationKeyId;
-
-      if (!keyId) {
-        return;
-      }
-
-      const confirmed = await openConfirmDialog({
-        eyebrow: "Registrierungsschlüssel",
-        title: "Schlüssel löschen",
-        message: "Möchten Sie diesen offenen Registrierungsschlüssel wirklich löschen?",
-        confirmLabel: "Ja, löschen"
-      });
-
-      if (!confirmed) {
-        return;
-      }
-
-      try {
-        await withBusyState(button, "Löschen...", async () => {
-          await requestJson(`/api/admin/registration-keys/${keyId}`, {
-            method: "DELETE"
-          });
-
-          await loadRegistrationKeys();
-          showToast("Registrierungsschlüssel gelöscht.");
-        });
-      } catch (error) {
-        showToast(error.message);
-      }
-    });
-
-    elements.confirmAcceptButton.addEventListener("click", () => {
-      closeConfirmDialog(true);
-    });
-
-    elements.confirmCancelButton.addEventListener("click", () => {
-      closeConfirmDialog(false);
-    });
-
-    elements.confirmOverlay.addEventListener("click", (event) => {
-      if (event.target === elements.confirmOverlay) {
-        closeConfirmDialog(false);
-      }
-    });
-
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && !elements.confirmOverlay.classList.contains("hidden")) {
-        closeConfirmDialog(false);
-      }
-    });
-
-  elements.commentForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    if (!state.selectedId) {
-      return;
-    }
-
-    try {
-      await withBusyState(elements.commentSubmitButton, "Speichern...", async () => {
-        await requestJson(`/api/applications/${state.selectedId}/comments`, {
-          method: "POST",
-          body: JSON.stringify({
-            message: elements.commentInput.value
-          })
-        });
-
-        elements.commentInput.value = "";
-        await loadComments(state.selectedId);
-        showToast("Team-Kommentar gespeichert.");
-      });
-    } catch (error) {
-      showToast(error.message);
-    }
-  });
-
-  elements.searchInput.addEventListener("input", (event) => {
-    clearTimeout(searchTimeoutId);
+  el.fltSearch.addEventListener("input", (event) => {
     state.filters.search = event.target.value;
-
-    searchTimeoutId = setTimeout(() => {
-      loadApplications().catch((error) => showToast(error.message));
-    }, 180);
+    el.mastSearch.value = event.target.value;
+    renderTable();
   });
-
-  elements.filtersForm.addEventListener("change", (event) => {
-    const target = event.target;
-    state.filters[target.name] = target.value;
-    loadApplications().catch((error) => showToast(error.message));
+  el.mastSearch.addEventListener("input", (event) => {
+    state.filters.search = event.target.value;
+    el.fltSearch.value = event.target.value;
+    renderTable();
   });
-
-  elements.resetFiltersButton.addEventListener("click", () => {
-    state.filters = {
-      search: "",
-      municipality: "",
-      protectionStatus: "",
-      workflowStatus: ""
-    };
-    setQuickFilters(["all"]);
-
-    elements.searchInput.value = "";
-    elements.municipalitySelect.value = "";
-    elements.protectionStatusSelect.value = "";
-    elements.workflowStatusSelect.value = "";
-
-    loadApplications().catch((error) => showToast(error.message));
+  el.fltMun.addEventListener("change", (event) => { state.filters.municipality = event.target.value; renderTable(); });
+  el.fltProt.addEventListener("change", (event) => { state.filters.protection = event.target.value; renderTable(); });
+  el.fltWf.addEventListener("change", (event) => { state.filters.workflow = event.target.value; renderTable(); });
+  el.resetFilters.addEventListener("click", () => {
+    state.filters = { search: "", municipality: "", protection: "", workflow: "" };
+    el.fltSearch.value = "";
+    el.mastSearch.value = "";
+    el.fltMun.value = "";
+    el.fltProt.value = "";
+    el.fltWf.value = "";
+    renderTable();
   });
-
-  elements.fontSizeToggleButton.addEventListener("click", () => {
-    state.largeTextEnabled = !state.largeTextEnabled;
-    localStorage.setItem("heimatschutz-large-text", state.largeTextEnabled ? "1" : "0");
-    updateFontSizeUi();
-  });
-
-  elements.themeToggleButton?.addEventListener("click", () => {
-    state.darkModeEnabled = !state.darkModeEnabled;
-    localStorage.setItem("heimatschutz-dark-mode", state.darkModeEnabled ? "1" : "0");
-    localStorage.setItem("hsd-design-dark", state.darkModeEnabled ? "1" : "0");
-    updateThemeUi();
-    window.dispatchEvent(new CustomEvent("heimatschutz-dark-mode-change", {
-      detail: { enabled: state.darkModeEnabled }
-    }));
-  });
-
-  elements.toggleAdminPanelButton.addEventListener("click", () => {
-    if (!isMasterUser()) {
+  el.tbody.addEventListener("click", (event) => {
+    if (event.target.closest("[data-reset-empty]")) {
+      el.resetFilters.click();
       return;
     }
+    const row = event.target.closest("tr[data-id]");
+    if (row) selectItem(row.dataset.id);
+  });
+  el.tbody.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      const row = event.target.closest("tr[data-id]");
+      if (row) selectItem(row.dataset.id);
+    }
+  });
+  $$("th.sortable").forEach((th) => th.addEventListener("click", () => {
+    const key = th.dataset.sort;
+    if (state.sortKey === key) state.sortDir *= -1;
+    else {
+      state.sortKey = key;
+      state.sortDir = 1;
+    }
+    renderTable();
+  }));
 
-    state.adminPanelExpanded = !state.adminPanelExpanded;
-    updateMasterUi();
+  el.syncBtn.addEventListener("click", async () => {
+    el.syncBtn.classList.add("spin");
+    try {
+      await requestJson("/api/sync", { method: "POST" });
+      await refreshAll();
+      toast("Synchronisation abgeschlossen.");
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      el.syncBtn.classList.remove("spin");
+    }
   });
 
-  for (const button of elements.quickFilterButtons) {
-    button.addEventListener("click", () => {
-      toggleQuickFilter(button.dataset.quickFilter);
-      state.items = buildVisibleItems(state.loadedItems);
-      renderApplications();
-    });
+  el.runImport.addEventListener("click", async () => {
+    busy(el.runImport, true, "Import läuft...");
+    try {
+      const payload = await requestJson("/api/sync", { method: "POST" });
+      await refreshAll();
+      toast(payload.message || "Import abgeschlossen.");
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      busy(el.runImport, false);
+    }
+  });
+
+  el.saveBtn.addEventListener("click", async (event) => {
+    event.preventDefault();
+    busy(el.saveBtn, true, "Speichern...");
+    try {
+      await patchSelectedApplication({
+        workflowStatus: el.fWorkflow.value,
+        assignee: el.fAssignee.value,
+        note: el.fNote.value,
+        learnFromDecision: true
+      }, "Entscheidung gespeichert.");
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      busy(el.saveBtn, false);
+    }
+  });
+
+  el.clearBtn.addEventListener("click", async () => {
+    busy(el.clearBtn, true, "Speichern...");
+    try {
+      await patchSelectedApplication({
+        workflowStatus: "cleared",
+        assignee: el.fAssignee.value || state.currentUser?.displayName || "",
+        note: el.fNote.value,
+        learnFromDecision: true
+      }, "Als erledigt markiert.");
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      busy(el.clearBtn, false);
+    }
+  });
+
+  el.commentSubmit.addEventListener("click", async (event) => {
+    event.preventDefault();
+    if (!state.selectedId || !el.commentInput.value.trim()) return;
+    busy(el.commentSubmit, true, "Speichern...");
+    try {
+      await requestJson(`/api/applications/${encodeURIComponent(state.selectedId)}/comments`, {
+        method: "POST",
+        body: { message: el.commentInput.value }
+      });
+      el.commentInput.value = "";
+      await loadComments(state.selectedId);
+      toast("Kommentar gespeichert.");
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      busy(el.commentSubmit, false);
+    }
+  });
+
+  el.nextOpen.addEventListener("click", nextOpen);
+  el.printBtn.addEventListener("click", () => {
+    const item = state.items.find((entry) => entry.id === state.selectedId);
+    if (!item) return;
+    fillPrintArea(item);
+    window.print();
+  });
+
+  el.themeToggle.addEventListener("click", () => {
+    const on = document.body.classList.toggle("dark");
+    el.themeToggle.setAttribute("aria-pressed", String(on));
+    localStorage.setItem("hsa-dark", on ? "1" : "0");
+  });
+  el.fontToggle.addEventListener("click", () => {
+    const on = document.documentElement.classList.toggle("large-text");
+    el.fontToggle.setAttribute("aria-pressed", String(on));
+    localStorage.setItem("hsa-large", on ? "1" : "0");
+  });
+  $$(".nav-item").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
+  $$(".rail-item").forEach((button) => button.addEventListener("click", () => switchPane(button.dataset.pane)));
+  el.srcSearch.addEventListener("input", (event) => {
+    state.sourceSearch = event.target.value;
+    renderSources();
+  });
+  $("#pane-sources .adm-toolbar .tool-btn")?.addEventListener("click", async () => {
+    if (!isMaster()) return;
+    const municipality = window.prompt("Welche Gemeindequelle bearbeiten?", el.srcSearch.value || "");
+    if (!municipality) return;
+    const source = state.municipalitySources.find((entry) =>
+      entry.municipality.toLowerCase() === municipality.trim().toLowerCase()
+    );
+    if (!source) {
+      state.sourceSearch = municipality;
+      el.srcSearch.value = municipality;
+      renderSources();
+      toast("Gemeinde in der Liste auswählen und dort bearbeiten.");
+      return;
+    }
+    try {
+      await editSource(source.id);
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+  el.srcBody.addEventListener("click", async (event) => {
+    const openButton = event.target.closest("[data-source-open]");
+    if (openButton?.dataset.sourceOpen) {
+      window.open(openButton.dataset.sourceOpen, "_blank", "noopener");
+      return;
+    }
+    const editButton = event.target.closest("[data-source-edit]");
+    if (editButton?.dataset.sourceEdit) {
+      try {
+        await editSource(editButton.dataset.sourceEdit);
+      } catch (error) {
+        toast(error.message);
+      }
+    }
+  });
+  $("#pane-keys .tool-btn")?.addEventListener("click", async () => {
+    if (!isMaster()) return;
+    const note = window.prompt("Notiz zum Registrierungsschlüssel", "Neue Einladung");
+    if (note === null) return;
+    try {
+      const key = await requestJson("/api/admin/registration-keys", { method: "POST", body: { note } });
+      state.registrationKeys = [key, ...state.registrationKeys];
+      renderKeys();
+      toast(`Schlüssel erstellt: ${key.keyCode}`);
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+  el.keysBody.addEventListener("click", async (event) => {
+    const resetButton = event.target.closest("[data-user-reset]");
+    if (resetButton) {
+      const password = window.prompt("Neues Passwort setzen (mind. 8 Zeichen)");
+      if (!password) return;
+      try {
+        await requestJson(`/api/admin/users/${encodeURIComponent(resetButton.dataset.userReset)}/password`, {
+          method: "PATCH",
+          body: { password }
+        });
+        toast("Passwort gesetzt.");
+      } catch (error) {
+        toast(error.message);
+      }
+      return;
+    }
+    const deleteButton = event.target.closest("[data-key-delete]");
+    if (deleteButton && window.confirm("Registrierungsschlüssel wirklich löschen?")) {
+      try {
+        await requestJson(`/api/admin/registration-keys/${encodeURIComponent(deleteButton.dataset.keyDelete)}`, { method: "DELETE" });
+        state.registrationKeys = state.registrationKeys.filter((key) => key.id !== deleteButton.dataset.keyDelete);
+        renderKeys();
+        toast("Schlüssel gelöscht.");
+      } catch (error) {
+        toast(error.message);
+      }
+    }
+  });
+}
+
+async function maybeRevealMasterSetup() {
+  try {
+    const payload = await requestJson("/api/auth/master-setup-status", { skipSessionReset: true });
+    if (payload.setupRequired) showAuthPanel("master");
+  } catch {
+    // Login bleibt sichtbar.
   }
+}
 
-  elements.applicationsTableBody.addEventListener("click", (event) => {
-    const row = event.target.closest("tr[data-id]");
-
-    if (!row) {
+async function restoreSession() {
+  await loadAuthConfig();
+  const remembered = localStorage.getItem(rememberedUsernameStorageKey);
+  if (remembered) el.loginUsername.value = remembered;
+  try {
+    const payload = await requestJson("/api/auth/session", { skipSessionReset: true });
+    if (payload.authenticated && payload.user) {
+      showAuthenticated(payload.user);
+      await refreshAll();
       return;
     }
-
-    selectApplication(row.dataset.id, { scrollToDetail: true });
-  });
-
-  elements.applicationsTableBody.addEventListener("keydown", (event) => {
-    const row = event.target.closest("tr[data-id]");
-
-    if (!row || (event.key !== "Enter" && event.key !== " ")) {
-      return;
-    }
-
-    event.preventDefault();
-    selectApplication(row.dataset.id, { scrollToDetail: true });
-  });
-
-  elements.nextOpenButton.addEventListener("click", () => {
-    const nextOpenItem = findNextOpenItem();
-
-    if (!nextOpenItem) {
-      return;
-    }
-
-    selectApplication(nextOpenItem.id, { scrollToDetail: true });
-  });
-
-  elements.detailForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    try {
-      await withBusyState(elements.saveButton, "Speichern...", () =>
-        patchSelectedApplication(
-          {
-            workflowStatus: elements.detailWorkflowStatus.value,
-            assignee: getAssigneeValue(),
-            note: elements.detailNote.value
-          },
-          "Änderungen gespeichert."
-        )
-      );
-    } catch (error) {
-      showToast(error.message);
-    }
-  });
-
-  elements.clearButton.addEventListener("click", async () => {
-    try {
-      await withBusyState(elements.clearButton, "Markieren...", () =>
-        patchSelectedApplication(
-          {
-            workflowStatus: "cleared",
-            assignee: getAssigneeValue(),
-            note: elements.detailNote.value
-          },
-          "Gesuch als erledigt markiert."
-        )
-      );
-    } catch (error) {
-      showToast(error.message);
-    }
-  });
-
+  } catch {
+    // Danach Login anzeigen.
+  }
+  showLoggedOut();
+  await maybeRevealMasterSetup();
 }
 
 async function init() {
-  state.largeTextEnabled = localStorage.getItem("heimatschutz-large-text") === "1";
-  updateFontSizeUi();
-  const storedDarkMode = localStorage.getItem("heimatschutz-dark-mode");
-  state.darkModeEnabled =
-    storedDarkMode === "1" ||
-    (storedDarkMode === null && window.matchMedia?.("(prefers-color-scheme: dark)").matches === true);
-  updateThemeUi();
-  loadRememberedUsername();
-  bindEvents();
-  await loadAuthConfig();
-
-  try {
-    const hasSession = await restoreSession();
-
-    if (hasSession) {
-      await showAuthenticatedApp();
-    } else {
-      await maybeRevealMasterSetup();
-      focusWithoutScroll(elements.loginUsername);
-    }
-  } catch (error) {
-    setLoginError(error.message);
-  }
+  collectElements();
+  wireEvents();
+  if (localStorage.getItem("hsa-dark") === "1") el.themeToggle.click();
+  if (localStorage.getItem("hsa-large") === "1") el.fontToggle.click();
+  await restoreSession();
 }
 
-init();
+document.addEventListener("DOMContentLoaded", () => {
+  init().catch((error) => {
+    console.error(error);
+    showLoggedOut();
+    setMessage(el.loginError, error.message || "Die App konnte nicht geladen werden.");
+  });
+});

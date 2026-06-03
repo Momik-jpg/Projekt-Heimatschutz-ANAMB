@@ -818,8 +818,9 @@ test("master can list seeded municipality sources for all Aargau municipalities"
   assert.equal(aarauSource?.enabled, true);
   assert.ok(merenschwandSource?.sourceUrl.includes("/aktuelles/"));
   assert.equal(merenschwandSource?.enabled, true);
-  assert.equal(auwSource?.enabled, false);
-  assert.match(auwSource?.notes ?? "", /eBau-Seite/i);
+  assert.equal(auwSource?.sourceUrl, "https://www.auw.ch/gemeinde/aktuelles.html/402");
+  assert.equal(auwSource?.enabled, true);
+  assert.match(auwSource?.notes ?? "", /Baugesuchseite/i);
   assert.equal(jonenSource?.enabled, false);
   assert.equal(jonenSource?.sourceUrl, "https://www.jonen.ch");
   assert.equal(muriSource?.enabled, true);
@@ -860,7 +861,7 @@ test("municipality source catalog exposes coverage report, ratings and shared so
       response.payload.report.ratings.D,
     196
   );
-  assert.equal(response.payload.report.totalUniqueSources, 196);
+  assert.ok(response.payload.report.totalUniqueSources >= 196);
   assert.ok(response.payload.sharedSources.length >= 1);
   assert.ok(
     response.payload.sharedSources.some(
@@ -874,11 +875,53 @@ test("municipality source catalog exposes coverage report, ratings and shared so
   );
 
   const aarauCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Aarau");
+  const aarburgCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Aarburg");
+  const abtwilCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Abtwil");
+  const ammerswilCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Ammerswil");
+  const aristauCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Aristau");
+  const arniCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Arni (AG)");
+  const auensteinCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Auenstein");
+  const auwCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Auw");
+  const bremgartenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Bremgarten");
+  const dintikonCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Dintikon");
+  const fislisbachCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Fislisbach");
+  const herznachUekenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Herznach-Ueken");
+  const niederlenzCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Niederlenz");
+  const oberentfeldenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Oberentfelden");
+  const unterkulmCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Unterkulm");
+  const wohlenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Wohlen");
+  const zufikonCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Zufikon");
+  const moerikenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Möriken-Wildegg");
   const zuzgenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Zuzgen");
   assert.ok(aarauCatalogItem);
   assert.equal(aarauCatalogItem.rating, "A");
   assert.ok(Array.isArray(aarauCatalogItem.supplementalSources));
   assert.ok(aarauCatalogItem.supplementalSources.some((source) => source.name === "eBau Aargau"));
+  for (const item of [
+    aarburgCatalogItem,
+    abtwilCatalogItem,
+    aristauCatalogItem,
+    arniCatalogItem,
+    auensteinCatalogItem,
+    auwCatalogItem,
+    bremgartenCatalogItem,
+    dintikonCatalogItem,
+    fislisbachCatalogItem,
+    herznachUekenCatalogItem,
+    niederlenzCatalogItem,
+    oberentfeldenCatalogItem,
+    unterkulmCatalogItem,
+    wohlenCatalogItem,
+    zufikonCatalogItem
+  ]) {
+    assert.ok(item);
+    assert.equal(item.rating, "A");
+  }
+  assert.ok(ammerswilCatalogItem);
+  assert.equal(ammerswilCatalogItem.rating, "C");
+  assert.ok(moerikenCatalogItem);
+  assert.equal(moerikenCatalogItem.rating, "A");
+  assert.equal(moerikenCatalogItem.primarySourceName, "Möriken-Wildegg: direkte Baugesuchseite");
   assert.ok(zuzgenCatalogItem);
   assert.equal(zuzgenCatalogItem.primarySourceName, "eBau Aargau");
 });
@@ -974,9 +1017,9 @@ test("auto-managed municipality sources are refreshed to safer official defaults
     `)
     .get();
 
-  assert.equal(auwSource.source_url, "https://gesuch.rbv-wsw.ch/");
-  assert.equal(auwSource.enabled, 0);
-  assert.match(auwSource.notes, /eBau-Seite/i);
+  assert.equal(auwSource.source_url, "https://www.auw.ch/gemeinde/aktuelles.html/402");
+  assert.equal(auwSource.enabled, 1);
+  assert.match(auwSource.notes, /Baugesuchseite/i);
 
   assert.equal(badenSource.source_url, "https://custom.example.org/baugesuche");
   assert.equal(badenSource.source_token, "secret-token");
@@ -1380,6 +1423,315 @@ test("municipality import hydrates official detail pages and ignores generic arc
     .prepare("SELECT COUNT(*) AS count FROM applications WHERE source_url = 'https://fischbach.example.org/category/baubewilligungen/'")
     .get().count;
   assert.equal(duplicateCategoryCount, 0);
+});
+
+test("municipality import keeps clear Baugesuch without a date for manual review", async (context) => {
+  const syncFetchImpl = async (url) => {
+    if (String(url) === "https://datelos.example.org/baugesuche") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Baugesuche</h1>
+                <article>
+                  <a href="/baugesuch-bg-2026-099/">Baugesuch BG 2026-099</a>
+                </article>
+              </main>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html"
+          }
+        }
+      );
+    }
+
+    if (String(url) === "https://datelos.example.org/baugesuch-bg-2026-099/") {
+      return new Response(
+        `
+          <html>
+            <head>
+              <title>Baugesuch BG 2026-099</title>
+              <meta
+                name="description"
+                content="Bauherrschaft: Sandra Bachmann. Bauobjekt: Neubau Gartenhaus mit Pergola. Lage: Parzelle Nr. 412."
+              />
+            </head>
+            <body>
+              <main>
+                <article>
+                  <p><strong>Bauobjekt:</strong> Neubau Gartenhaus mit Pergola</p>
+                  <p><strong>Lage:</strong> Parzelle Nr. 412</p>
+                </article>
+              </main>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html"
+          }
+        }
+      );
+    }
+
+    throw new Error(`Unexpected municipality sync URL: ${url}`);
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    autoSyncEnabled: true,
+    autoSyncRunOnStart: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Fischbach-Göslikon");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(
+    testServer.baseUrl,
+    `/api/admin/municipality-sources/${source.id}`,
+    {
+      method: "PATCH",
+      headers: {
+        Cookie: masterCookie
+      },
+      body: JSON.stringify({
+        sourceType: "html",
+        digitalStatus: "digital",
+        enabled: true,
+        sourceUrl: "https://datelos.example.org/baugesuche",
+        includePattern: "baubewilligung|baugesuch",
+        excludePattern: "facebook|newsletter",
+        notes: "Baugesuchseite ohne Datum"
+      })
+    }
+  );
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const imported = syncResponse.payload.items[0];
+  assert.equal(imported.municipality, "Fischbach-Göslikon");
+  assert.equal(imported.address, "Parzelle 412");
+  assert.equal(imported.publicationDate, "");
+  assert.equal(imported.deadlineDate, "");
+  assert.equal(imported.protectionStatus, "manual-review");
+  assert.match(imported.automatedAssessment, /von Hand prüfen/i);
+});
+
+test("municipality import reads definition-list publication layouts cleanly", async (context) => {
+  const syncFetchImpl = async (url) => {
+    if (String(url) === "https://dl.example.org/baugesuche") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Baupublikationen</h1>
+                <p>Öffentliche Auflage vom 10. Mai 2026 bis 9. Juni 2026</p>
+                <dl>
+                  <dt>Bauherrschaft</dt>
+                  <dd>Familie Brunner, Lenzburg</dd>
+                  <dt>Bauvorhaben</dt>
+                  <dd>Neubau Doppelgarage mit Vordach</dd>
+                  <dt>Standort</dt>
+                  <dd>Lindenweg 9, Parzelle 233</dd>
+                </dl>
+              </main>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html"
+          }
+        }
+      );
+    }
+
+    throw new Error(`Unexpected municipality sync URL: ${url}`);
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    autoSyncEnabled: true,
+    autoSyncRunOnStart: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Fischbach-Göslikon");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: {
+      Cookie: masterCookie
+    },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://dl.example.org/baugesuche",
+      includePattern: "baugesuch|baubewilligung|bauvorhaben|bauobjekt",
+      excludePattern: "facebook|newsletter",
+      notes: "Definitionslisten-Layout"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const imported = syncResponse.payload.items[0];
+  assert.equal(imported.municipality, "Fischbach-Göslikon");
+  assert.equal(imported.address, "Lindenweg 9");
+  assert.equal(imported.parcel, "233");
+  assert.equal(imported.projectType, "Neubau Doppelgarage mit Vordach");
+  assert.equal(imported.publicationDate, "2026-05-10");
+  assert.equal(imported.deadlineDate, "2026-06-09");
+});
+
+test("municipality import reads bold-label layouts with synonym wording", async (context) => {
+  const syncFetchImpl = async (url) => {
+    if (String(url) === "https://bold.example.org/baugesuche") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Baugesuche</h1>
+                <p>Öffentliche Auflage vom 3. April 2026 bis 3. Mai 2026</p>
+                <p>
+                  <b>Bauherrschaft:</b> Familie Keller, Aarau
+                  <br>
+                  <b>Bauvorhaben:</b> Aufstockung Mehrfamilienhaus
+                  <br>
+                  <b>Standort:</b> Schulstrasse 14, Parzelle 678
+                </p>
+              </main>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html"
+          }
+        }
+      );
+    }
+
+    throw new Error(`Unexpected municipality sync URL: ${url}`);
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    autoSyncEnabled: true,
+    autoSyncRunOnStart: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Fischbach-Göslikon");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: {
+      Cookie: masterCookie
+    },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://bold.example.org/baugesuche",
+      includePattern: "baugesuch|baubewilligung|bauvorhaben|bauobjekt",
+      excludePattern: "facebook|newsletter",
+      notes: "Fettschrift-Layout mit Synonymen"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const imported = syncResponse.payload.items[0];
+  assert.equal(imported.municipality, "Fischbach-Göslikon");
+  assert.equal(imported.address, "Schulstrasse 14");
+  assert.equal(imported.parcel, "678");
+  assert.equal(imported.projectType, "Aufstockung Mehrfamilienhaus");
+  assert.equal(imported.publicationDate, "2026-04-03");
+  assert.equal(imported.deadlineDate, "2026-05-03");
 });
 
 test("municipality import prefers official detail pages over vague list titles", async (context) => {
@@ -3600,6 +3952,1077 @@ test("municipality import auto-discovers the publication page from a homepage-on
   assert.ok(requestedUrls.includes("https://discovery-demo.example.org/baugesuch-bg-2026-014/"));
 });
 
+test("municipality import rediscovers moved publication pages when the configured URL is stale", async (context) => {
+  const requestedUrls = [];
+  const syncFetchImpl = async (url) => {
+    requestedUrls.push(String(url));
+
+    if (String(url) === "https://moving-source.example.org/alte-baugesuche") {
+      return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (
+      String(url) === "https://moving-source.example.org" ||
+      String(url) === "https://moving-source.example.org/"
+    ) {
+      return new Response(
+        `
+          <html>
+            <body>
+              <nav>
+                <a href="/gemeinde">Gemeinde</a>
+                <a href="/kontakt">Kontakt</a>
+              </nav>
+              <main><h1>Startseite</h1></main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://moving-source.example.org/sitemap.xml") {
+      return new Response(
+        `
+          <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <url><loc>https://moving-source.example.org/aktuell/baugesuche</loc></url>
+            <url><loc>https://moving-source.example.org/aktuell/veranstaltungen</loc></url>
+          </urlset>
+        `,
+        { status: 200, headers: { "Content-Type": "application/xml" } }
+      );
+    }
+
+    if (String(url) === "https://moving-source.example.org/sitemap_index.xml") {
+      return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "application/xml" } });
+    }
+
+    if (String(url) === "https://moving-source.example.org/aktuell/baugesuche") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Baugesuche und öffentliche Auflagen</h1>
+                <a href="/aktuell/baugesuch-bg-2026-201">Baugesuch BG 2026-201</a>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://moving-source.example.org/aktuell/baugesuch-bg-2026-201") {
+      return new Response(
+        `
+          <html>
+            <head>
+              <title>Baugesuch BG 2026-201</title>
+              <meta name="description" content="Bauherrschaft: Muster AG, Hauptstrasse 4, 5242 Birr Bauobjekt: Anbau Werkstatt Bauplatz: Hauptstrasse 4, Parzelle Nr. 812">
+              <meta property="article:published_time" content="2026-05-12T08:00:00+01:00">
+            </head>
+            <body>
+              <main>
+                <h1>Baugesuch BG 2026-201</h1>
+                <p>Öffentliche Auflage vom 12. Mai 2026 bis 10. Juni 2026.</p>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url).includes("api3.geo.admin.ch")) {
+      return new Response(
+        JSON.stringify({ results: [{ attrs: { x: 2651000, y: 1252000, label: "Hauptstrasse 4, Birr" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    throw new Error(`Unexpected moved-source sync URL: ${url}`);
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl: syncFetchImpl,
+    geocodeEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: { Cookie: masterCookie }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Birr");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://moving-source.example.org/alte-baugesuche",
+      includePattern: "baugesuch|baubewilligung|publikation",
+      excludePattern: "",
+      notes: "Alte Baugesuchseite"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(syncResponse.payload.items[0].municipality, "Birr");
+  assert.equal(syncResponse.payload.items[0].sourceUrl, "https://moving-source.example.org/aktuell/baugesuch-bg-2026-201");
+  assert.ok(requestedUrls.includes("https://moving-source.example.org/"));
+  assert.ok(requestedUrls.includes("https://moving-source.example.org/sitemap.xml"));
+  assert.ok(requestedUrls.includes("https://moving-source.example.org/aktuell/baugesuche"));
+});
+
+test("municipality import uses the municipal site search when publications are only searchable", async (context) => {
+  const requestedUrls = [];
+  const syncFetchImpl = async (url, options = {}) => {
+    requestedUrls.push(`${options.method ?? "GET"} ${String(url)}`);
+
+    if (String(url) === "https://search-source.example.org/alte-baugesuche") {
+      return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (
+      String(url) === "https://search-source.example.org" ||
+      String(url) === "https://search-source.example.org/"
+    ) {
+      return new Response(
+        "<html><body><main><h1>Gemeinde</h1><a href=\"/verwaltung\">Verwaltung</a></main></body></html>",
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://search-source.example.org/suche/") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <form method="post" id="tx_indexedsearch" action="/suche/?tx_indexedsearch_pi2%5Baction%5D=search&amp;tx_indexedsearch_pi2%5Bcontroller%5D=Search">
+                <input type="hidden" name="tx_indexedsearch_pi2[search][numberOfResults]" value="10" />
+                <input type="text" name="tx_indexedsearch_pi2[search][sword]" value="" />
+                <input type="submit" name="tx_indexedsearch_pi2[search][submitButton]" value="Suchen" />
+              </form>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://search-source.example.org/suche/?tx_indexedsearch_pi2%5Baction%5D=search&tx_indexedsearch_pi2%5Bcontroller%5D=Search") {
+      const bodyText = String(options.body ?? "");
+      assert.match(bodyText, /Baugesuch/i);
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <p>Anzeige der Ergebnisse 1 bis 10 von insgesamt 28.</p>
+                <article>
+                  <a href="/aktuelles/amtliche-publikationen/">Amtliche Publikationen / Limmatwelle</a>
+                  <p>Alle amtlichen Publikationen und Baugesuche.</p>
+                </article>
+                <article>
+                  <a href="/aktuelles/aktuelles/news-detail/artikel/amtliche-publikation-baugesuch-bg-2026-030">Amtliche Publikation - Baugesuch BG 2026-030</a>
+                </article>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://search-source.example.org/aktuelles/amtliche-publikationen/") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Amtliche Publikationen</h1>
+                <h2>Baugesuche</h2>
+                <a href="/aktuelles/aktuelles/news-detail/artikel/amtliche-publikation-baugesuch-bg-2026-030">Baugesuch BG 2026-030</a>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://search-source.example.org/aktuelles/aktuelles/news-detail/artikel/amtliche-publikation-baugesuch-bg-2026-030") {
+      return new Response(
+        `
+          <html>
+            <head>
+              <title>Baugesuch BG 2026-030</title>
+              <meta name="description" content="Bauherrschaft: Beispiel AG, Dorfstrasse 8, 5242 Birr Bauobjekt: Umbau Wohnhaus Bauplatz: Dorfstrasse 8, Parzelle Nr. 812">
+              <meta property="article:published_time" content="2026-05-18T08:00:00+01:00">
+            </head>
+            <body>
+              <main>
+                <h1>Baugesuch BG 2026-030</h1>
+                <p>Öffentliche Auflage vom 18. Mai 2026 bis 17. Juni 2026.</p>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url).includes("api3.geo.admin.ch")) {
+      return new Response(
+        JSON.stringify({ results: [{ attrs: { x: 2651000, y: 1252000, label: "Dorfstrasse 8, Birr" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (String(url).endsWith("/sitemap.xml") || String(url).endsWith("/sitemap_index.xml")) {
+      return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "application/xml" } });
+    }
+
+    throw new Error(`Unexpected search-source sync URL: ${url}`);
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl: syncFetchImpl,
+    geocodeEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: { Cookie: masterCookie }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Birr");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://search-source.example.org/alte-baugesuche",
+      includePattern: "baugesuch|baubewilligung|publikation",
+      excludePattern: "",
+      notes: "Alte Baugesuchseite"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(syncResponse.payload.items[0].municipality, "Birr");
+  assert.equal(
+    syncResponse.payload.items[0].sourceUrl,
+    "https://search-source.example.org/aktuelles/aktuelles/news-detail/artikel/amtliche-publikation-baugesuch-bg-2026-030"
+  );
+  assert.ok(requestedUrls.includes("GET https://search-source.example.org/suche/"));
+  assert.ok(
+    requestedUrls.some((entry) =>
+      entry.startsWith(
+        "POST https://search-source.example.org/suche/?tx_indexedsearch_pi2%5Baction%5D=search"
+      )
+    )
+  );
+});
+
+test("municipality import tries simple municipal search query urls when no search form is visible", async (context) => {
+  const requestedUrls = [];
+  const syncFetchImpl = async (url, options = {}) => {
+    requestedUrls.push(`${options.method ?? "GET"} ${String(url)}`);
+
+    if (String(url) === "https://query-search.example.org/alte-baugesuche") {
+      return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (
+      String(url) === "https://query-search.example.org" ||
+      String(url) === "https://query-search.example.org/"
+    ) {
+      return new Response("<html><body><main>Startseite ohne Baugesuch-Link</main></body></html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" }
+      });
+    }
+
+    if (String(url) === "https://query-search.example.org/suche/") {
+      return new Response("<html><body><main>Suche</main></body></html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" }
+      });
+    }
+
+    if (String(url) === "https://query-search.example.org/suche/?q=Baugesuche") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <p>Anzeige der Ergebnisse 1 bis 10 von insgesamt 12.</p>
+                <article>
+                  <a href="/news/erteilte-baubewilligung-bg-2026-999">Erteilte Baubewilligung BG 2026-999</a>
+                  <p>Archivmeldung zu einem bereits abgeschlossenen Baugesuch.</p>
+                </article>
+                <article>
+                  <a href="/publikationen">Alle amtlichen Publikationen</a>
+                  <p>Baugesuche und öffentliche Auflagen werden hier gesammelt.</p>
+                </article>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://query-search.example.org/publikationen") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Amtliche Publikationen</h1>
+                <a href="/news/baugesuch-bg-2026-041">Baugesuch BG 2026-041</a>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://query-search.example.org/news/baugesuch-bg-2026-041") {
+      return new Response(
+        `
+          <html>
+            <head>
+              <title>Baugesuch BG 2026-041</title>
+              <meta name="description" content="Bauherrschaft: Beispiel AG Bauobjekt: Ausbau Dachgeschoss Bauplatz: Schulstrasse 2, Parzelle Nr. 801">
+              <meta property="article:published_time" content="2026-05-21T08:00:00+01:00">
+            </head>
+            <body><main><p>Öffentliche Auflage vom 21. Mai 2026 bis 20. Juni 2026.</p></main></body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url).includes("api3.geo.admin.ch")) {
+      return new Response(
+        JSON.stringify({ results: [{ attrs: { x: 2651000, y: 1252000, label: "Schulstrasse 2, Birr" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (String(url).endsWith("/sitemap.xml") || String(url).endsWith("/sitemap_index.xml")) {
+      return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "application/xml" } });
+    }
+
+    return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "text/html" } });
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl: syncFetchImpl,
+    geocodeEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: { Cookie: masterCookie }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Birr");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://query-search.example.org/alte-baugesuche",
+      includePattern: "baugesuch|baubewilligung|publikation",
+      excludePattern: "",
+      notes: "Alte Baugesuchseite"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(syncResponse.payload.items[0].sourceUrl, "https://query-search.example.org/news/baugesuch-bg-2026-041");
+  assert.ok(requestedUrls.includes("GET https://query-search.example.org/suche/?q=Baugesuche"));
+  assert.ok(requestedUrls.includes("GET https://query-search.example.org/publikationen"));
+  assert.ok(!requestedUrls.some((entry) => entry.includes("erteilte-baubewilligung")));
+});
+
+test("municipality import uses OpenSearch descriptions when the search form is hidden", async (context) => {
+  const requestedUrls = [];
+  const syncFetchImpl = async (url) => {
+    requestedUrls.push(String(url));
+
+    if (String(url) === "https://opensearch-source.example.org/alte-baugesuche") {
+      return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (
+      String(url) === "https://opensearch-source.example.org" ||
+      String(url) === "https://opensearch-source.example.org/"
+    ) {
+      return new Response(
+        `
+          <html>
+            <head>
+              <link rel="search" type="application/opensearchdescription+xml" href="/opensearch.xml" />
+            </head>
+            <body><main><h1>Gemeinde</h1></main></body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://opensearch-source.example.org/opensearch.xml") {
+      return new Response(
+        `
+          <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+            <Url type="text/html" template="https://opensearch-source.example.org/suche?search={searchTerms}" />
+          </OpenSearchDescription>
+        `,
+        { status: 200, headers: { "Content-Type": "application/opensearchdescription+xml" } }
+      );
+    }
+
+    if (String(url) === "https://opensearch-source.example.org/suche?search=Baugesuche") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <p>Anzeige der Ergebnisse 1 bis 10 von insgesamt 14.</p>
+                <article>
+                  <a href="/amtliche-publikationen">Amtliche Publikationen</a>
+                  <p>Baugesuche und öffentliche Auflagen werden hier gesammelt.</p>
+                </article>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://opensearch-source.example.org/amtliche-publikationen") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Amtliche Publikationen</h1>
+                <h2>Baugesuche</h2>
+                <a href="/amtliche-publikation-baugesuch-bg-2026-052">Baugesuch BG 2026-052</a>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://opensearch-source.example.org/amtliche-publikation-baugesuch-bg-2026-052") {
+      return new Response(
+        `
+          <html>
+            <head>
+              <title>Baugesuch BG 2026-052</title>
+              <meta name="description" content="Bauherrschaft: Beispiel AG Bauobjekt: Umbau Werkstatt Bauplatz: Dorfstrasse 6, Parzelle Nr. 802">
+              <meta property="article:published_time" content="2026-05-22T08:00:00+01:00">
+            </head>
+            <body><main><p>Öffentliche Auflage vom 22. Mai 2026 bis 21. Juni 2026.</p></main></body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url).includes("api3.geo.admin.ch")) {
+      return new Response(
+        JSON.stringify({ results: [{ attrs: { x: 2651000, y: 1252000, label: "Dorfstrasse 6, Birr" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "text/html" } });
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl: syncFetchImpl,
+    geocodeEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: { Cookie: masterCookie }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Birr");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://opensearch-source.example.org/alte-baugesuche",
+      includePattern: "baugesuch|baubewilligung|publikation",
+      excludePattern: "",
+      notes: "Alte Baugesuchseite"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(
+    syncResponse.payload.items[0].sourceUrl,
+    "https://opensearch-source.example.org/amtliche-publikation-baugesuch-bg-2026-052"
+  );
+  assert.ok(requestedUrls.includes("https://opensearch-source.example.org/opensearch.xml"));
+  assert.ok(requestedUrls.includes("https://opensearch-source.example.org/suche?search=Baugesuche"));
+});
+
+test("municipality discovery rejects path-only Baugesuch pages that render generic content", async (context) => {
+  const requestedUrls = [];
+  const syncFetchImpl = async (url) => {
+    requestedUrls.push(String(url));
+
+    if (String(url) === "https://path-only-source.example.org/alte-baugesuche") {
+      return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (
+      String(url) === "https://path-only-source.example.org" ||
+      String(url) === "https://path-only-source.example.org/"
+    ) {
+      return new Response("<html><body><main><h1>Willkommen</h1><p>Kontakt und Verwaltung.</p></main></body></html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" }
+      });
+    }
+
+    if (String(url) === "https://path-only-source.example.org/baugesuche") {
+      return new Response("<html><body><main><h1>Willkommen</h1><p>Kontakt und Verwaltung.</p></main></body></html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" }
+      });
+    }
+
+    if (String(url) === "https://path-only-source.example.org/amtlichepublikationen") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Amtliche Publikationen</h1>
+                <h2>Baugesuche</h2>
+                <a href="/publikation-baugesuch-bg-2026-061">Baugesuch BG 2026-061</a>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://path-only-source.example.org/publikation-baugesuch-bg-2026-061") {
+      return new Response(
+        `
+          <html>
+            <head>
+              <title>Baugesuch BG 2026-061</title>
+              <meta name="description" content="Bauherrschaft: Beispiel AG Bauobjekt: Ersatzneubau Garage Bauplatz: Bahnhofstrasse 10, Parzelle Nr. 803">
+              <meta property="article:published_time" content="2026-05-25T08:00:00+01:00">
+            </head>
+            <body><main><p>Öffentliche Auflage vom 25. Mai 2026 bis 24. Juni 2026.</p></main></body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url).includes("api3.geo.admin.ch")) {
+      return new Response(
+        JSON.stringify({ results: [{ attrs: { x: 2651000, y: 1252000, label: "Bahnhofstrasse 10, Birr" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "text/html" } });
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl: syncFetchImpl,
+    geocodeEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: { Cookie: masterCookie }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Birr");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://path-only-source.example.org/alte-baugesuche",
+      includePattern: "baugesuch|baubewilligung|publikation",
+      excludePattern: "",
+      notes: "Alte Baugesuchseite"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(
+    syncResponse.payload.items[0].sourceUrl,
+    "https://path-only-source.example.org/publikation-baugesuch-bg-2026-061"
+  );
+  assert.ok(requestedUrls.includes("https://path-only-source.example.org/baugesuche"));
+  assert.ok(requestedUrls.includes("https://path-only-source.example.org/amtlichepublikationen"));
+});
+
+test("municipality import rejects generic search-result pages without concrete Baugesuch details", async (context) => {
+  const syncFetchImpl = async (url) => {
+    if (String(url) === "https://niederwil.example.org/suche?query=baugesuch") {
+      return new Response(
+        `
+          <html>
+            <head><title>Suchergebnisse | Gemeinde Niederwil AG</title></head>
+            <body>
+              <main>
+                <h1>Suchergebnisse</h1>
+                <p>Webseite der Gemeinde Niederwil AG. Hauptstrasse 4, 5524 Niederwil.</p>
+                <p>Ihre Suche nach Baugesuch lieferte allgemeine Seiten der Gemeindeverwaltung.</p>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "text/html" } });
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: { Cookie: masterCookie }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Niederwil");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://niederwil.example.org/suche?query=baugesuch",
+      includePattern: "baugesuch|baubewilligung|publikation",
+      excludePattern: "",
+      notes: "Suchseite ohne konkrete Treffer"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 0);
+  assert.equal(syncResponse.payload.updatedCount, 0);
+});
+
+test("municipality import rejects bulletin and planning pages without pending Baugesuch signal", async (context) => {
+  const syncFetchImpl = async (url) => {
+    if (String(url) === "https://oberentfelden.example.org/mitteilungsblatt") {
+      return new Response(
+        `
+          <html>
+            <head><title>Mitteilungsblatt Gemeinde Oberentfelden</title></head>
+            <body>
+              <main>
+                <h1>Mitteilungsblatt</h1>
+                <p>Im Februar 2026. Infoblatt bezüglich Elektronetz-Ausbau. Dorfstrasse 7, Oberentfelden.</p>
+                <p>Archivtext mit dem Stichwort Baugesuch, aber ohne konkrete öffentliche Auflage.</p>
+                <p>Mitteilung vom 17.02.2026, Gemeinderat und Verwaltung.</p>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://oberrohrdorf.example.org/nutzungsplanung") {
+      return new Response(
+        `
+          <html>
+            <head><title>Familiengartenzone Staretschwil</title></head>
+            <body>
+              <main>
+                <h1>Öffentliche Auflage Nutzungsplanung</h1>
+                <p>KLP Familiengartenzone Staretschwil. Änderungen der BNO, Vorprüfungsbericht vom 10.07.2025.</p>
+                <p>Parzelle 199, Mitwirkung und Genehmigung.</p>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://auenstein.example.org/eleg-plangenehmigung") {
+      return new Response(
+        `
+          <html>
+            <head><title>Ordentliches Plangenehmigungsverfahren nach Elektrizitätsgesetz</title></head>
+            <body>
+              <main>
+                <h1>Ordentliches Plangenehmigungsverfahren nach Elektrizitätsgesetz (EleG)</h1>
+                <p>Betroffene Gemeinden: Auenstein. Parzelle 721. Öffentliche Auflage bis 10.06.2026.</p>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "text/html" } });
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: { Cookie: masterCookie }
+  });
+  const oberentfelden = sourcesResponse.payload.items.find((item) => item.municipality === "Oberentfelden");
+  const oberrohrdorf = sourcesResponse.payload.items.find((item) => item.municipality === "Oberrohrdorf");
+  const auenstein = sourcesResponse.payload.items.find((item) => item.municipality === "Auenstein");
+  assert.ok(oberentfelden);
+  assert.ok(oberrohrdorf);
+  assert.ok(auenstein);
+
+  for (const [source, sourceUrl] of [
+    [oberentfelden, "https://oberentfelden.example.org/mitteilungsblatt"],
+    [oberrohrdorf, "https://oberrohrdorf.example.org/nutzungsplanung"],
+    [auenstein, "https://auenstein.example.org/eleg-plangenehmigung"]
+  ]) {
+    const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+      method: "PATCH",
+      headers: { Cookie: masterCookie },
+      body: JSON.stringify({
+        sourceType: "html",
+        digitalStatus: "digital",
+        enabled: true,
+        sourceUrl,
+        includePattern: "baugesuch|baubewilligung|publikation|auflage",
+        excludePattern: "",
+        notes: "Nicht-Baugesuch-Seite"
+      })
+    });
+    assert.equal(saveResponse.status, 200);
+  }
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 0);
+  assert.equal(syncResponse.payload.updatedCount, 0);
+});
+
+test("municipality import rejects generic publication routes and Baugesuch form templates", async (context) => {
+  const syncFetchImpl = async (url) => {
+    if (String(url) === "https://wohlen.example.org/_rtr/beschluesse") {
+      return new Response(
+        `
+          <html>
+            <head><title>Beschluesse und Reglemente | Gemeinde Wohlen</title></head>
+            <body>
+              <main>
+                <h1>Publikationen der Politik und Verwaltung</h1>
+                <p>Ab Mitte Februar 2018 finden Sie hier Beschluesse, Reglemente und weitere Publikationen.</p>
+                <p>Die Suche enthaelt auch Treffer zum Stichwort Baugesuch.</p>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://killwangen.example.org/baugesuche") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Bauverwaltung</h1>
+                <a href="/docs/Formular_Baugesuch_Killwangen_ausfuellbar.pdf">Formular Baugesuch</a>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://killwangen.example.org/docs/Formular_Baugesuch_Killwangen_ausfuellbar.pdf") {
+      return new Response(new Uint8Array([37, 80, 68, 70]), {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" }
+      });
+    }
+
+    if (String(url) === "https://zufikon.example.org/baugesuche") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Baugesuche</h1>
+                <a href="/src/pdf_bt_bg_260504.pdf">Baugesuch 06.05.2026 - 05.06.2026</a>
+              </main>
+            </body>
+          </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    if (String(url) === "https://zufikon.example.org/src/pdf_bt_bg_260504.pdf") {
+      return new Response(new Uint8Array([37, 80, 68, 70]), {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" }
+      });
+    }
+
+    if (String(url) === "https://menziken.example.org/Baugesuchumschlag_2023.pdf") {
+      return new Response(new Uint8Array([37, 80, 68, 70]), {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" }
+      });
+    }
+
+    return new Response("Nicht gefunden", { status: 404, headers: { "Content-Type": "text/html" } });
+  };
+
+  const pdfTextExtractImpl = async (_buffer, { resolvedUrl } = {}) => {
+    if (String(resolvedUrl).includes("pdf_bt_bg_260504")) {
+      return "Baugesuch 06.05.2026 - 05.06.2026";
+    }
+
+    if (String(resolvedUrl).includes("Baugesuchumschlag_2023")) {
+      return "Print To PDF 2023. Gesuchsteller Max Muster, Hauptstrasse 1. Einsprachfrist 10.06.2026.";
+    }
+
+    return "Gesuchsteller Thomas Gretener, Bahnhofstrasse 1. Einsprachfrist 10.06.2026.";
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    pdfTextExtractImpl,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: { Cookie: masterCookie }
+  });
+  const wohlen = sourcesResponse.payload.items.find((item) => item.municipality === "Wohlen");
+  const killwangen = sourcesResponse.payload.items.find((item) => item.municipality === "Killwangen");
+  const zufikon = sourcesResponse.payload.items.find((item) => item.municipality === "Zufikon");
+  const menziken = sourcesResponse.payload.items.find((item) => item.municipality === "Menziken");
+  assert.ok(wohlen);
+  assert.ok(killwangen);
+  assert.ok(zufikon);
+  assert.ok(menziken);
+
+  for (const [source, sourceUrl] of [
+    [wohlen, "https://wohlen.example.org/_rtr/beschluesse"],
+    [killwangen, "https://killwangen.example.org/baugesuche"],
+    [zufikon, "https://zufikon.example.org/baugesuche"],
+    [menziken, "https://menziken.example.org/Baugesuchumschlag_2023.pdf"]
+  ]) {
+    const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+      method: "PATCH",
+      headers: { Cookie: masterCookie },
+      body: JSON.stringify({
+        sourceType: source === menziken ? "pdf" : "html",
+        digitalStatus: "digital",
+        enabled: true,
+        sourceUrl,
+        includePattern: "baugesuch|baubewilligung|publikation|auflage",
+        excludePattern: "",
+        notes: "Allgemeine Publikation oder Formularvorlage"
+      })
+    });
+    assert.equal(saveResponse.status, 200);
+  }
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 0);
+  assert.equal(syncResponse.payload.updatedCount, 0);
+});
+
 test("Amtsblatt source scrapes canton-wide Baugesuche and tags the correct municipality", async (context) => {
   const requestedUrls = [];
   const listingPage = `
@@ -4427,6 +5850,90 @@ test("application updates persist workflow and note", async (context) => {
     }
   });
   assert.equal(detailResponse.payload.note, "Automatisch freigegeben.");
+});
+
+test("confirmed decisions train future Baugesuch recognition", async (context) => {
+  const syncFetchImpl = async () =>
+    createJsonResponse({
+      items: [
+        {
+          id: "BG-LEARN-001",
+          source: "API",
+          sourceReference: "LEARN-001",
+          sourceUrl: "https://api.example.org/learned/1",
+          municipality: "Baden",
+          address: "Mellingerstrasse 7",
+          parcel: "1189",
+          publicationDate: dateOnlyDaysFromNow(-1),
+          deadlineDate: dateOnlyDaysFromNow(14),
+          projectType: "Fenstersanierung",
+          description: "Ersatz der Fensterfront mit neuen Holz-Metall-Fenstern.",
+          protectionStatus: "manual-review",
+          agisMatch: "Noch nicht eindeutig zugeordnet",
+          agisLayers: [],
+          ambiguousAddress: true
+        }
+      ]
+    });
+
+  const testServer = createTestServer({
+    syncSourceUrl: "https://api.example.org/learned.json",
+    syncFetchImpl,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const cookie = await login(testServer.baseUrl);
+  const patchResponse = await requestJson(testServer.baseUrl, "/api/applications/BG-2026-002", {
+    method: "PATCH",
+    headers: {
+      Cookie: cookie
+    },
+    body: JSON.stringify({
+      workflowStatus: "cleared",
+      assignee: "QA Team",
+      note: "Lernsignal bestätigt.",
+      learnFromDecision: true
+    })
+  });
+
+  assert.equal(patchResponse.status, 200);
+
+  const dashboardResponse = await requestJson(testServer.baseUrl, "/api/dashboard", {
+    headers: {
+      Cookie: cookie
+    }
+  });
+  assert.ok(dashboardResponse.payload.learningSummary.totalRules >= 1);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: cookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const importedItem = syncResponse.payload.items.find((item) => item.id === "BG-LEARN-001");
+  assert.ok(importedItem);
+  assert.equal(importedItem.protectionStatus, "no-hit");
+  assert.equal(importedItem.agisMatch, "Kein Schutztreffer");
+  assert.match(importedItem.automatedAssessment, /Lernregel/i);
+
+  const detailResponse = await requestJson(testServer.baseUrl, "/api/applications/BG-LEARN-001", {
+    headers: {
+      Cookie: cookie
+    }
+  });
+
+  assert.equal(detailResponse.status, 200);
+  assert.equal(detailResponse.payload.protectionStatus, "no-hit");
+  assert.equal(detailResponse.payload.ambiguousAddress, false);
 });
 
 test("team comments can be stored and read for an application", async (context) => {

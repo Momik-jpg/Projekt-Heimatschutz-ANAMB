@@ -175,6 +175,25 @@ const schema = `
     FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS application_learning_rules (
+    id TEXT PRIMARY KEY,
+    municipality_key TEXT NOT NULL,
+    municipality TEXT NOT NULL,
+    address_signature TEXT NOT NULL DEFAULT '',
+    project_signature TEXT NOT NULL DEFAULT '',
+    protection_status TEXT NOT NULL,
+    agis_match TEXT NOT NULL DEFAULT '',
+    agis_layers TEXT NOT NULL DEFAULT '[]',
+    automated_assessment TEXT NOT NULL DEFAULT '',
+    confidence REAL NOT NULL DEFAULT 0.82,
+    match_count INTEGER NOT NULL DEFAULT 1,
+    created_from_application_id TEXT NOT NULL DEFAULT '',
+    created_by_user_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (municipality_key, address_signature, project_signature)
+  );
+
   CREATE TABLE IF NOT EXISTS municipality_sources (
     id TEXT PRIMARY KEY,
     municipality TEXT NOT NULL UNIQUE,
@@ -256,6 +275,8 @@ const schema = `
   CREATE INDEX IF NOT EXISTS idx_sync_jobs_next_run_at ON sync_jobs(next_run_at);
   CREATE INDEX IF NOT EXISTS idx_app_settings_updated_at ON app_settings(updated_at);
   CREATE INDEX IF NOT EXISTS idx_import_notifications_created_at ON import_notifications(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_application_learning_rules_municipality ON application_learning_rules(municipality_key, confidence DESC);
+  CREATE INDEX IF NOT EXISTS idx_application_learning_rules_updated ON application_learning_rules(updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_municipality_sources_enabled ON municipality_sources(enabled, municipality);
   CREATE INDEX IF NOT EXISTS idx_publication_sources_shared ON publication_sources(is_shared, name);
   CREATE INDEX IF NOT EXISTS idx_municipality_source_links_municipality ON municipality_source_links(municipality_id, relation_type);
@@ -777,6 +798,109 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
         OR address LIKE 'Erteilte Baubewilligungen%'
         OR project_type IN ('RSS', 'Archiv', 'Baubewilligungen', 'Nicht importieren')
         OR project_type LIKE 'Erteilte Baubewilligungen%'
+      );
+
+    DELETE FROM applications
+    WHERE source = 'Gemeinde-Webseite'
+      AND workflow_status = 'new'
+      AND IFNULL(assignee, '') = ''
+      AND IFNULL(note, '') = ''
+      AND (
+        source_url LIKE '%/suche%'
+        OR source_url LIKE '%/search%'
+        OR source_url LIKE '%/_rtr/%'
+        OR source_url LIKE '%Vorpruefungsbericht%'
+        OR source_url LIKE '%Vorprüfungsbericht%'
+        OR source_url LIKE '%Nutzungsplanung%'
+        OR source_url LIKE '%Familiengartenzone%'
+        OR source_url LIKE '%Baugesuchumschlag%'
+        OR source_url LIKE '%Formular_Baugesuch%'
+        OR source_url LIKE '%formular%baugesuch%'
+        OR source_url LIKE '%OnlineSchalter%Bauverwaltung%'
+        OR source_url LIKE '%Mitteilungsblatt%'
+        OR source_url LIKE '%mitteilungsblatt%'
+        OR source_url LIKE '%Infoblatt%'
+        OR source_url LIKE '%infoblatt%'
+        OR source_url LIKE '%Katasterplan%'
+        OR source_url LIKE '%Katasterplankopie%'
+        OR source_url LIKE '%Situationsplan%'
+        OR address LIKE 'Im Januar 20%'
+        OR address LIKE 'Im Februar 20%'
+        OR address LIKE 'Im März 20%'
+        OR address LIKE 'Im April 20%'
+        OR address LIKE 'Im Mai 20%'
+        OR address LIKE 'Im Juni 20%'
+        OR address LIKE 'Im Juli 20%'
+        OR address LIKE 'Im August 20%'
+        OR address LIKE 'Im September 20%'
+        OR address LIKE 'Im Oktober 20%'
+        OR address LIKE 'Im November 20%'
+        OR address LIKE 'Im Dezember 20%'
+        OR address LIKE 'Ab Anfang Januar 20%'
+        OR address LIKE 'Ab Anfang Februar 20%'
+        OR address LIKE 'Ab Anfang März 20%'
+        OR address LIKE 'Ab Anfang April 20%'
+        OR address LIKE 'Ab Anfang Mai 20%'
+        OR address LIKE 'Ab Anfang Juni 20%'
+        OR address LIKE 'Ab Anfang Juli 20%'
+        OR address LIKE 'Ab Anfang August 20%'
+        OR address LIKE 'Ab Anfang September 20%'
+        OR address LIKE 'Ab Anfang Oktober 20%'
+        OR address LIKE 'Ab Anfang November 20%'
+        OR address LIKE 'Ab Anfang Dezember 20%'
+        OR address LIKE 'Ab Mitte Januar 20%'
+        OR address LIKE 'Ab Mitte Februar 20%'
+        OR address LIKE 'Ab Mitte März 20%'
+        OR address LIKE 'Ab Mitte April 20%'
+        OR address LIKE 'Ab Mitte Mai 20%'
+        OR address LIKE 'Ab Mitte Juni 20%'
+        OR address LIKE 'Ab Mitte Juli 20%'
+        OR address LIKE 'Ab Mitte August 20%'
+        OR address LIKE 'Ab Mitte September 20%'
+        OR address LIKE 'Ab Mitte Oktober 20%'
+        OR address LIKE 'Ab Mitte November 20%'
+        OR address LIKE 'Ab Mitte Dezember 20%'
+        OR address LIKE 'Ab Ende Januar 20%'
+        OR address LIKE 'Ab Ende Februar 20%'
+        OR address LIKE 'Ab Ende März 20%'
+        OR address LIKE 'Ab Ende April 20%'
+        OR address LIKE 'Ab Ende Mai 20%'
+        OR address LIKE 'Ab Ende Juni 20%'
+        OR address LIKE 'Ab Ende Juli 20%'
+        OR address LIKE 'Ab Ende August 20%'
+        OR address LIKE 'Ab Ende September 20%'
+        OR address LIKE 'Ab Ende Oktober 20%'
+        OR address LIKE 'Ab Ende November 20%'
+        OR address LIKE 'Ab Ende Dezember 20%'
+        OR address LIKE 'vom %.% bis %.%'
+        OR address LIKE 'vom %. Januar 20% bis %. Januar 20%'
+        OR address LIKE 'vom %. Februar 20% bis %. Februar 20%'
+        OR address LIKE 'vom %. März 20% bis %. März 20%'
+        OR address LIKE 'vom %. April 20% bis %. April 20%'
+        OR address LIKE 'vom %. Mai 20% bis %. Mai 20%'
+        OR address LIKE 'vom %. Juni 20% bis %. Juni 20%'
+        OR address LIKE 'vom %. Juli 20% bis %. Juli 20%'
+        OR address LIKE 'vom %. August 20% bis %. August 20%'
+        OR address LIKE 'vom %. September 20% bis %. September 20%'
+        OR address LIKE 'vom %. Oktober 20% bis %. Oktober 20%'
+        OR address LIKE 'vom %. November 20% bis %. November 20%'
+        OR address LIKE 'vom %. Dezember 20% bis %. Dezember 20%'
+        OR address LIKE 'Pdf%Bg%'
+        OR address LIKE '%Mitteilungsblatt%'
+        OR project_type = '2'
+        OR project_type LIKE '%Suchergebnisse%'
+        OR project_type LIKE '%Mitteilungsblatt%'
+        OR project_type LIKE '%Infoblatt%'
+        OR project_type LIKE '%Plangenehmigungsverfahren%'
+        OR project_type LIKE '%Elektrizitätsgesetz%'
+        OR project_type LIKE '%Elektrizitaetsgesetz%'
+        OR project_type LIKE '%EleG%'
+        OR project_type LIKE '%Familiengartenzone%'
+        OR project_type LIKE '%Vorprüfungsbericht%'
+        OR project_type LIKE '%Nutzungsplanung%'
+        OR project_type LIKE '%Mitwirkung%'
+        OR project_type LIKE '%Genehmigung%'
+        OR project_type LIKE '%Gemeinde Oberentfelden%'
       );
 
     DELETE FROM municipality_source_links

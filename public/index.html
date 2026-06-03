@@ -1,860 +1,446 @@
 <!doctype html>
 <html lang="de">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
-    <title>Heimatschutz Aargau</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;450;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <link rel="stylesheet" href="/styles.css?v=10">
-    <link rel="stylesheet" href="/theme-lab.css?v=25">
-    <script src="/theme-lab.js?v=25" defer></script>
-  </head>
-  <body>
-    <section id="authShell" class="auth-shell">
-      <div class="auth-backdrop"></div>
-      <section class="auth-card" aria-labelledby="loginTitle">
-        <div class="auth-copy">
-          <div class="brand-lockup">
-            <span class="brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 64 64" role="img" aria-label="Heimatschutz Aargau Logo">
-                <path d="M16 31.5 32 17l16 14.5" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M20 30.5 32 20l12 10.5V45a2 2 0 0 1-2 2H22a2 2 0 0 1-2-2V30.5Z" fill="currentColor" opacity="0.92"/>
-                <rect x="28.5" y="35" width="7" height="12" rx="2" fill="#fff"/>
-              </svg>
-            </span>
-            <span class="brand-word">Heimatschutz <strong>Aargau</strong></span>
-          </div>
-          <p class="eyebrow">Interner Zugang</p>
-          <h1 id="loginTitle">Anmelden und gemeinsam arbeiten</h1>
-          <p class="lead">
-            Diese Anwendung ist für das interne Team. Melden Sie sich an, um Baugesuche zu prüfen und Notizen zu teilen.
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Heimatschutz Aargau — Arbeitsplatz</title>
+  <link rel="icon" href="wappen.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="redesign.css">
+</head>
+<body>
+  <section id="authShell" class="auth-shell hidden" aria-labelledby="loginTitle">
+    <div class="auth-card">
+      <div class="auth-copy">
+        <span class="brand auth-brand">
+          <img class="wappen" src="wappen.svg" alt="Wappen Kanton Aargau">
+          <span class="word"><b>Heimatschutz Aargau</b><span>Interner Arbeitsplatz Denkmalpflege</span></span>
+        </span>
+        <p class="auth-eyebrow">Geschützter Zugang</p>
+        <h1 id="loginTitle">Anmelden und produktiv arbeiten</h1>
+        <p>Nach dem Login werden Baugesuche, Teamnotizen, Importe und Gemeindequellen direkt aus dem bestehenden System geladen.</p>
+      </div>
+
+      <div class="auth-forms">
+        <form id="loginForm" class="auth-form">
+          <h2>Login</h2>
+          <label><span>Benutzername</span><input id="loginUsername" type="text" autocomplete="username" placeholder="lucia.vettori"></label>
+          <label><span>Passwort</span><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Passwort"></label>
+          <label id="loginTotpField" class="hidden"><span>2FA-Code</span><input id="loginTotp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-stelliger Code"></label>
+          <div id="loginTurnstile" class="turnstile-slot hidden"></div>
+          <button id="loginButton" class="btn" type="submit">Anmelden</button>
+          <p id="loginError" class="auth-message error hidden" role="alert"></p>
+          <p class="auth-links">
+            <button id="showForgotPasswordButton" type="button">Passwort vergessen</button>
+            <button id="showRegisterButton" type="button">Konto registrieren</button>
           </p>
-          <div class="auth-benefits">
-            <span class="status-chip summary-chip">Geschützter Zugang für das Team</span>
-            <span class="status-chip summary-chip">Klare Zuordnung im Team</span>
-            <span class="status-chip summary-chip">Einfach verständlich für den Alltag</span>
-          </div>
-        </div>
-
-        <div class="auth-form-stack">
-          <form id="loginForm" class="auth-form">
-            <div class="auth-form-header">
-              <h2>Login</h2>
-              <p class="muted">Bitte Benutzername und Passwort eingeben.</p>
-            </div>
-
-            <label>
-              <span>Benutzername</span>
-              <input id="loginUsername" name="username" type="text" placeholder="Zum Beispiel: lucia.vettori" autocomplete="username">
-            </label>
-
-            <label class="checkbox-field">
-              <input id="rememberUsernameCheckbox" type="checkbox">
-              <span>Benutzername merken</span>
-            </label>
-
-            <label>
-              <span>Passwort</span>
-              <input id="loginPassword" name="password" type="password" placeholder="Passwort eingeben" autocomplete="current-password">
-            </label>
-
-            <label id="loginTotpField" class="hidden">
-              <span>2FA-Code (Authenticator-App)</span>
-              <input id="loginTotp" name="totp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-stelliger Code">
-            </label>
-
-            <div id="loginTurnstile" class="turnstile-slot hidden"></div>
-            <button id="loginButton" type="submit">Anmelden</button>
-            <p class="auth-note muted">
-              Passwort vergessen?
-              <button id="showForgotPasswordButton" type="button" class="link-button">Per E-Mail zurücksetzen</button>
-              oder das Master-Konto setzt ein neues.
-            </p>
-            <p class="auth-note muted">
-              Noch kein Konto?
-              <button id="showRegisterButton" type="button" class="link-button">Jetzt registrieren</button>
-            </p>
-            <p id="loginError" class="auth-error hidden" role="alert"></p>
-          </form>
-
-          <form id="registerForm" class="auth-form auth-form-secondary hidden">
-            <div class="auth-form-header">
-              <h2>Neues Konto</h2>
-              <p class="muted">Neue Konten können nur mit einem gültigen Registrierungsschlüssel angelegt werden.</p>
-            </div>
-
-            <p class="auth-note muted">
-              Schon registriert?
-              <button id="showLoginButton" type="button" class="link-button">Zurück zum Login</button>
-            </p>
-
-            <label>
-              <span>Vollständiger Name</span>
-              <input id="registerDisplayName" name="displayName" type="text" placeholder="Zum Beispiel: Maria Beispiel" autocomplete="name">
-            </label>
-
-            <label>
-              <span>Benutzername</span>
-              <input id="registerUsername" name="username" type="text" placeholder="Zum Beispiel: maria.beispiel" autocomplete="username">
-            </label>
-
-            <label>
-              <span>E-Mail (optional, für Passwort-Reset)</span>
-              <input id="registerEmail" name="email" type="email" placeholder="z. B. name@example.org" autocomplete="email">
-            </label>
-
-            <label>
-              <span>Passwort</span>
-              <input id="registerPassword" name="password" type="password" placeholder="Mindestens 8 Zeichen" autocomplete="new-password">
-            </label>
-
-            <label>
-              <span>Registrierungsschlüssel</span>
-              <input id="registerAccessKey" name="accessKey" type="text" placeholder="Zum Beispiel: HSA-1A2B-3C4D-5E6F" autocomplete="one-time-code">
-            </label>
-
-            <div id="registerTurnstile" class="turnstile-slot hidden"></div>
-            <button id="registerButton" class="secondary" type="submit">Konto erstellen</button>
-            <p class="auth-note muted hidden">Den Registrierungsschlüssel erhalten neue Mitarbeitende vom Master-Konto.</p>
-            <p id="registerError" class="auth-error hidden" role="alert"></p>
-          </form>
-
-          <form id="masterSetupForm" class="auth-form auth-form-secondary hidden">
-            <div class="auth-form-header">
-              <h2>Master-Konto einrichten</h2>
-              <p class="muted">Das Master-Konto wird mit einem Einmal-Schlüssel eingerichtet, der per E-Mail zugestellt wurde.</p>
-            </div>
-
-            <label>
-              <span>Setup-Schlüssel</span>
-              <input id="masterSetupKey" name="setupKey" type="text" placeholder="Zum Beispiel: HSA-SETUP-1A2B-3C4D-5E6F-7A8B" autocomplete="one-time-code">
-            </label>
-
-            <label>
-              <span>Neues Master-Passwort</span>
-              <input id="masterSetupPassword" name="password" type="password" placeholder="Mindestens 8 Zeichen" autocomplete="new-password">
-            </label>
-
-            <button id="masterSetupButton" class="secondary" type="submit">Master-Passwort setzen</button>
-            <p class="auth-note muted">Den Schlüssel erhalten Sie per E-Mail an die hinterlegte Master-Adresse.</p>
-            <p id="masterSetupError" class="auth-error hidden" role="alert"></p>
-            <p id="masterSetupSuccess" class="auth-success hidden" role="status"></p>
-          </form>
-
-          <form id="forgotPasswordForm" class="auth-form auth-form-secondary hidden">
-            <div class="auth-form-header">
-              <h2>Passwort zurücksetzen</h2>
-              <p class="muted">E-Mail-Adresse eingeben. Ist sie bei einem Konto hinterlegt, senden wir einen Einmal-Schlüssel dorthin.</p>
-            </div>
-
-            <label>
-              <span>E-Mail-Adresse</span>
-              <input id="forgotPasswordEmail" name="email" type="email" placeholder="z. B. name@example.org" autocomplete="email">
-            </label>
-
-            <div id="forgotTurnstile" class="turnstile-slot hidden"></div>
-            <button id="forgotPasswordButton" class="secondary" type="submit">Schlüssel anfordern</button>
-            <p id="forgotPasswordError" class="auth-error hidden" role="alert"></p>
-            <p id="forgotPasswordSuccess" class="auth-success hidden" role="status"></p>
-          </form>
-
-          <form id="resetPasswordForm" class="auth-form auth-form-secondary hidden">
-            <div class="auth-form-header">
-              <h2>Neues Passwort setzen</h2>
-              <p class="muted">Schlüssel aus der E-Mail eingeben und neues Passwort vergeben.</p>
-            </div>
-
-            <label>
-              <span>Reset-Schlüssel</span>
-              <input id="resetPasswordKey" name="resetKey" type="text" placeholder="z. B. HSA-RESET-1A2B-3C4D-5E6F-7A8B" autocomplete="one-time-code">
-            </label>
-
-            <label>
-              <span>Neues Passwort</span>
-              <input id="resetPasswordValue" name="password" type="password" placeholder="Mindestens 8 Zeichen" autocomplete="new-password">
-            </label>
-
-            <button id="resetPasswordButton" class="secondary" type="submit">Neues Passwort speichern</button>
-            <p id="resetPasswordError" class="auth-error hidden" role="alert"></p>
-            <p id="resetPasswordSuccess" class="auth-success hidden" role="status"></p>
-          </form>
-        </div>
-      </section>
-    </section>
-
-    <main id="appShell" class="simple-page hidden">
-      <section id="dashboard" class="panel top-shell">
-        <div class="top-shell-main">
-          <div class="top-shell-copy">
-            <div class="brand-lockup brand-lockup-compact">
-              <span class="brand-mark" aria-hidden="true">
-                <svg viewBox="0 0 64 64" role="img" aria-label="Heimatschutz Aargau Logo">
-                  <path d="M16 31.5 32 17l16 14.5" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M20 30.5 32 20l12 10.5V45a2 2 0 0 1-2 2H22a2 2 0 0 1-2-2V30.5Z" fill="currentColor" opacity="0.92"/>
-                  <rect x="28.5" y="35" width="7" height="12" rx="2" fill="#fff"/>
-                </svg>
-              </span>
-              <span class="brand-word">Heimatschutz <strong>Aargau</strong></span>
-            </div>
-            <h1>Arbeitsliste Baugesuche</h1>
-            <p class="lead compact-lead">Prüfen, priorisieren und im Team abschliessen.</p>
-          </div>
-          <div class="top-shell-tools">
-            <div class="session-card" aria-label="Angemeldeter Benutzer">
-              <div>
-                <p class="eyebrow">Angemeldet als</p>
-                <strong id="sessionUserName" class="session-user-name">-</strong>
-                <p id="sessionUserRole" class="session-user-role muted">-</p>
-              </div>
-              <button id="logoutButton" class="ghost compact-button" type="button">Abmelden</button>
-            </div>
-            <button id="themeToggleButton" class="ghost hero-action-button" type="button" aria-pressed="false">Dunkelmodus</button>
-            <button id="fontSizeToggleButton" class="ghost hero-action-button" type="button">Grössere Schrift</button>
-            <button id="toggleAdminPanelButton" class="ghost hero-action-button hidden" type="button">Verwaltung einblenden</button>
-          </div>
-        </div>
-        <div class="top-shell-footer">
-          <div class="top-summary" aria-label="Heute wichtig">
-            <span class="status-chip summary-chip">Standardansicht: nur aktuelle Fälle.</span>
-          </div>
-          <div class="compact-stats hidden" aria-label="Kennzahlen">
-            <article class="mini-stat">
-              <span class="mini-stat-label">Alle Gesuche</span>
-              <strong id="statTotal" class="mini-stat-value">0</strong>
-            </article>
-
-            <article class="mini-stat">
-              <span class="mini-stat-label">Davon geschützt</span>
-              <strong id="statRelevant" class="mini-stat-value warning">0</strong>
-            </article>
-
-            <article class="mini-stat">
-              <span class="mini-stat-label">Von Hand prüfen</span>
-              <strong id="statManual" class="mini-stat-value danger">0</strong>
-            </article>
-
-            <article class="mini-stat">
-              <span class="mini-stat-label">Frist bald</span>
-              <strong id="statDueSoon" class="mini-stat-value">0</strong>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section id="notificationsPanel" class="panel notifications-panel hidden">
-        <div class="panel-heading">
-          <div>
-            <h2 class="section-heading large-heading">Neue automatische Hinweise</h2>
-            <p class="detail-helper-text">Neue oder geänderte Schutztreffer aus dem Import erscheinen hier.</p>
-          </div>
-        </div>
-
-        <div id="notificationsList" class="notifications-list"></div>
-        <div id="notificationsEmptyState" class="empty-row hidden">Zurzeit gibt es keine neuen automatischen Hinweise.</div>
-      </section>
-
-      <section id="masterAccessPanel" class="panel master-panel hidden">
-        <div class="panel-heading">
-          <div>
-            <h2 class="section-heading large-heading">Registrierungsschlüssel</h2>
-            <p class="detail-helper-text">Neue Schlüssel für Mitarbeitende erstellen.</p>
-          </div>
-        </div>
-
-        <div class="master-key-controls">
-          <label>
-            <span>Hinweis zum Schlüssel</span>
-            <input
-              id="registrationKeyNote"
-              name="registrationKeyNote"
-              type="text"
-              maxlength="120"
-              placeholder="Zum Beispiel: neue Mitarbeiterin, Praktikum, Projektteam"
-            >
-          </label>
-          <button id="createRegistrationKeyButton" type="button">Neuen Schlüssel erstellen</button>
-        </div>
-
-        <div class="auth-benefits master-benefits hidden">
-          <span class="status-chip summary-chip">Jeder Schlüssel ist einmalig verwendbar.</span>
-          <span class="status-chip summary-chip">Schlüssel bleiben 30 Tage gültig.</span>
-        </div>
-
-        <div id="registrationKeysEmptyState" class="empty-row hidden">Noch keine Registrierungsschlüssel vorhanden.</div>
-        <div id="registrationKeysList" class="registration-keys-list"></div>
-
-        <section class="master-admin-section">
-          <div class="panel-heading">
-            <div>
-              <h3>Passwort zurücksetzen</h3>
-              <p class="detail-helper-text">Das Master-Konto kann hier für Teammitglieder ein neues Passwort setzen.</p>
-            </div>
-          </div>
-
-          <div class="master-key-controls master-reset-controls">
-            <label>
-              <span>Person</span>
-              <select id="adminUserSelect" name="adminUserSelect">
-                <option value="">Person auswählen</option>
-              </select>
-            </label>
-            <label>
-              <span>Neues Passwort</span>
-              <input
-                id="adminPasswordResetInput"
-                name="adminPasswordResetInput"
-                type="password"
-                placeholder="Mindestens 8 Zeichen"
-                autocomplete="new-password"
-              >
-            </label>
-            <button id="adminPasswordResetButton" type="button">Passwort setzen</button>
-          </div>
-        </section>
-
-        <section class="master-admin-section">
-          <div class="panel-heading">
-            <div>
-              <h3>Zwei-Faktor-Authentifizierung</h3>
-              <p class="detail-helper-text">Zusätzlicher Schutz für das Master-Login per Authenticator-App (TOTP).</p>
-            </div>
-          </div>
-
-          <div class="master-key-controls">
-            <p id="twoFactorStatus" class="muted">Status wird geladen …</p>
-            <button id="twoFactorSetupButton" type="button">2FA einrichten</button>
-
-            <div id="twoFactorSetupArea" class="hidden">
-              <p class="detail-helper-text">Diesen Schlüssel in der Authenticator-App (z. B. Google/Microsoft Authenticator) als Konto hinzufügen:</p>
-              <code id="twoFactorSecret" class="two-factor-secret"></code>
-              <label>
-                <span>Code aus der App</span>
-                <input id="twoFactorCode" name="twoFactorCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-stelliger Code">
-              </label>
-              <button id="twoFactorEnableButton" type="button">Aktivieren</button>
-            </div>
-
-            <div id="twoFactorDisableArea" class="hidden">
-              <label>
-                <span>Code aus der App zum Deaktivieren</span>
-                <input id="twoFactorDisableCode" name="twoFactorDisableCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-stelliger Code">
-              </label>
-              <button id="twoFactorDisableButton" class="ghost" type="button">2FA deaktivieren</button>
-            </div>
-
-            <p id="twoFactorError" class="auth-error hidden" role="alert"></p>
-            <p id="twoFactorSuccess" class="auth-success hidden" role="status"></p>
-          </div>
-        </section>
-
-        <section class="master-admin-section">
-          <div class="panel-heading">
-            <div>
-              <h3>Datenimport</h3>
-              <p class="detail-helper-text">JSON-Export aus AGIS oder eBau einfügen und direkt übernehmen.</p>
-            </div>
-          </div>
-
-          <div class="master-import-controls">
-            <label>
-              <span>JSON-Export</span>
-              <textarea
-                id="manualImportJsonInput"
-                name="manualImportJsonInput"
-                placeholder='Zum Beispiel: {"features":[{"attributes":{"Gemeinde":"Aarau","ParzNr":"1234","GES_TITEL":"Dachsanierung"}}]}'
-              ></textarea>
-            </label>
-            <button id="manualImportButton" type="button">JSON importieren</button>
-          </div>
-        </section>
-
-        <section class="master-admin-section">
-          <div class="panel-heading">
-            <div>
-              <h3>Automatischer Import</h3>
-              <p class="detail-helper-text">Hier kann eine Gemeinde-Webseite, ein RSS-/Sitemap-Feed, eine PDF-Datei, eine JSON-Quelle oder ein AGIS-/ArcGIS-Dienst für den Wochenimport gespeichert werden.</p>
-            </div>
-          </div>
-
-          <div class="master-import-controls">
-            <div class="detail-form-grid">
-              <label>
-                <span>Importart</span>
-                <select id="syncSourceTypeSelect" name="syncSourceTypeSelect">
-                  <option value="">Automatisch erkennen</option>
-                  <option value="amtsblatt">Amtsblatt Aargau (kantonsweit)</option>
-                  <option value="html">Website-Scraping</option>
-                  <option value="xml">RSS / Sitemap</option>
-                  <option value="pdf">PDF-Scraping</option>
-                  <option value="json">JSON-Datei</option>
-                  <option value="arcgis">ArcGIS / AGIS</option>
-                </select>
-              </label>
-              <label>
-                <span>Gemeinde für Scraping</span>
-                <input
-                  id="syncSourceMunicipalityInput"
-                  name="syncSourceMunicipalityInput"
-                  type="text"
-                  placeholder="Zum Beispiel: Aarau"
-                >
-                <span class="form-help muted">Nötig, wenn die Quelle als Website, RSS/Sitemap oder PDF gelesen wird.</span>
-              </label>
-            </div>
-            <label>
-              <span>Quell-URL</span>
-              <input
-                id="syncSourceUrlInput"
-                name="syncSourceUrlInput"
-                type="url"
-                placeholder="Zum Beispiel: https://gemeinde.ch/baugesuche oder .../MapServer"
-              >
-            </label>
-            <label>
-              <span>Token für geschützte Quelle (optional)</span>
-              <input
-                id="syncSourceTokenInput"
-                name="syncSourceTokenInput"
-                type="password"
-                autocomplete="off"
-                placeholder="Zum Beispiel: AGIS-Zugriffstoken"
-              >
-            </label>
-            <div class="button-row">
-              <button id="saveSyncSettingsButton" type="button">Quelle speichern</button>
-              <button id="runSyncNowButton" class="ghost" type="button">Jetzt synchronisieren</button>
-            </div>
-            <p id="syncSettingsStatus" class="detail-helper-text">Noch keine automatische Import-Quelle gespeichert.</p>
-          </div>
-        </section>
-
-        <section class="master-admin-section municipality-sources-section">
-          <div class="panel-heading">
-            <div>
-              <h3>Gemeindequellen Aargau</h3>
-              <p class="detail-helper-text">Gemeinde-Webseiten sind die Hauptquellen. AGIS ergänzt danach die Schutzprüfung.</p>
-            </div>
-            <div class="panel-actions">
-              <a id="municipalitySourcesExportJsonLink" class="ghost compact-button" href="/api/admin/municipality-sources/export.json" target="_blank" rel="noreferrer">JSON exportieren</a>
-              <a id="municipalitySourcesExportCsvLink" class="ghost compact-button" href="/api/admin/municipality-sources/export.csv" target="_blank" rel="noreferrer">CSV exportieren</a>
-            </div>
-          </div>
-
-          <div class="municipality-source-summary">
-            <span id="municipalitySourcesTotalChip" class="status-chip summary-chip compact-summary-chip">0 Gemeinden</span>
-            <span id="municipalitySourcesConfiguredChip" class="status-chip summary-chip compact-summary-chip">0 eindeutige Quellen</span>
-            <span id="municipalitySourcesEnabledChip" class="status-chip summary-chip compact-summary-chip">0 automatisch aktiv</span>
-            <span id="municipalityRatingAChip" class="status-chip summary-chip compact-summary-chip">A: 0</span>
-            <span id="municipalityRatingBChip" class="status-chip summary-chip compact-summary-chip">B: 0</span>
-            <span id="municipalityRatingCChip" class="status-chip summary-chip compact-summary-chip">C: 0</span>
-            <span id="municipalityRatingDChip" class="status-chip summary-chip compact-summary-chip">D: 0</span>
-            <span id="municipalitySharedSourcesChip" class="status-chip summary-chip compact-summary-chip">0 geteilte Quellen</span>
-          </div>
-
-          <div class="municipality-source-report-grid">
-            <article class="report-card">
-              <p class="panel-title">Katalogstatus</p>
-              <p id="municipalityCoverageReportText" class="report-card-copy">Die Qualitätsübersicht wird geladen.</p>
-            </article>
-            <article class="report-card">
-              <p class="panel-title">Häufig geteilte Quellen</p>
-              <ul id="sharedSourcesList" class="shared-sources-list"></ul>
-              <p id="sharedSourcesEmptyState" class="form-help muted hidden">Noch keine geteilten Quellen erkannt.</p>
-            </article>
-          </div>
-
-          <div class="municipality-source-browser">
-            <section class="municipality-source-list-shell">
-              <label>
-                <span>Gemeinde suchen</span>
-                <input
-                  id="municipalitySourceSearchInput"
-                  name="municipalitySourceSearchInput"
-                  type="search"
-                  placeholder="Zum Beispiel: Aarau, Baden, Zofingen"
-                >
-              </label>
-              <div id="municipalitySourcesEmptyState" class="empty-row hidden">Keine Gemeindequelle gefunden.</div>
-              <div id="municipalitySourcesList" class="municipality-sources-list"></div>
-            </section>
-
-            <form id="municipalitySourceForm" class="municipality-source-form stack">
-              <div class="form-intro">
-                <p class="panel-title">Ausgewählte Gemeinde</p>
-                <p id="municipalitySourceCurrentLabel" class="form-help muted">Bitte links eine Gemeinde auswählen.</p>
-              </div>
-
-              <section class="municipality-source-insights">
-                <div class="municipality-source-insight-grid">
-                  <article class="municipality-source-insight-card">
-                    <p class="panel-title">Offizielle Website</p>
-                    <p id="municipalityOfficialWebsiteLabel" class="form-help">-</p>
-                    <a id="municipalityOfficialWebsiteLink" class="source-link-button hidden" href="#" target="_blank" rel="noreferrer">Website öffnen</a>
-                  </article>
-                  <article class="municipality-source-insight-card">
-                    <p class="panel-title">Primärquelle</p>
-                    <p id="municipalityPrimarySourceLabel" class="form-help">-</p>
-                    <a id="municipalityPrimarySourceLink" class="data-link-button hidden" href="#" target="_blank" rel="noreferrer">Quelle öffnen</a>
-                  </article>
-                  <article class="municipality-source-insight-card">
-                    <p class="panel-title">Bewertung</p>
-                    <div class="municipality-rating-row">
-                      <span id="municipalityRatingBadge" class="badge neutral">-</span>
-                    </div>
-                    <p id="municipalityRatingRationale" class="form-help">-</p>
-                  </article>
-                  <article class="municipality-source-insight-card">
-                    <p class="panel-title">Gemeinsame Nutzung</p>
-                    <p id="municipalitySharedSourceLabel" class="form-help">-</p>
-                    <p id="municipalitySupplementalSourcesLabel" class="form-help">-</p>
-                  </article>
-                </div>
-              </section>
-
-              <div class="detail-form-grid">
-                <label>
-                  <span>Quellentyp</span>
-                  <select id="municipalitySourceTypeSelect" name="sourceType">
-                    <option value="manual">Manuell</option>
-                    <option value="html">Gemeinde-Webseite</option>
-                    <option value="xml">XML / RSS / Sitemap</option>
-                    <option value="json">JSON-Datei</option>
-                    <option value="arcgis">ArcGIS / AGIS</option>
-                    <option value="pdf">Direkte PDF-Quelle</option>
-                  </select>
-                </label>
-
-                <label>
-                  <span>Digitalisierungsstand</span>
-                  <select id="municipalitySourceDigitalStatusSelect" name="digitalStatus">
-                    <option value="unknown">Noch offen</option>
-                    <option value="digital">Digital</option>
-                    <option value="partial">Teilweise digital</option>
-                    <option value="manual">Nicht digital</option>
-                  </select>
-                </label>
-              </div>
-
-              <label class="checkbox-field">
-                <input id="municipalitySourceEnabledCheckbox" name="enabled" type="checkbox">
-                <span>Automatisch berücksichtigen</span>
-              </label>
-
-              <label>
-                <span>Quell-URL</span>
-                <input
-                  id="municipalitySourceUrlInput"
-                  name="sourceUrl"
-                  type="url"
-                  placeholder="Zum Beispiel: https://gemeinde.ch/baugesuche oder .../MapServer"
-                >
-              </label>
-
-              <label>
-                <span>Token für geschützte Quelle (optional)</span>
-                <input
-                  id="municipalitySourceTokenInput"
-                  name="sourceToken"
-                  type="password"
-                  autocomplete="off"
-                  placeholder="Nur nötig bei geschütztem Dienst"
-                >
-              </label>
-
-              <div class="detail-form-grid">
-                <label>
-                  <span>Nur passende Einträge (optional)</span>
-                  <input
-                    id="municipalitySourceIncludePatternInput"
-                    name="includePattern"
-                    type="text"
-                    placeholder="Zum Beispiel: baugesuch|auflage"
-                  >
-                </label>
-
-                <label>
-                  <span>Ignorieren (optional)</span>
-                  <input
-                    id="municipalitySourceExcludePatternInput"
-                    name="excludePattern"
-                    type="text"
-                    placeholder="Zum Beispiel: kontakt|impressum"
-                  >
-                </label>
-              </div>
-
-              <label>
-                <span>Notiz</span>
-                <textarea
-                  id="municipalitySourceNotesInput"
-                  name="notes"
-                  rows="4"
-                  placeholder="Zum Beispiel: noch kein digitaler Feed, PDF-Liste vorhanden, URL prüfen"
-                ></textarea>
-              </label>
-
-              <div class="button-row">
-                <button id="saveMunicipalitySourceButton" type="submit">Gemeindequelle speichern</button>
-              </div>
-            </form>
-          </div>
-        </section>
-      </section>
-
-      <section id="applications" class="workspace">
-          <div class="panel filters-panel">
-          <div class="panel-heading">
-            <h2 class="section-heading large-heading">Filter</h2>
-            <div class="panel-actions">
-              <button id="resetFiltersButton" class="ghost compact-button" type="button">Zurücksetzen</button>
-            </div>
-          </div>
-            <form id="filtersForm" class="filter-grid">
-              <label>
-                <span>Suche</span>
-                <input id="searchInput" name="search" type="search" placeholder="Ort, Adresse oder Bauvorhaben">
-              </label>
-              <label>
-                <span>Ort</span>
-                <select id="municipalitySelect" name="municipality">
-                  <option value="">Alle Gemeinden</option>
-                </select>
-              </label>
-              <label>
-                <span>AGIS-Treffer</span>
-                <select id="protectionStatusSelect" name="protectionStatus">
-                  <option value="">Alle AGIS-Treffer</option>
-                </select>
-              </label>
-              <label>
-                <span>Team-Status</span>
-                <select id="workflowStatusSelect" name="workflowStatus">
-                  <option value="">Alle Team-Status</option>
-                </select>
-              </label>
-            </form>
-
-            <div class="quick-filter-section" aria-label="Schnellauswahl">
-              <p class="panel-title">Schnell</p>
-              <div class="quick-filter-row">
-                <button class="quick-filter-button active" data-quick-filter="all" type="button">Arbeitsliste</button>
-                <button class="quick-filter-button" data-quick-filter="important" type="button">Schutztreffer</button>
-                <button class="quick-filter-button" data-quick-filter="manual" type="button">Von Hand prüfen</button>
-                <button class="quick-filter-button" data-quick-filter="open" type="button">Nur offen</button>
-                <button class="quick-filter-button" data-quick-filter="due-soon" type="button">Frist bald</button>
-                <button class="quick-filter-button" data-quick-filter="archive" type="button">Alle / Archiv</button>
-              </div>
-              <p id="activeFilterText" class="active-filter-text">Aktuell: Arbeitsliste.</p>
-            </div>
-
-            <div class="workspace-toolbar" aria-label="Arbeitsstatus">
-              <span id="workspaceLastSyncChip" class="status-chip summary-chip compact-summary-chip">Letzter Sync: -</span>
-              <span id="workspaceSyncModeChip" class="status-chip summary-chip compact-summary-chip">Import: -</span>
-              <span id="workspaceCoverageChip" class="status-chip summary-chip compact-summary-chip">Gemeindequellen: -</span>
-            </div>
-          </div>
-
-          <div class="main-grid">
-            <section class="panel list-panel">
-              <div class="panel-heading">
-                <div>
-                    <h3>Fälle</h3>
-                    <p class="section-subtitle">Nach Frist und Relevanz für die tägliche Bearbeitung.</p>
-                </div>
-                <span id="resultCount" class="tag">0 Baugesuche</span>
-              </div>
-              <div class="table-shell">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Gemeinde</th>
-                      <th>Baugesuch</th>
-                      <th>Treffer</th>
-                      <th>Frist</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody id="applicationsTableBody"></tbody>
-                </table>
-              </div>
-            </section>
-
-            <section id="detail" class="panel detail-panel">
-              <div class="panel-heading">
-                <div>
-                    <h3>Prüfung</h3>
-                    <p id="detailHelperText" class="detail-helper-text">Entscheidung, Karte und interne Bearbeitung.</p>
-                </div>
-                <div class="detail-heading-actions">
-                  <span id="detailStatusBadge" class="tag">Keine Auswahl</span>
-                  <button id="nextOpenButton" class="ghost compact-button" type="button">Nächstes offenes Gesuch</button>
-                </div>
-              </div>
-
-              <div id="emptyDetailState" class="empty-state">
-                <p class="muted">Wählen Sie links ein Baugesuch aus.</p>
-              </div>
-
-              <div id="detailContent" class="detail-content hidden">
-                <div class="detail-top-grid">
-                  <dl class="detail-list detail-facts">
-                    <div class="detail-fact detail-fact-place">
-                      <dt>Ort</dt>
-                      <dd id="detailMunicipality">-</dd>
-                    </div>
-                    <div class="detail-fact detail-fact-address">
-                      <dt>Adresse</dt>
-                      <dd id="detailAddress">-</dd>
-                    </div>
-                    <div class="detail-fact detail-fact-parcel">
-                      <dt>Parzelle</dt>
-                      <dd id="detailParcelFact">-</dd>
-                    </div>
-                    <div class="detail-fact detail-fact-published">
-                      <dt>Publiziert</dt>
-                      <dd id="detailPublishedFact">-</dd>
-                    </div>
-                    <div class="detail-fact detail-fact-deadline">
-                      <dt>Fristende</dt>
-                      <dd id="detailDeadlineDate">-</dd>
-                    </div>
-                    <div class="detail-fact detail-fact-agis">
-                      <dt>AGIS-Treffer</dt>
-                      <dd id="detailAgisFact">-</dd>
-                    </div>
-                    <div class="detail-fact detail-fact-project detail-fact-wide">
-                      <dt>Bauvorhaben</dt>
-                      <dd id="detailProjectType">-</dd>
-                    </div>
-                  </dl>
-                  <p id="detailAgisMatch" class="hidden" aria-hidden="true">-</p>
-                  <p id="detailPublicationDate" class="hidden" aria-hidden="true">-</p>
-
-                  <section class="subpanel map-card">
-                    <div class="panel-heading map-heading">
-                      <div>
-                        <p class="panel-title">Standort</p>
-                        <p id="mapStatusLabel" class="map-status">Standort wird angezeigt</p>
-                      </div>
-                      <div class="map-actions">
-                        <a
-                          id="detailDataLink"
-                          class="data-link-button hidden"
-                          href="#"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Karte öffnen
-                        </a>
-                        <a
-                          id="detailSourceLink"
-                          class="source-link-button hidden"
-                          href="#"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Quelle öffnen
-                        </a>
-                      </div>
-                    </div>
-                    <div id="detailMap" class="detail-map" aria-label="Standort auf Karte"></div>
-                    <p id="mapFallback" class="map-fallback hidden">Für dieses Gesuch ist noch kein genauer Standort vorhanden.</p>
-                    <div id="mapLegend" class="map-legend hidden" aria-label="Kartenlegende"></div>
-                    <p id="mapSymbolHint" class="map-symbol-hint hidden">
-                      Hinweis: Schutzfläche und Punkte sind hier nur symbolisch dargestellt und nicht die exakten AGIS-Grenzen.
-                    </p>
-                    <p id="detailCoordinates" class="map-meta muted hidden"></p>
-                  </section>
-                </div>
-
-                <section class="subpanel detail-summary-card">
-                  <div class="detail-summary-grid detail-summary-grid-compact">
-                    <article class="summary-block summary-block-wide summary-block-focus">
-                      <p class="panel-title">Einschätzung</p>
-                      <h4 id="detailRecommendationTitle" class="recommendation-title">-</h4>
-                      <p id="detailRecommendationText" class="muted">-</p>
-                      <div class="recommendation-meta">
-                        <span id="detailDeadlineHint" class="badge neutral">Frist wird berechnet</span>
-                      </div>
-                      <p id="detailSourceMeta" class="summary-meta muted">-</p>
-                    </article>
-                  </div>
-                  <p id="detailDescription" class="hidden" aria-hidden="true">-</p>
-                  <p id="detailAutomatedAssessment" class="hidden" aria-hidden="true">-</p>
-                  <p id="detailRecommendationCompact" class="hidden" aria-hidden="true">-</p>
-                  <p id="detailDeadlineCompact" class="hidden" aria-hidden="true">-</p>
-                  <p id="detailLastSyncAt" class="hidden" aria-hidden="true">-</p>
-                  <p id="detailSourceLabel" class="hidden" aria-hidden="true">-</p>
-                  <p id="detailAssessmentLabel" class="hidden" aria-hidden="true">-</p>
-                  <p id="detailAgisLayers" class="hidden" aria-hidden="true">-</p>
-                </section>
-
-                <form id="detailForm" class="stack detail-form-panel">
-                  <div class="form-intro">
-                    <p class="panel-title">Interne Notiz</p>
-                    <p class="form-help muted">Hier können Sie eine interne Notiz und den Team-Status speichern.</p>
-                  </div>
-                  <div class="detail-form-grid">
-                    <label>
-                      <span>Team-Status</span>
-                      <select id="detailWorkflowStatus" name="workflowStatus"></select>
-                    </label>
-                    <label>
-                      <span>Zuständig</span>
-                      <input id="detailAssignee" name="assignee" type="text" placeholder="Name oder Team">
-                    </label>
-                  </div>
-                  <label>
-                    <span>Interne Notiz</span>
-                    <textarea id="detailNote" name="note" rows="5" placeholder="Zum Beispiel: genauer prüfen, Rückfrage nötig, bereits erledigt"></textarea>
-                  </label>
-
-                  <div class="button-row">
-                    <button id="saveButton" type="submit">Speichern</button>
-                    <button id="clearButton" class="secondary" type="button">Als erledigt markieren</button>
-                  </div>
-                </form>
-
-                <details class="subpanel team-panel stack" id="commentsSection">
-                  <summary class="comments-summary">Team-Austausch</summary>
-                  <div id="commentsEmptyState" class="empty-row hidden">Noch keine Team-Kommentare vorhanden.</div>
-                  <div id="commentsList" class="comments-list"></div>
-
-                  <form id="commentForm" class="stack">
-                    <label>
-                      <span>Neuer Team-Kommentar</span>
-                      <textarea id="commentInput" name="message" rows="4" placeholder="Zum Beispiel: Ich habe die Karte geprüft, bitte noch die Unterlagen vergleichen."></textarea>
-                    </label>
-                    <div class="button-row">
-                      <button id="commentSubmitButton" type="submit">Kommentar speichern</button>
-                    </div>
-                  </form>
-                </details>
-              </div>
-            </section>
-          </div>
-      </section>
-    </main>
-
-    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <section id="confirmOverlay" class="confirm-overlay hidden" aria-hidden="true">
-      <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
-        <p id="confirmEyebrow" class="eyebrow">Bitte bestätigen</p>
-        <h2 id="confirmTitle">Aktion bestätigen</h2>
-        <p id="confirmMessage" class="muted">Möchten Sie fortfahren?</p>
-        <div class="button-row">
-          <button id="confirmAcceptButton" type="button">Ja, löschen</button>
-          <button id="confirmCancelButton" class="ghost" type="button">Abbrechen</button>
+        </form>
+
+        <form id="registerForm" class="auth-form hidden">
+          <h2>Neues Konto</h2>
+          <label><span>Vollständiger Name</span><input id="registerDisplayName" type="text" autocomplete="name"></label>
+          <label><span>Benutzername</span><input id="registerUsername" type="text" autocomplete="username"></label>
+          <label><span>E-Mail</span><input id="registerEmail" type="email" autocomplete="email"></label>
+          <label><span>Passwort</span><input id="registerPassword" type="password" autocomplete="new-password"></label>
+          <label><span>Registrierungsschlüssel</span><input id="registerAccessKey" type="text" autocomplete="one-time-code"></label>
+          <div id="registerTurnstile" class="turnstile-slot hidden"></div>
+          <button id="registerButton" class="btn" type="submit">Konto erstellen</button>
+          <p id="registerError" class="auth-message error hidden" role="alert"></p>
+          <p class="auth-links"><button id="showLoginButton" type="button">Zurück zum Login</button></p>
+        </form>
+
+        <form id="forgotPasswordForm" class="auth-form hidden">
+          <h2>Passwort zurücksetzen</h2>
+          <label><span>E-Mail-Adresse</span><input id="forgotPasswordEmail" type="email" autocomplete="email"></label>
+          <div id="forgotTurnstile" class="turnstile-slot hidden"></div>
+          <button id="forgotPasswordButton" class="btn" type="submit">Schlüssel anfordern</button>
+          <p id="forgotPasswordError" class="auth-message error hidden" role="alert"></p>
+          <p id="forgotPasswordSuccess" class="auth-message ok hidden" role="status"></p>
+          <p class="auth-links">
+            <button id="showResetPasswordButton" type="button">Reset-Schlüssel eingeben</button>
+            <button id="showLoginFromForgotButton" type="button">Zurück zum Login</button>
+          </p>
+        </form>
+
+        <form id="resetPasswordForm" class="auth-form hidden">
+          <h2>Neues Passwort</h2>
+          <label><span>Reset-Schlüssel</span><input id="resetPasswordKey" type="text" autocomplete="one-time-code"></label>
+          <label><span>Neues Passwort</span><input id="resetPasswordValue" type="password" autocomplete="new-password"></label>
+          <button id="resetPasswordButton" class="btn" type="submit">Passwort speichern</button>
+          <p id="resetPasswordError" class="auth-message error hidden" role="alert"></p>
+          <p id="resetPasswordSuccess" class="auth-message ok hidden" role="status"></p>
+          <p class="auth-links"><button id="showLoginFromResetButton" type="button">Zurück zum Login</button></p>
+        </form>
+
+        <form id="masterSetupForm" class="auth-form hidden">
+          <h2>Master-Konto einrichten</h2>
+          <label><span>Setup-Schlüssel</span><input id="masterSetupKey" type="text" autocomplete="one-time-code"></label>
+          <label><span>Neues Master-Passwort</span><input id="masterSetupPassword" type="password" autocomplete="new-password"></label>
+          <button id="masterSetupButton" class="btn" type="submit">Master-Passwort setzen</button>
+          <p id="masterSetupError" class="auth-message error hidden" role="alert"></p>
+          <p id="masterSetupSuccess" class="auth-message ok hidden" role="status"></p>
+          <p class="auth-links"><button id="showLoginFromMasterButton" type="button">Zurück zum Login</button></p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <div id="appShell" class="app hidden">
+    <!-- ============ Kopf ============ -->
+    <header class="masthead">
+      <div class="mast-util">
+        <span class="mast-org"><b>Kanton Aargau</b><span class="dept">Departement Bildung, Kultur und Sport · Kantonale Denkmalpflege</span></span>
+        <span class="mast-account">
+          <span>Angemeldet als <span id="sessionUserName" class="user-name">-</span><span id="sessionUserRole" class="user-role">-</span></span>
+          <button id="logoutButton" class="util-link" type="button">Abmelden</button>
+        </span>
+      </div>
+      <div class="mast-main">
+        <span class="brand">
+          <img class="wappen" src="wappen.svg" alt="Wappen Kanton Aargau">
+          <span class="word"><b>Heimatschutz Aargau</b><span>Baugesuche prüfen &amp; bearbeiten</span></span>
+        </span>
+        <label class="mast-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5" stroke-linecap="round"/></svg>
+          <input id="mastSearch" type="search" placeholder="Gemeinde, Adresse oder Bauvorhaben suchen …">
+        </label>
+        <div class="mast-tools">
+          <button id="themeToggle" class="tool-btn" type="button" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linejoin="round"/></svg>
+            <span>Dunkelmodus</span>
+          </button>
+          <button id="fontToggle" class="tool-btn" type="button" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7V5h11v2M9 5v14M7 19h4M16 13v-1h6v1M19 12v7M17.5 19h3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Grössere Schrift</span>
+          </button>
         </div>
       </div>
-    </section>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script type="module" src="/app.js"></script>
-  </body>
+      <!-- Primärnavigation -->
+      <nav class="mast-nav" aria-label="Hauptbereiche">
+        <button class="nav-item active" data-view="work" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 5h18M3 12h18M3 19h12" stroke-linecap="round"/></svg>
+          Arbeitsliste <span class="nav-badge" id="navWorkCount">0</span>
+        </button>
+        <button class="nav-item" data-view="admin" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" stroke-linejoin="round"/></svg>
+          Verwaltung
+        </button>
+      </nav>
+    </header>
+
+    <!-- ============ Arbeitsliste ============ -->
+    <main class="view active" id="view-work">
+    <div class="titleband">
+      <div class="titleband-copy">
+        <p class="bread">Startseite › Baugesuche › <span>Arbeitsliste</span></p>
+        <h1>Arbeitsliste Baugesuche</h1>
+        <p class="lead">Prüfen, priorisieren und im Team abschliessen.</p>
+      </div>
+      <div class="titleband-meta">
+        <span class="band-chip"><span class="dot"></span>Letzter Sync: <b>heute, 06:10</b></span>
+        <span class="band-chip">Import: <b>Amtsblatt + 11 Gemeinden</b></span>
+        <span class="band-chip">Gemeindequellen: <b>198/213</b></span>
+      </div>
+    </div>
+    <div class="workspace">
+      <!-- Liste -->
+      <section class="panel list-panel">
+        <div class="panel-head">
+          <div>
+            <h3>Fälle</h3>
+            <p id="activeFilterText" class="sub">Aktuell: offene und laufende Fälle.</p>
+          </div>
+          <div class="ph-actions">
+            <button id="syncBtn" class="icon-btn sm" type="button" title="Liste aktualisieren">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <span id="resultCount" class="count-tag">0 Baugesuche</span>
+          </div>
+        </div>
+        <nav class="tabs" aria-label="Schnellauswahl">
+          <button class="tab active" data-tab="all" type="button">Arbeitsliste <span class="tab-count" data-count="all">0</span></button>
+          <button class="tab" data-tab="important" type="button">Schutztreffer <span class="tab-count" data-count="important">0</span></button>
+          <button class="tab" data-tab="manual" type="button">Von Hand prüfen <span class="tab-count" data-count="manual">0</span></button>
+          <button class="tab" data-tab="open" type="button">Nur offen</button>
+          <button class="tab" data-tab="due-soon" type="button">Frist bald <span class="tab-count" data-count="due-soon">0</span></button>
+          <button class="tab" data-tab="archive" type="button">Alle / Archiv</button>
+        </nav>
+        <form class="filter-bar" onsubmit="return false">
+          <label class="fb-search"><span>Suche</span><input id="fltSearch" type="search" placeholder="Ort, Adresse oder Bauvorhaben"></label>
+          <label><span>Ort</span><select id="fltMun"><option value="">Alle Gemeinden</option></select></label>
+          <label><span>AGIS-Treffer</span>
+            <select id="fltProt">
+              <option value="">Alle Treffer</option>
+              <option value="combined-hit">Gebäude + Gebiet</option>
+              <option value="protected-point">Gebäude geschützt</option>
+              <option value="protected-zone">Gebiet geschützt</option>
+              <option value="manual-review">Manuell prüfen</option>
+              <option value="no-hit">Kein Schutz</option>
+            </select>
+          </label>
+          <label><span>Team-Status</span>
+            <select id="fltWf">
+              <option value="">Alle Status</option>
+              <option value="new">Offen</option>
+              <option value="under-review">Im Team</option>
+              <option value="cleared">Erledigt</option>
+              <option value="archived">Abgelegt</option>
+            </select>
+          </label>
+          <button id="resetFilters" class="reset-btn" type="button">Zurücksetzen</button>
+        </form>
+        <div class="table-shell">
+          <table>
+            <colgroup><col class="c-mun"><col class="c-app"><col class="c-hit"><col class="c-due"><col class="c-stat"></colgroup>
+            <thead><tr>
+              <th class="sortable" data-sort="municipality"><span class="th-inner">Gemeinde <svg class="sort-ind" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
+              <th>Baugesuch</th>
+              <th>AGIS-Treffer</th>
+              <th class="sortable" data-sort="dueDays"><span class="th-inner">Frist <svg class="sort-ind" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
+              <th>Status</th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Detail / Prüfung -->
+      <aside class="panel detail-panel">
+        <div class="panel-head">
+          <div>
+            <h3>Prüfung</h3>
+            <p id="detailHelper" class="sub">Entscheidung, Karte und interne Bearbeitung.</p>
+          </div>
+          <div class="detail-status-row">
+            <span id="detailStatusBadge" class="detail-badge-slot">Keine Auswahl</span>
+            <button id="printBtn" class="icon-btn sm" type="button" title="Fall drucken / als PDF">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button id="nextOpen" class="btn ghost" type="button" style="padding:6px 11px;font-size:0.82rem">Nächstes offenes →</button>
+          </div>
+        </div>
+
+        <div id="detailEmpty" class="detail-empty hidden">
+          <div class="empty-state">
+            <svg class="ill" viewBox="0 0 96 96" fill="none" aria-hidden="true">
+              <rect x="20" y="14" width="56" height="68" rx="6" fill="#eef4fb" stroke="#a3d4ef" stroke-width="2"/>
+              <path d="M32 32h32M32 44h32M32 56h20" stroke="#6fb8e1" stroke-width="3" stroke-linecap="round"/>
+              <circle cx="64" cy="64" r="16" fill="#fff" stroke="#007ab8" stroke-width="3"/>
+              <path d="m76 76 8 8" stroke="#007ab8" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+            <h4>Kein Fall ausgewählt</h4>
+            <p>Wählen Sie links ein Baugesuch, um Fakten, Karte, Verlauf und Bearbeitung zu sehen.</p>
+          </div>
+        </div>
+
+        <div id="detailBody" class="detail-body">
+          <dl class="facts">
+            <div class="fact"><dt>Ort</dt><dd id="fMun">–</dd></div>
+            <div class="fact"><dt>Adresse</dt><dd id="fAddr">–</dd></div>
+            <div class="fact"><dt>Parzelle</dt><dd id="fParcel">–</dd></div>
+            <div class="fact"><dt>Publiziert</dt><dd id="fPub">–</dd></div>
+            <div class="fact"><dt>Fristende</dt><dd id="fDue">–</dd></div>
+            <div class="fact"><dt>AGIS-Treffer</dt><dd id="fAgis">–</dd></div>
+            <div class="fact wide"><dt>Bauvorhaben</dt><dd id="fProject">–</dd></div>
+          </dl>
+
+          <section class="map-card">
+            <div class="map-card-head">
+              <div><p class="ttl">Standort</p><p id="mapStatus" class="st">Standort wird angezeigt</p></div>
+              <a id="agisLink" class="map-link" href="#" target="_blank" rel="noreferrer">AGIS öffnen</a>
+            </div>
+            <div id="detailMap" class="detail-map" aria-label="Standort auf Karte"></div>
+            <p id="mapFallback" class="map-fallback hidden">Für dieses Gesuch ist noch kein genauer Standort vorhanden.</p>
+            <div id="mapLegend" class="map-legend hidden" aria-label="Kartenlegende"></div>
+            <p id="mapSymbolHint" class="map-symbol-hint hidden"></p>
+          </section>
+
+          <section class="assessment">
+            <p class="ttl">Einschätzung</p>
+            <h4 id="recTitle">–</h4>
+            <p id="recText">–</p>
+            <div class="meta">
+              <span id="recBadge" class="badge neutral">–</span>
+              <span id="dueBadge" class="badge neutral">–</span>
+            </div>
+            <p id="srcMeta" class="src-meta" style="margin-top:10px">–</p>
+          </section>
+
+          <section class="timeline-card">
+            <p class="ttl">Verlauf</p>
+            <div class="tl" id="timeline"></div>
+          </section>
+
+          <form class="form-card" onsubmit="return false">
+            <div class="intro"><p class="ttl">Interne Bearbeitung</p><p>Team-Status, Zuständigkeit und interne Notiz erfassen.</p></div>
+            <div class="form-grid">
+              <label><span>Team-Status</span>
+                <select id="fWorkflow">
+                  <option value="new">Offen</option>
+                  <option value="under-review">Im Team</option>
+                  <option value="cleared">Erledigt</option>
+                  <option value="archived">Abgelegt</option>
+                </select>
+              </label>
+              <label><span>Zuständig</span><input id="fAssignee" type="text" placeholder="Name oder Team"></label>
+            </div>
+            <label><span>Interne Notiz</span><textarea id="fNote" placeholder="Zum Beispiel: genauer prüfen, Rückfrage nötig, bereits erledigt"></textarea></label>
+            <div class="btn-row">
+              <button id="saveBtn" class="btn" type="submit">Entscheidung erfassen</button>
+              <button id="clearBtn" class="btn ghost" type="button">Als erledigt markieren</button>
+            </div>
+          </form>
+
+          <details class="team">
+            <summary>Team-Austausch (<span id="commentCount">0</span>)</summary>
+            <div class="team-body">
+              <div id="commentsList"></div>
+              <form class="comment-form" onsubmit="return false">
+                <textarea id="commentInput" placeholder="Zum Beispiel: Ich habe die Karte geprüft, bitte noch die Unterlagen vergleichen."></textarea>
+                <div class="btn-row"><button id="commentSubmit" class="btn" type="submit">Kommentar speichern</button></div>
+              </form>
+            </div>
+          </details>
+        </div>
+      </aside>
+    </div>
+    </main>
+
+    <!-- ============ Verwaltung ============ -->
+    <main class="view" id="view-admin">
+    <div class="titleband">
+      <div class="titleband-copy">
+        <p class="bread">Startseite › <span>Verwaltung</span></p>
+        <h1>Verwaltung</h1>
+        <p class="lead">Datenquellen, Importe und Zugänge der Denkmalpflege.</p>
+      </div>
+      <div class="titleband-meta">
+        <span class="band-chip"><span class="dot"></span>System aktiv</span>
+        <span class="band-chip">Nächster Import: <b>morgen, 06:00</b></span>
+      </div>
+    </div>
+    <div class="admin">
+      <nav class="admin-rail" aria-label="Verwaltungsbereiche">
+        <span class="rail-label">Bereiche</span>
+        <button class="rail-item active" data-pane="sources" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Gemeindequellen <span class="rc">213</span>
+        </button>
+        <button class="rail-item" data-pane="import" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Import &amp; Sync
+        </button>
+        <button class="rail-item" data-pane="keys" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="5"/><path d="M11.5 11.5L21 21M17 17l2-2M14 14l2-2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Zugänge &amp; Schlüssel <span class="rc">5</span>
+        </button>
+      </nav>
+
+      <div class="admin-content">
+        <!-- Gemeindequellen -->
+        <div class="admin-pane active" id="pane-sources">
+          <div class="adm-card">
+            <div class="stat-row">
+              <div class="stat"><p class="k">Gemeinden total</p><p class="v">213</p><p class="d mut">Kanton Aargau</p></div>
+              <div class="stat"><p class="k">Quelle aktiv</p><p class="v">198<small> /213</small></p><div class="progress"><span style="width:93%"></span></div></div>
+              <div class="stat"><p class="k">Datenqualität Ø</p><p class="v">Hoch</p><p class="d up">181 strukturiert</p></div>
+              <div class="stat"><p class="k">Wartung nötig</p><p class="v">11</p><p class="d warn">Quelle prüfen</p></div>
+              <div class="stat"><p class="k">Ohne Quelle</p><p class="v">4</p><p class="d mut">manuell erfassen</p></div>
+            </div>
+          </div>
+          <div class="adm-card">
+            <div class="adm-card-head">
+              <div><h2>Gemeindequellen</h2><p class="sub">Woher die Baugesuche je Gemeinde bezogen werden. Status und Quelle pflegen.</p></div>
+              <div class="adm-toolbar">
+                <span class="search-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5" stroke-linecap="round"/></svg><input id="srcSearch" type="search" placeholder="Gemeinde suchen …"></span>
+                <button class="tool-btn" type="button" data-toast="Neue Gemeindequelle – Formular geöffnet."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Quelle hinzufügen</button>
+              </div>
+            </div>
+            <div class="adm-card-body flush">
+              <table class="adm-table">
+                <thead><tr><th>Gemeinde</th><th>Quelltyp</th><th>Datenqualität</th><th>Trend (7 T.)</th><th>Letzter Abruf</th><th>Treffer</th><th>Status</th><th style="text-align:right">Aktion</th></tr></thead>
+                <tbody id="srcBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Import & Sync -->
+        <div class="admin-pane" id="pane-import">
+          <div class="adm-card">
+            <div class="adm-card-head">
+              <div><h2>Import &amp; Sync</h2><p class="sub">Automatischer Abgleich von Amtsblatt und Gemeindeportalen. Manuell auslösbar.</p></div>
+              <button class="btn" type="button" id="runImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>Import jetzt starten</button>
+            </div>
+            <div class="stat-row">
+              <div class="stat"><p class="k">Letzter Lauf</p><p class="v" style="font-size:1.25rem">heute 06:10</p><p class="d up">erfolgreich</p></div>
+              <div class="stat"><p class="k">Neue Baugesuche</p><p class="v">37</p><p class="d up">in 24 Std.</p></div>
+              <div class="stat"><p class="k">AGIS-Treffer</p><p class="v">14</p><p class="d warn">zu prüfen</p></div>
+              <div class="stat"><p class="k">Fehlerquellen</p><p class="v">2</p><p class="d warn">Zofingen, Frick</p></div>
+            </div>
+          </div>
+          <div class="adm-card">
+            <div class="adm-card-head"><div><h2>Letzte Importläufe</h2><p class="sub">Protokoll der letzten Synchronisationen.</p></div></div>
+            <div class="adm-card-body flush"><div class="run-list" id="runList"></div></div>
+          </div>
+        </div>
+
+        <!-- Zugänge & Schlüssel -->
+        <div class="admin-pane" id="pane-keys">
+          <div class="adm-card">
+            <div class="adm-card-head">
+              <div><h2>Zugänge &amp; Schlüssel</h2><p class="sub">Benutzerkonten der Denkmalpflege und API-Schlüssel für AGIS und Datenquellen.</p></div>
+              <button class="tool-btn" type="button" data-toast="Neuer Zugang – Einladung versendet."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Zugang einladen</button>
+            </div>
+            <div class="adm-card-body flush">
+              <table class="adm-table">
+                <thead><tr><th>Person / Dienst</th><th>Rolle</th><th>Schlüssel</th><th>Letzter Zugriff</th><th>Status</th><th style="text-align:right">Aktion</th></tr></thead>
+                <tbody id="keysBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Druckansicht (nur beim Drucken sichtbar) -->
+  <div class="print-area" id="printArea">
+    <div class="pa-head">
+      <img src="wappen.svg" alt="Wappen Kanton Aargau">
+      <div class="pa-org"><b>Kanton Aargau · Kantonale Denkmalpflege</b><span>Heimatschutz Aargau — Prüfbericht Baugesuch</span></div>
+      <div class="pa-id" id="paId">—</div>
+    </div>
+    <h2 class="pa-title" id="paTitle">—</h2>
+    <p class="pa-sub" id="paSub">—</p>
+    <dl class="pa-grid">
+      <div class="pa-f"><dt>Gemeinde</dt><dd id="paMun">—</dd></div>
+      <div class="pa-f"><dt>Adresse</dt><dd id="paAddr">—</dd></div>
+      <div class="pa-f"><dt>Parzelle</dt><dd id="paParcel">—</dd></div>
+      <div class="pa-f"><dt>Publiziert</dt><dd id="paPub">—</dd></div>
+      <div class="pa-f"><dt>Fristende</dt><dd id="paDue">—</dd></div>
+      <div class="pa-f"><dt>AGIS-Treffer</dt><dd id="paAgis">—</dd></div>
+      <div class="pa-f wide"><dt>Bauvorhaben</dt><dd id="paProject">—</dd></div>
+    </dl>
+    <div class="pa-block">
+      <h5>Einschätzung der Denkmalpflege</h5>
+      <p id="paRec">—</p>
+      <h5>Quelle</h5>
+      <p id="paSource">—</p>
+    </div>
+    <div class="pa-foot"><span id="paFoot">Heimatschutz Aargau</span><span>Bearbeitung: Lucia Vettori, Kantonale Denkmalpflege</span></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js" integrity="sha384-BIsA8GBrihzaRmijjpqTCihj8D5Vox3hyBFg9sJiTGAEOv6KusZ8QOCKbTFEAfhm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+  <script src="app.js"></script>
+
+</body>
 </html>

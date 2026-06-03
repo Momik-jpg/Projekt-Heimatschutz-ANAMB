@@ -1,0 +1,1180 @@
+/* Amtliche Redesign-Umsetzung nach den Lookbook-Dateien aus Downloads/_heim/redesign. */
+
+body.redesign-amtlich {
+  /* Offizielle Kanton-Aargau-Blaupalette (global.css v22.4.1) */
+  --brand-50:  #e5f4fc;
+  --brand-100: #c2ebff;
+  --brand-200: #a3e0ff;
+  --brand-300: #85d6ff;
+  --brand-400: #4aa6d6;
+  --brand-500: #1184c2;
+  --brand-600: #0069a3;
+  --brand-700: #007ab8;
+  --brand-800: #004774;
+  --brand-900: #00355c;
+
+  --copper-400: #6b7a88;
+  --copper-500: #51616f;
+  --copper-600: #3c4a58;
+
+  --stone-50:  #f2f3f4;
+  --stone-100: #f4f4f4;
+  --stone-150: #f0f0f0;
+  --stone-200: #e2e2e2;
+  --stone-300: #dbdbdb;
+
+  --ink-900: #262626;
+  --ink-800: #3a3a3a;
+  --ink-700: #4a4a4a;
+  --ink-600: #5f666d;
+  --ink-500: #767676;
+  --ink-400: #aeaeae;
+
+  --success: #1f6b46;
+  --success-soft: #e0efe7;
+  --warning: #8a5a00;
+  --warning-soft: #f8eed5;
+  --danger: #b80d22;
+  --danger-soft: #fbe5e8;
+  --info: var(--brand-700);
+
+  --bg: var(--stone-50);
+  --bg-deep: #e6e8ea;
+  --panel: rgba(255, 255, 255, 0.96);
+  --panel-strong: #ffffff;
+  --panel-muted: #f4f7fb;
+  --panel-border: #dbdbdb;
+  --text: var(--ink-900);
+  --muted: var(--ink-500);
+  --accent: var(--brand-700);
+  --accent-soft: var(--brand-50);
+  --accent-deep: var(--brand-900);
+  --neutral: var(--stone-150);
+  --surface-quiet: #f7fafc;
+  --line-strong: #cfcfcf;
+  --white: #ffffff;
+
+  --map-area-fill: #c2ebff;
+  --map-area-stroke: #007ab8;
+  --map-point-fill: #b80d22;
+  --map-point-stroke: #ffffff;
+  --map-location-fill: #007ab8;
+
+  --r-xs: 3px;
+  --r-sm: 3px;
+  --r-md: 5px;
+  --r-lg: 8px;
+  --r-xl: 8px;
+  --r-pill: 999px;
+
+  --shadow-xs: 0 1px 2px rgba(16, 35, 56, 0.06);
+  --shadow-soft: 0 1px 2px rgba(16, 35, 56, 0.06);
+  --shadow: 0 6px 22px -12px rgba(16, 35, 56, 0.28), 0 2px 6px -3px rgba(16, 35, 56, 0.10);
+  --shadow-lg: 0 24px 60px -28px rgba(0, 53, 92, 0.38);
+  --shadow-brand: 0 10px 24px -16px rgba(0, 122, 184, 0.45);
+  --ring: 0 0 0 3px rgba(0, 122, 184, 0.28);
+
+  --font-sans: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+
+  background: var(--stone-50);
+  color: var(--ink-900);
+}
+
+body.redesign-amtlich.dark {
+  color-scheme: dark;
+  --brand-50: rgba(26, 120, 194, 0.14);
+  --brand-100: rgba(26, 120, 194, 0.22);
+  --brand-200: #8fbce0;
+  --brand-300: #67a4d4;
+  --brand-400: #4c91c8;
+  --brand-500: #1a78c2;
+  --brand-600: #1162a8;
+  --brand-700: #1a78c2;
+  --brand-800: #0b4f8a;
+  --brand-900: #dbe8f4;
+
+  --stone-50:  #0b1220;
+  --stone-100: #101a2b;
+  --stone-150: #15243a;
+  --stone-200: #20334f;
+  --stone-300: #2d4567;
+
+  --ink-900: #eef4fa;
+  --ink-800: #dbe8f4;
+  --ink-700: #b9cbe0;
+  --ink-600: #8faaca;
+  --ink-500: #6f8caa;
+  --ink-400: #557392;
+
+  --bg: #0b1220;
+  --bg-deep: #070d18;
+  --panel: rgba(15, 26, 43, 0.96);
+  --panel-strong: #101a2b;
+  --panel-muted: #15243a;
+  --panel-border: rgba(185, 203, 224, 0.18);
+  --surface-quiet: #111f33;
+  --line-strong: rgba(185, 203, 224, 0.28);
+  --text: var(--ink-900);
+  --muted: var(--ink-600);
+  --success-soft: rgba(31, 107, 70, 0.22);
+  --warning-soft: rgba(138, 90, 0, 0.22);
+  --danger-soft: rgba(179, 38, 30, 0.22);
+  --shadow: 0 10px 32px -18px rgba(0, 0, 0, 0.75);
+  --shadow-lg: 0 30px 70px -30px rgba(0, 0, 0, 0.82);
+  --ring: 0 0 0 3px rgba(76, 145, 200, 0.32);
+
+  background: #0b1220;
+}
+
+body.redesign-amtlich h1,
+body.redesign-amtlich h2,
+body.redesign-amtlich h3,
+body.redesign-amtlich h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+body.redesign-amtlich:has(#authShell:not(.hidden)) {
+  background: #eef1f4;
+}
+
+body.redesign-amtlich.dark:has(#authShell:not(.hidden)) {
+  background: #0b1220;
+}
+
+body.redesign-amtlich .simple-page {
+  max-width: none;
+  padding: 16px clamp(14px, 2vw, 28px) 28px;
+  gap: 14px;
+}
+
+/* =====================================================================
+   Login — Option C "Dossier": helle redaktionelle Split-Ansicht,
+   Serifen-Headline + Trennstrich links, Anmeldeformular rechts.
+   ===================================================================== */
+body.redesign-amtlich .auth-shell {
+  align-items: center;
+  padding: clamp(20px, 4vw, 56px);
+  background: #eef1f4;
+}
+
+body.redesign-amtlich.dark .auth-shell {
+  background: #0b1220;
+}
+
+body.redesign-amtlich .auth-backdrop {
+  background: #eef1f4;
+}
+
+body.redesign-amtlich.dark .auth-backdrop {
+  background: #0b1220;
+}
+
+body.redesign-amtlich .auth-backdrop::after {
+  opacity: 0;
+}
+
+body.redesign-amtlich .auth-card {
+  width: min(1040px, 100%);
+  grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-lg);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  overflow: hidden;
+  max-height: calc(100dvh - 40px);
+}
+
+/* Linke Seite: hell, redaktionell */
+body.redesign-amtlich .auth-copy {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 28px;
+  padding: clamp(40px, 4.5vw, 56px) clamp(34px, 4vw, 52px);
+  color: var(--ink-900);
+  background: #fdfcfa;
+  border-right: 1px solid #e4e1d9;
+  overflow: hidden;
+}
+
+body.redesign-amtlich.dark .auth-copy {
+  background: var(--panel-muted);
+  border-right-color: var(--panel-border);
+}
+
+body.redesign-amtlich .auth-copy::after { content: none; }
+
+body.redesign-amtlich .auth-copy .brand-word {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 600;
+  font-size: 1.3rem;
+  color: var(--ink-900);
+}
+
+body.redesign-amtlich .auth-copy .brand-word strong {
+  color: var(--ink-900);
+  -webkit-text-fill-color: var(--ink-900);
+}
+
+body.redesign-amtlich .auth-copy .brand-sub {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--ink-500);
+}
+
+body.redesign-amtlich .auth-copy .brand-mark { color: var(--brand-700); }
+
+body.redesign-amtlich .auth-rule {
+  display: block;
+  width: 54px;
+  height: 3px;
+  background: var(--brand-700);
+  margin-bottom: 24px;
+}
+
+body.redesign-amtlich .auth-copy h1 {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: clamp(2rem, 3vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: var(--ink-900);
+  -webkit-text-fill-color: var(--ink-900);
+  max-width: 15ch;
+  margin: 0 0 18px;
+}
+
+body.redesign-amtlich .auth-copy .lead {
+  font-size: 1.08rem;
+  line-height: 1.65;
+  color: var(--ink-600);
+  max-width: 40ch;
+  margin: 0;
+}
+
+body.redesign-amtlich .auth-copy-foot {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-400);
+}
+
+/* Rechte Seite: Anmeldeformular */
+body.redesign-amtlich .auth-form-stack {
+  align-content: center;
+  padding: clamp(40px, 4.5vw, 56px) clamp(34px, 4vw, 54px);
+  background: var(--panel-strong);
+}
+
+body.redesign-amtlich .auth-form,
+body.redesign-amtlich .auth-form-secondary {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.redesign-amtlich .auth-form-secondary {
+  padding-top: 24px;
+  border-top: 1px solid var(--panel-border);
+}
+
+body.redesign-amtlich .auth-form-header .eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brand-700);
+  margin: 0 0 10px;
+}
+
+body.redesign-amtlich .auth-form-header h2 {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 1.7rem;
+  font-weight: 600;
+  color: var(--ink-900);
+  -webkit-text-fill-color: var(--ink-900);
+  margin: 0 0 6px;
+}
+
+body.redesign-amtlich .auth-note {
+  color: var(--muted);
+}
+
+/* Controls */
+body.redesign-amtlich input,
+body.redesign-amtlich select,
+body.redesign-amtlich textarea {
+  border: 1px solid var(--stone-300);
+  border-radius: var(--r-md);
+  background: var(--panel-strong);
+  color: var(--ink-900);
+  box-shadow: none;
+}
+
+body.redesign-amtlich input:hover,
+body.redesign-amtlich select:hover,
+body.redesign-amtlich textarea:hover {
+  border-color: var(--ink-400);
+}
+
+body.redesign-amtlich input:focus,
+body.redesign-amtlich select:focus,
+body.redesign-amtlich textarea:focus,
+body.redesign-amtlich input:focus-visible,
+body.redesign-amtlich select:focus-visible,
+body.redesign-amtlich textarea:focus-visible {
+  border-color: var(--brand-500);
+  box-shadow: var(--ring);
+}
+
+body.redesign-amtlich button:not(.link-button):not(.quick-filter-button) {
+  border-radius: var(--r-md);
+  background: var(--brand-700);
+  color: #ffffff;
+  border-color: var(--brand-700);
+  box-shadow: var(--shadow-brand);
+  text-shadow: none;
+}
+
+body.redesign-amtlich button:not(.link-button):not(.quick-filter-button):hover {
+  background: var(--brand-600);
+  border-color: var(--brand-600);
+  transform: none;
+  filter: none;
+}
+
+body.redesign-amtlich button.secondary,
+body.redesign-amtlich button.ghost,
+body.redesign-amtlich .data-link-button,
+body.redesign-amtlich .source-link-button,
+body.redesign-amtlich .compact-button.ghost {
+  background: var(--panel-strong) !important;
+  color: var(--brand-700) !important;
+  border-color: var(--stone-300) !important;
+  box-shadow: none !important;
+}
+
+body.redesign-amtlich.dark button.secondary,
+body.redesign-amtlich.dark button.ghost,
+body.redesign-amtlich.dark .data-link-button,
+body.redesign-amtlich.dark .source-link-button,
+body.redesign-amtlich.dark .compact-button.ghost {
+  background: var(--panel-muted) !important;
+  color: var(--brand-200) !important;
+  border-color: var(--panel-border) !important;
+}
+
+body.redesign-amtlich .link-button {
+  color: var(--brand-700);
+  font-weight: 700;
+}
+
+body.redesign-amtlich.dark .link-button {
+  color: var(--brand-300);
+}
+
+/* App layout */
+body.redesign-amtlich .top-shell,
+body.redesign-amtlich .filters-panel,
+body.redesign-amtlich .list-panel,
+body.redesign-amtlich .detail-panel,
+body.redesign-amtlich .master-panel,
+body.redesign-amtlich .notifications-panel {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-lg);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-soft);
+}
+
+body.redesign-amtlich .top-shell {
+  padding: 0;
+  overflow: hidden;
+}
+
+body.redesign-amtlich .top-shell::before,
+body.redesign-amtlich .top-shell::after {
+  content: none;
+}
+
+body.redesign-amtlich .top-shell-main {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--panel-border);
+  background: var(--panel-strong);
+}
+
+body.redesign-amtlich .top-shell-footer {
+  padding: 16px 24px 18px;
+  background: var(--brand-700);
+  color: #ffffff;
+}
+
+body.redesign-amtlich .top-shell h1 {
+  font-size: 1.55rem;
+  color: var(--ink-900);
+}
+
+body.redesign-amtlich .top-shell .lead {
+  color: var(--ink-500);
+}
+
+body.redesign-amtlich .top-shell-footer .summary-chip {
+  color: #d3e4f3;
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.10);
+}
+
+body.redesign-amtlich .session-card {
+  background: var(--panel-muted);
+  border-color: var(--panel-border);
+  border-radius: var(--r-md);
+  box-shadow: none;
+}
+
+body.redesign-amtlich .hero-action-button {
+  min-height: 38px;
+}
+
+body.redesign-amtlich .filters-panel {
+  padding: 16px 18px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  top: 10px;
+}
+
+body.redesign-amtlich .filters-panel .panel-heading,
+body.redesign-amtlich .list-panel .panel-heading,
+body.redesign-amtlich .detail-panel .panel-heading {
+  background: var(--panel-strong);
+  border-bottom: 1px solid var(--panel-border);
+}
+
+body.redesign-amtlich.dark .filters-panel .panel-heading,
+body.redesign-amtlich.dark .list-panel .panel-heading,
+body.redesign-amtlich.dark .detail-panel .panel-heading {
+  background: var(--panel-muted);
+}
+
+body.redesign-amtlich .quick-filter-button {
+  border-radius: 0;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--ink-600);
+  box-shadow: none;
+  min-height: 34px;
+}
+
+body.redesign-amtlich .quick-filter-button:hover {
+  background: var(--surface-quiet);
+  color: var(--brand-700);
+}
+
+body.redesign-amtlich .quick-filter-button.active {
+  background: transparent;
+  color: var(--brand-700);
+  border-bottom-color: var(--brand-700);
+  box-shadow: none;
+}
+
+body.redesign-amtlich.dark .quick-filter-button.active {
+  color: var(--brand-300);
+  border-bottom-color: var(--brand-300);
+}
+
+body.redesign-amtlich .quick-filter-button .a-tab-count {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 7px;
+  background: var(--stone-150);
+  border-radius: var(--r-pill);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--ink-600);
+  vertical-align: 1px;
+}
+body.redesign-amtlich .quick-filter-button.active .a-tab-count {
+  background: var(--brand-100);
+  color: var(--brand-700);
+}
+body.redesign-amtlich.dark .quick-filter-button.active .a-tab-count {
+  color: var(--brand-300);
+}
+
+body.redesign-amtlich .status-chip,
+body.redesign-amtlich .tag,
+body.redesign-amtlich .badge {
+  border-radius: var(--r-sm);
+  border: 1px solid var(--stone-200);
+  background: var(--surface-quiet);
+  color: var(--ink-600);
+  box-shadow: none;
+}
+
+body.redesign-amtlich .tag.alert,
+body.redesign-amtlich .badge.alert {
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-color: rgba(138, 90, 0, 0.22);
+}
+
+body.redesign-amtlich .tag.danger,
+body.redesign-amtlich .badge.danger {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: rgba(179, 38, 30, 0.20);
+}
+
+body.redesign-amtlich .tag.ok,
+body.redesign-amtlich .badge.ok {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: rgba(31, 107, 70, 0.20);
+}
+
+body.redesign-amtlich .list-panel,
+body.redesign-amtlich .detail-panel {
+  box-shadow: var(--shadow);
+}
+
+body.redesign-amtlich table {
+  font-size: 0.9rem;
+}
+
+body.redesign-amtlich .list-panel thead,
+body.redesign-amtlich .list-panel th,
+body.redesign-amtlich.dark .list-panel thead,
+body.redesign-amtlich.dark th {
+  background: #f4f7f9;
+  color: var(--ink-500);
+  box-shadow: none;
+}
+
+body.redesign-amtlich.dark .list-panel thead,
+body.redesign-amtlich.dark .list-panel th {
+  background: var(--panel-muted);
+}
+
+body.redesign-amtlich tbody td {
+  border-bottom-color: var(--stone-150);
+}
+
+body.redesign-amtlich tbody tr:hover td {
+  background: #f7fafc;
+}
+
+body.redesign-amtlich.dark tbody tr:hover td {
+  background: rgba(76, 145, 200, 0.10);
+}
+
+body.redesign-amtlich .selected-row td,
+body.redesign-amtlich .protected-row.selected-row td,
+body.redesign-amtlich.dark .selected-row td {
+  background: var(--brand-50);
+}
+
+body.redesign-amtlich.dark .protected-row.selected-row td {
+  background: rgba(26, 120, 194, 0.14);
+}
+
+body.redesign-amtlich .selected-row td:first-child,
+body.redesign-amtlich .protected-row.selected-row td:first-child,
+body.redesign-amtlich.dark .selected-row td:first-child {
+  box-shadow: inset 4px 0 0 var(--brand-700);
+}
+
+body.redesign-amtlich .detail-summary-card,
+body.redesign-amtlich .subpanel,
+body.redesign-amtlich .detail-form-panel,
+body.redesign-amtlich .team-panel,
+body.redesign-amtlich .notification-card,
+body.redesign-amtlich .registration-key-card,
+body.redesign-amtlich .comment-card {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-lg);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-xs);
+}
+
+body.redesign-amtlich .detail-summary-card {
+  background: var(--surface-quiet);
+}
+
+body.redesign-amtlich .detail-form-panel,
+body.redesign-amtlich .team-panel {
+  background: var(--panel-strong);
+}
+
+body.redesign-amtlich .automated-assessment {
+  border-left: 3px solid var(--brand-700);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: var(--brand-50);
+}
+
+body.redesign-amtlich.dark .automated-assessment {
+  background: rgba(26, 120, 194, 0.12);
+}
+
+body.redesign-amtlich .map-card,
+body.redesign-amtlich .detail-map {
+  border-radius: var(--r-lg);
+  border-color: var(--panel-border);
+}
+
+body.redesign-amtlich .map-actions .data-link-button,
+body.redesign-amtlich .map-actions .source-link-button {
+  border-radius: var(--r-md);
+}
+
+/* =====================================================================
+   Amtlich-Kopf: Servicezeile (dunkel) + Masthead (weiss) + Titelband (blau)
+   nach option-a.css, an die echten #dashboard-Bauteile angepasst.
+   ===================================================================== */
+
+/* Servicezeile */
+body.redesign-amtlich .a-utility {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: #00355c; /* festes Aargau-Navy: in Hell- UND Dunkelmodus dunkel */
+  color: #b9cbe0;
+  padding: 8px 24px;
+  font-size: 0.78rem;
+}
+body.redesign-amtlich .a-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+body.redesign-amtlich .a-flag b { color: #fff; font-weight: 700; letter-spacing: 0.02em; }
+body.redesign-amtlich .a-flag svg { border-radius: 1px; }
+body.redesign-amtlich .a-util-dept {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #cdddec;
+}
+body.redesign-amtlich .a-util-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+}
+body.redesign-amtlich .a-util-user { color: #cdddec; }
+body.redesign-amtlich .a-util-user .session-user-name { color: #fff; font-weight: 700; }
+body.redesign-amtlich .a-util-user .session-user-role { color: #9fb6cd; margin-left: 8px; }
+body.redesign-amtlich .a-util-link {
+  background: transparent !important;
+  color: #cdddec !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font-size: 0.78rem !important;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  min-height: 0 !important;
+  cursor: pointer;
+}
+body.redesign-amtlich .a-util-link:hover { color: #fff !important; }
+
+/* Masthead */
+body.redesign-amtlich .a-masthead {
+  display: block;
+  background: var(--panel-strong);
+  padding: 0;
+}
+/* schlanke Org-/Nutzerzeile oben im weissen Kopf */
+body.redesign-amtlich .a-mast-util {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 7px 24px;
+  border-bottom: 1px solid var(--panel-border);
+  font-size: 0.78rem;
+  color: var(--ink-500);
+}
+body.redesign-amtlich .a-mast-org b { color: var(--ink-800); font-weight: 700; letter-spacing: 0.01em; }
+body.redesign-amtlich .a-mast-org .a-mast-dept { margin-left: 12px; color: var(--ink-500); }
+body.redesign-amtlich .a-mast-account { display: inline-flex; align-items: center; gap: 12px; }
+body.redesign-amtlich .a-mast-account .session-user-name { color: var(--ink-900); font-weight: 700; }
+body.redesign-amtlich .a-mast-account .session-user-role { color: var(--ink-500); margin-left: 6px; }
+body.redesign-amtlich .a-mast-account .a-util-link {
+  background: transparent !important;
+  color: var(--brand-700) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font-size: 0.78rem !important;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  min-height: 0 !important;
+  cursor: pointer;
+}
+body.redesign-amtlich .a-mast-account .a-util-link:hover { color: var(--brand-800) !important; }
+/* Hauptzeile: Marke + Suche + Werkzeuge */
+body.redesign-amtlich .a-mast-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 14px 24px;
+}
+body.redesign-amtlich .a-masthead .a-brand { margin: 0; }
+body.redesign-amtlich .a-masthead .a-word { line-height: 1.15; }
+body.redesign-amtlich .a-masthead .a-word b {
+  display: block;
+  font-size: 1.18rem;
+  font-weight: 700;
+  color: var(--ink-900);
+  letter-spacing: -0.01em;
+}
+body.redesign-amtlich .a-masthead .a-word span {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--ink-500);
+}
+body.redesign-amtlich .a-mast-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--stone-300) !important;
+  border-radius: var(--r-sm) !important;
+  padding: 9px 12px !important;
+  width: min(320px, 100%);
+  color: var(--ink-400) !important;
+  background: var(--stone-100) !important;
+  font-size: 0.9rem !important;
+  font-weight: 500;
+  text-align: left;
+  box-shadow: none !important;
+  cursor: text;
+}
+body.redesign-amtlich .a-mast-search:hover {
+  border-color: var(--ink-400) !important;
+  background: var(--stone-100) !important;
+}
+body.redesign-amtlich .a-mast-search svg { width: 16px; height: 16px; flex: none; }
+body.redesign-amtlich .a-mast-search span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.redesign-amtlich.dark .a-mast-search {
+  background: var(--panel-muted) !important;
+  border-color: var(--panel-border) !important;
+  color: var(--ink-500) !important;
+}
+
+body.redesign-amtlich .a-mast-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* Werkzeug-Buttons dezenter, damit Marke + Suche führen */
+body.redesign-amtlich .a-mast-tools .hero-action-button {
+  min-height: 36px;
+  padding: 7px 13px;
+  font-size: 0.84rem;
+  background: var(--panel-strong) !important;
+  color: var(--ink-700) !important;
+  border-color: var(--stone-300) !important;
+  box-shadow: none !important;
+}
+body.redesign-amtlich .a-mast-tools .hero-action-button:hover {
+  border-color: var(--brand-700) !important;
+  color: var(--brand-700) !important;
+  background: var(--brand-50) !important;
+}
+body.redesign-amtlich.dark .a-mast-tools .hero-action-button {
+  background: var(--panel-muted) !important;
+  color: var(--ink-700) !important;
+  border-color: var(--panel-border) !important;
+}
+
+/* Titelband */
+body.redesign-amtlich .a-titleband {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 24px 24px 26px;
+}
+body.redesign-amtlich .a-titleband-copy { min-width: 0; }
+body.redesign-amtlich .a-titleband-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  max-width: 50%;
+}
+body.redesign-amtlich .a-titleband-meta .summary-chip {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.30) !important;
+  color: #eaf3fb !important;
+  font-size: 0.78rem;
+  font-weight: 500;
+  box-shadow: none !important;
+}
+body.redesign-amtlich .a-titleband .a-bread {
+  font-size: 0.78rem;
+  color: #bcd6ec;
+  margin: 0 0 8px;
+  letter-spacing: 0.02em;
+}
+body.redesign-amtlich .a-titleband h1 {
+  margin: 0;
+  font-size: 1.85rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+body.redesign-amtlich .a-titleband .compact-lead {
+  margin: 6px 0 0;
+  color: #d3e4f3;
+  font-size: 0.96rem;
+}
+
+/* =====================================================================
+   Detail-Schiene (Option A "a-detail"): gerastertes Fakten-Raster,
+   Einschätzungs-Box mit blauem Balken, ruhige Bearbeitungsfelder.
+   ===================================================================== */
+
+/* Fakten als gerastertes Raster mit geteilten Linien statt schwebender Karten */
+body.redesign-amtlich .detail-facts {
+  padding: 0;
+  gap: 0;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--panel-strong);
+}
+body.redesign-amtlich .detail-facts > div {
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--stone-150);
+  background: var(--panel-strong);
+  min-height: 0;
+  padding: 11px 13px;
+}
+body.redesign-amtlich .detail-facts > div:nth-child(odd) {
+  border-right: 1px solid var(--stone-150);
+}
+body.redesign-amtlich .detail-facts > .detail-fact-wide {
+  border-right: 0;
+}
+body.redesign-amtlich .detail-facts > div:last-child {
+  border-bottom: 0;
+}
+
+/* Einschätzung: flacher blauer Balken statt Verlauf */
+body.redesign-amtlich .summary-block-focus {
+  border-left: 3px solid var(--brand-700);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: var(--brand-50);
+}
+body.redesign-amtlich.dark .summary-block-focus {
+  background: rgba(26, 120, 194, 0.12);
+}
+body.redesign-amtlich .detail-summary-card {
+  background: var(--panel-strong);
+}
+
+/* =====================================================================
+   Tabelle: Treffer als Pille mit eckigem Punkt, Team-Status als
+   Punkt-Label ohne Chip (Option A "pill" / "wf").
+   ===================================================================== */
+body.redesign-amtlich .list-panel .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+body.redesign-amtlich .list-panel .badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: currentColor;
+  flex: none;
+}
+/* Team-Status: nur farbiger runder Punkt + Text, kein Chip */
+body.redesign-amtlich .list-cell-team .badge {
+  border: 0;
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+body.redesign-amtlich .list-cell-team .badge::before {
+  border-radius: 50%;
+  width: 8px;
+  height: 8px;
+}
+
+/* =====================================================================
+   Markenzeichen: freistehendes Aargauer Wappen statt blauer Kachel.
+   ===================================================================== */
+body.redesign-amtlich .brand-mark {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  overflow: visible;
+  width: auto;
+  height: auto;
+}
+body.redesign-amtlich .brand-mark::after { content: none; }
+body.redesign-amtlich .brand-mark svg {
+  width: auto;
+  height: 42px;
+}
+body.redesign-amtlich .brand-lockup-compact .brand-mark svg {
+  height: 36px;
+}
+
+/* =====================================================================
+   Arbeitsbereich neu angeordnet (Option A): Tab-Leiste oben,
+   schlanke Filterzeile über der Tabelle, breitere Tabelle / Detail-Aside,
+   Verwaltung aus dem Arbeitsfluss nach unten.
+   ===================================================================== */
+
+/* Verwaltung als eigene Admin-Seite: ist sie sichtbar, wird die Arbeitsansicht
+   (Titelband + Arbeitsliste + Hinweise) ausgeblendet, nur das Admin-Panel bleibt. */
+body.redesign-amtlich:has(#masterAccessPanel:not(.hidden)) #applications,
+body.redesign-amtlich:has(#masterAccessPanel:not(.hidden)) #notificationsPanel,
+body.redesign-amtlich:has(#masterAccessPanel:not(.hidden)) .a-titleband {
+  display: none;
+}
+/* Admin-Seitenkopf */
+body.redesign-amtlich .admin-page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 4px 2px 18px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--panel-border);
+}
+body.redesign-amtlich .admin-page-head .a-bread {
+  font-size: 0.78rem;
+  color: var(--ag-700, var(--brand-700));
+  margin: 0 0 8px;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+body.redesign-amtlich .admin-page-head h2 {
+  margin: 0;
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+body.redesign-amtlich .admin-page-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+body.redesign-amtlich .admin-back-button {
+  background: var(--panel-strong) !important;
+  color: var(--brand-700) !important;
+  border: 1px solid var(--stone-300) !important;
+  box-shadow: none !important;
+}
+body.redesign-amtlich .admin-back-button:hover {
+  border-color: var(--brand-700) !important;
+  background: var(--brand-50) !important;
+}
+
+/* Arbeitsbereich: garantiert einspaltig, Kinder volle Breite */
+body.redesign-amtlich .workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+body.redesign-amtlich .workspace > .work-tabs,
+body.redesign-amtlich .workspace > .workspace-toolbar,
+body.redesign-amtlich .workspace > .main-grid {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Tab-Leiste als flache Kopfzeile der Fallliste (im Panel, keine eigene Karte) */
+body.redesign-amtlich .work-tabs {
+  display: block;
+  width: 100%;
+  background: var(--panel-strong);
+  padding: 6px 16px 2px;
+}
+body.redesign-amtlich .work-tabs .quick-filter-row {
+  gap: 2px;
+  flex-wrap: wrap;
+}
+body.redesign-amtlich .work-tabs .quick-filter-button {
+  margin-bottom: -1px;
+}
+
+/* Status-Chips als dünne Zeile */
+body.redesign-amtlich .workspace-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 0 4px;
+}
+
+/* Schlanke Filterleiste in der Liste */
+body.redesign-amtlich .filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--panel-border);
+  background: var(--panel-strong);
+}
+body.redesign-amtlich .filter-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+}
+body.redesign-amtlich .filter-bar label > span {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-500);
+}
+body.redesign-amtlich .filter-bar .fb-search { flex: 1 1 240px; }
+body.redesign-amtlich .filter-bar input,
+body.redesign-amtlich .filter-bar select {
+  min-height: 38px;
+  width: 100%;
+}
+body.redesign-amtlich .filter-bar #resetFiltersButton {
+  margin-left: auto;
+  align-self: flex-end;
+}
+
+/* Liste: Tab-Leiste + Kopf + Filterzeile + Tabelle */
+body.redesign-amtlich .list-panel {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+/* Tabelle breiter, Detail-Aside schmaler */
+body.redesign-amtlich .main-grid {
+  grid-template-columns: minmax(0, 1.7fr) minmax(340px, 0.88fr);
+}
+
+@media (max-width: 1080px) {
+  body.redesign-amtlich .main-grid {
+    grid-template-columns: 1fr;
+  }
+  body.redesign-amtlich .detail-panel {
+    position: static;
+    height: auto;
+  }
+}
+
+/* =====================================================================
+   Arbeitstool-Dichte: Tabelle bekommt maximale Höhe, Kopf/Filter kompakt.
+   ===================================================================== */
+body.redesign-amtlich .list-panel,
+body.redesign-amtlich .detail-panel {
+  height: calc(100vh - 138px);
+  min-height: 560px;
+  max-height: none;
+}
+body.redesign-amtlich .detail-panel { top: 16px; }
+body.redesign-amtlich .a-masthead { padding: 0; border-bottom: 0; }
+body.redesign-amtlich .a-mast-main { padding: 12px 24px; }
+body.redesign-amtlich .a-titleband { padding: 14px 24px 16px; }
+body.redesign-amtlich .a-titleband h1 { font-size: 1.5rem; }
+body.redesign-amtlich .a-titleband .compact-lead { margin-top: 3px; font-size: 0.9rem; }
+
+/* kompakter Listenkopf */
+body.redesign-amtlich .list-panel .panel-heading { padding: 9px 18px; }
+body.redesign-amtlich .list-panel .panel-heading h3 { font-size: 1rem; }
+body.redesign-amtlich .list-panel .panel-heading .section-subtitle { font-size: 0.8rem; }
+
+/* Filter in EINER kompakten Zeile */
+body.redesign-amtlich .filter-bar { padding: 10px 18px; gap: 8px 14px; }
+body.redesign-amtlich .filter-bar label { flex: 1 1 140px; }
+body.redesign-amtlich .filter-bar .fb-search { flex: 2 1 200px; }
+body.redesign-amtlich .filter-bar label > span { margin-bottom: 3px; }
+body.redesign-amtlich .filter-bar input,
+body.redesign-amtlich .filter-bar select { min-height: 34px; padding: 6px 11px; }
+body.redesign-amtlich .filter-bar #resetFiltersButton { flex: 0 0 auto; align-self: flex-end; }
+
+/* Tabelle dichter: mehr Fälle pro Bildschirm */
+body.redesign-amtlich .list-panel table { border-spacing: 0 2px; }
+body.redesign-amtlich .list-panel tbody td { padding: 8px 14px; }
+body.redesign-amtlich .list-panel .cell-secondary { font-size: 0.78rem; }
+
+/* Dunkelmodus: Titelband nicht grell leuchten lassen */
+body.redesign-amtlich.dark .top-shell-footer,
+body.redesign-amtlich.dark .a-titleband {
+  background: #0c3a61;
+}
+
+/* Gemeindequellen-Liste: lesbare Karten statt blauer Buttons */
+body.redesign-amtlich .municipality-source-row {
+  background: var(--panel-strong) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--panel-border) !important;
+  box-shadow: none !important;
+}
+body.redesign-amtlich .municipality-source-row:hover {
+  background: var(--brand-50) !important;
+  border-color: var(--brand-300) !important;
+}
+body.redesign-amtlich .municipality-source-row.selected {
+  background: var(--brand-50) !important;
+  border-color: var(--brand-300) !important;
+  box-shadow: inset 3px 0 0 var(--brand-700) !important;
+}
+body.redesign-amtlich .municipality-source-row strong { color: var(--ink-900) !important; }
+body.redesign-amtlich .municipality-source-row-meta,
+body.redesign-amtlich .municipality-source-row-side { color: var(--muted) !important; }
+
+@media (max-width: 900px) {
+  body.redesign-amtlich .auth-card {
+    grid-template-columns: 1fr;
+  }
+
+  body.redesign-amtlich .auth-copy {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  }
+}
+
+@media (max-width: 720px) {
+  body.redesign-amtlich .auth-shell {
+    padding: 14px;
+  }
+
+  body.redesign-amtlich .auth-copy,
+  body.redesign-amtlich .auth-form-stack {
+    padding: 24px;
+  }
+
+  body.redesign-amtlich .top-shell-main,
+  body.redesign-amtlich .top-shell-footer {
+    padding: 16px;
+  }
+}

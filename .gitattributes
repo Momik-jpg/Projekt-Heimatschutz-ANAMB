@@ -1,0 +1,13 @@
+# Einheitliche Zeilenenden: im Repo immer LF, verhindert CRLF/LF-Churn unter Windows.
+* text=auto eol=lf
+
+# Binärdateien nicht normalisieren.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.woff  binary
+*.woff2 binary
+*.sqlite binary

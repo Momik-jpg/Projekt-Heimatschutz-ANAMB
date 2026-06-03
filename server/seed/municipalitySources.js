@@ -200,18 +200,18 @@ export const aargauMunicipalityNames = [
 const municipalitySourcePrefills = {
   "Aarau": ["digital", "https://www.aarau.ch/", "https://www.aarau.ch/leben/bauen/auflage-baugesuchebaugesuchs-dokumente.html/952", "Baugesuche öffentliche Auflage"],
   "Würenlos": ["digital", "http://www.wuerenlos.ch", "http://www.wuerenlos.ch/aktuelles/amtliche-publikationen/", "Amtliche Publikationen"],
-  "Aarburg": ["digital", "https://www.aarburg.ch/", "https://www.aarburg.ch/amtlichepublikationen", "Amtliche Publikationen"],
+  "Aarburg": ["digital", "https://www.aarburg.ch/", "https://www.aarburg.ch/baugesuche", "Baugesuche"],
   "Zofingen": ["digital", "https://www.zofingen.ch", "https://www.zofingen.ch/politik/aktuell.html/72", "News und Amtliche Publikationen"],
-  "Abtwil": ["partial", "http://www.abtwilag.ch", "", "Baubewilligung"],
+  "Abtwil": ["digital", "https://www.abtwilag.ch", "https://www.abtwilag.ch/verwaltung/abteilungen/bauverwaltung.html/81", "Baugesuch elektronisch einreichen; Baugesuche Richtlinien"],
   "Muri": ["digital", "https://www.muri.ch", "https://www.muri.ch/verwaltung/öffentliche-auflage/baupublikationen.html/897", "Öffentliche Auflage"],
-  "Ammerswil": ["partial", "https://www.ammerswil.ch", "", ""],
+  "Ammerswil": ["partial", "https://ammerswil.ch", "https://ammerswil.ch/abteilungen", "Regionale Bauverwaltung Seengen"],
   "Lenzburg": ["digital", "https://www.lenzburg.ch", "https://www.lenzburg.ch/baupublikationen", "Baupublikationen"],
-  "Aristau": ["partial", "http://www.aristau.ch", "", "Amtliche Publikation KW 10"],
-  "Arni (AG)": ["partial", "http://www.arni-ag.ch", "", "Baugesuche Roland und Virginia Weisskopf, Felix Hollenstein"],
-  "Bremgarten": ["partial", "https://www.bremgarten.ch", "", ""],
-  "Auenstein": ["digital", "http://www.auenstein.ch", "https://www.auenstein.ch/gemeinde-aktuelles/informationen/amtliche-publikationen.html/276", "Amtliche Publikationen"],
+  "Aristau": ["digital", "https://www.aristau.ch", "https://www.aristau.ch/portraet/aktuelles.html/16", "Öffentliche Auflage Baugesuch"],
+  "Arni (AG)": ["digital", "https://www.arni-ag.ch", "https://www.arni-ag.ch/verwaltung/gemeindeverwaltung/bauverwaltung.html/109", "eBau Baugesuch online einreichen"],
+  "Bremgarten": ["digital", "https://www.bremgarten.ch", "https://www.bremgarten.ch/baupublikationen", "Baupublikationen"],
+  "Auenstein": ["digital", "https://www.auenstein.ch", "https://www.auenstein.ch/gemeinde-aktuelles/informationen/amtliche-publikationen.html/276", "Öffentliche Auflage - Baugesuch"],
   "Brugg": ["digital", "https://www.stadt-brugg.ch", "https://www.brugg.ch/themen-a-z/amtliche-publikationen.html/203", "Amtliche Publikationen"],
-  "Auw": ["digital", "http://www.auw.ch", "https://gesuch.rbv-wsw.ch/", "eBaugesuch"],
+  "Auw": ["digital", "https://www.auw.ch", "https://www.auw.ch/gemeinde/aktuelles.html/402", "Rubrik Baugesuche"],
   "Baden": ["digital", "https://www.baden.ch", "https://www.baden.ch/de/home/leben-wohnen/wohnen-und-bauen/baubewilligung.html/570", "Baubewilligung"],
   "Beinwil (Freiamt)": ["digital", "http://www.beinwil.ch", "http://www.beinwil.ch/baugesuch-32", "Baugesuch"],
   "Beinwil am See": ["partial", "http://www.beinwilamsee.ch", "", ""],
@@ -241,7 +241,7 @@ const municipalitySourcePrefills = {
   "Buttwil": ["digital", "http://www.buttwil.ch", "http://www.buttwil.ch/baupublikationen", "Baupublikationen"],
   "Densbüren": ["digital", "http://www.densbueren.ch", "http://www.densbueren.ch/publikationen", "Publikationen"],
   "Dietwil": ["partial", "https://www.dietwil.ch", "", "Hermann-Kirchner Erwin und Beatrice: Photovoltaikanlage Aufdach"],
-  "Dintikon": ["digital", "http://www.dintikon.ch", "http://www.dintikon.ch/aktuelles/amtliche-publikationen", "Amtliche Publikationen"],
+  "Dintikon": ["digital", "http://www.dintikon.ch", "http://www.dintikon.ch/aktuelles/baugesuchspublikationen", "Baugesuchspublikationen"],
   "Dottikon": ["digital", "https://www.dottikon.ch/", "https://www.dottikon.ch/publikation-einbürgerungsgesuch-arcuri-manuela/", "Publikation Einbürgerungsgesuch, Arcuri, Manuela"],
   "Döttingen": ["digital", "http://www.doettingen.ch", "http://www.doettingen.ch/gemeinde/mitteilungen/baugesuche/", "Baugesuche"],
   "Dürrenäsch": ["partial", "https://www.duerrenaesch.ch", "", "Baugesuch Grob Kurt und Christine"],
@@ -255,7 +255,7 @@ const municipalitySourcePrefills = {
   "Fahrwangen": ["digital", "http://www.fahrwangen.ch", "http://www.fahrwangen.ch/amtlichepublikationen", "Amtliche Publikationen"],
   "Fischbach-Göslikon": ["digital", "http://www.fischbach-goeslikon.ch", "https://www.fischbach-goeslikon.ch/aktuelles/baugesuche/", "Baubewilligungen"],
   "Fisibach": ["partial", "http://www.fisibach.ch", "", ""],
-  "Fislisbach": ["digital", "https://www.fislisbach.ch/", "https://www.fislisbach.ch/aktuelles/amtliche-publikationen/", "Amtliche Publikationen"],
+  "Fislisbach": ["digital", "https://www.fislisbach.ch/", "https://www.fislisbach.ch/aktuelles/baugesuche/", "Baugesuche"],
   "Freienwil": ["partial", "https://www.freienwil.ch", "", ""],
   "Frick": ["digital", "https://www.frick.ch", "https://www.frick.ch/publikationen", "Publikationen"],
   "Full-Reuenthal": ["digital", "https://www.full-reuenthal.ch", "https://www.full-reuenthal.ch/_rte/information/2660222", "Mehr lesen Zum Eintrag: Baubewilligungen"],
@@ -272,7 +272,12 @@ const municipalitySourcePrefills = {
   "Hellikon": ["digital", "https://www.hellikon.ch", "https://www.ag.ch/de/smartserviceportal/dienstleistungen?dl=baugesuch-online-einreichen-8bdaa7e2-cc06-4dd6-8147-de5e8d6be91d_de", "eBau Aargau Baugesuch online einreichen"],
   "Rheinfelden": ["partial", "https://www.rheinfelden.ch/", "", "mehr"],
   "Hendschiken": ["digital", "https://hendschiken.ch", "https://hendschiken.ch/verwaltung/abteilungen-extern#Bauverwaltung", "Baugesuch"],
-  "Herznach-Ueken": ["partial", "https://herznach-ueken.ch/", "", ""],
+  "Herznach-Ueken": [
+    "digital",
+    "https://herznach-ueken.ch/",
+    "https://herznach-ueken.ch/amtliche-publikationen",
+    "Amtliche Publikationen Baugesuch öffentliche Auflage"
+  ],
   "Hirschthal": ["partial", "http://www.hirschthal.ch", "", "Baubewilligungen"],
   "Holderbank": ["digital", "http://www.holderbank.ch", "http://www.holderbank.ch/news-beitraege/publikationen", "Publikationen Baugesuche"],
   "Holziken": ["partial", "https://www.holziken.ch", "", ""],
@@ -282,7 +287,12 @@ const municipalitySourcePrefills = {
   "Kaiseraugst": ["digital", "https://www.kaiseraugst.ch", "https://www.kaiseraugst.ch/publikationen", "Amtliche Publikationen"],
   "Kaisten": ["digital", "https://www.kaisten.ch", "https://www.kaisten.ch/baugesuche", "Baugesuche"],
   "Kallern": ["partial", "https://www.kallern.ch", "", ""],
-  "Killwangen": ["digital", "https://www.killwangen.ch", "https://www.killwangen.ch/aktuelles/aktuelles/news-detail/artikel/amtliche-publikation-einbürgerungsgesuche-renzi-brayan-und-eros/", "16.03.2026 Amtliche Publikationen Baugesuch Dorfstrasse 23Signalisationsänderung Poststrasse/Steinbruchstrasse /&hellip;"],
+  "Killwangen": [
+    "digital",
+    "https://www.killwangen.ch",
+    "https://www.killwangen.ch/aktuelles/amtliche-publikationen-limmatwelle/",
+    "Baugesuche"
+  ],
   "Kirchleerau": ["partial", "http://www.kirchleerau.ch", "", ""],
   "Klingnau": ["partial", "https://www.klingnau.ch", "", ""],
   "Koblenz": ["partial", "https://www.koblenz.ch", "", "03.02.2026 Publikation Baugesuch Tüftelstrasse 20"],
@@ -295,7 +305,7 @@ const municipalitySourcePrefills = {
   "Leuggern": ["partial", "https://www.leuggern.ch/", "", ""],
   "Leutwil": ["partial", "http://www.leutwil.ch", "", ""],
   "Lupfig": ["partial", "https://www.lupfig.ch", "", "Baugesuch Reliag AG"],
-  "Magden": ["digital", "https://www.magden.ch", "https://www.magden.ch/publikationen", "Verschiedene Dokumente"],
+  "Magden": ["digital", "https://www.magden.ch", "https://www.magden.ch/publikationen", "Publikationen Baugesuch"],
   "Mägenwil": ["digital", "https://www.maegenwil.ch", "https://www.maegenwil.ch/aktuelles/amtliche-publikationen", "Amtliche Publikationen"],
   "Mandach": ["digital", "https://www.mandach.ch", "https://www.mandach.ch/publikationen", "Publikationen"],
   "Meisterschwanden": ["digital", "https://www.meisterschwanden.ch", "https://www.meisterschwanden.ch/gemeinde/news-publikationen/baugesuche.html/411", "Baugesuche"],
@@ -307,7 +317,12 @@ const municipalitySourcePrefills = {
   "Möhlin": ["partial", "https://www.moehlin.ch", "", "Baugesuchspublikation vom 27.02.2026"],
   "Mönthal": ["digital", "https://www.moenthal.ch", "https://www.moenthal.ch/verwaltung/nebenamtliche-funktionaere", "Nebenamtliche Funktionäre"],
   "Moosleerau": ["partial", "http://www.moosleerau.ch", "", ""],
-  "Möriken-Wildegg": ["partial", "https://www.moeriken-wildegg.ch", "", ""],
+  "Möriken-Wildegg": [
+    "digital",
+    "https://www.moeriken-wildegg.ch",
+    "https://www.moeriken-wildegg.ch/politik/aktuelles/baugesuche.html/421",
+    "Baugesuche"
+  ],
   "Muhen": ["digital", "https://www.muhen.ch", "https://www.muhen.ch/leben-arbeiten/bauen-wohnen/baugesuche.html/191", "Baugesuche"],
   "Mühlau": ["partial", "https://www.muehlau.ch/", "", "Baugesuch Wey"],
   "Mülligen": ["partial", "https://www.muelligen.ch", "", ""],
@@ -315,10 +330,10 @@ const municipalitySourcePrefills = {
   "Münchwilen": ["partial", "https://www.muenchwilen-ag.ch", "", "Baugesuch"],
   "Murgenthal": ["partial", "http://www.murgenthal.ch", "", "Baugesuche 16.3. - 14.4.2026"],
   "Neuenhof": ["digital", "http://www.neuenhof.ch", "http://www.neuenhof.ch/aktuelles/baugesuche/", "Baugesuche"],
-  "Niederlenz": ["digital", "http://www.niederlenz.ch", "https://www.niederlenz.ch/de/poltik-und-verwaltung/Gemeindeversammlung/Aktenauflage", "Aktenauflage"],
+  "Niederlenz": ["digital", "http://www.niederlenz.ch", "http://www.niederlenz.ch/baugesuche", "Baugesuche"],
   "Niederrohrdorf": ["digital", "http://www.niederrohrdorf.ch", "http://www.niederrohrdorf.ch/de/politik/cdws/baugesuche.php", "Baugesuche"],
   "Niederwil": ["partial", "https://www.niederwil.ch/", "", ""],
-  "Oberentfelden": ["digital", "https://www.oberentfelden.ch", "https://www.oberentfelden.ch/aktuelles/amtliche-publikationen", "Amtliche Publikationen"],
+  "Oberentfelden": ["digital", "https://www.oberentfelden.ch", "https://www.oberentfelden.ch/aktuelles/baugesuche", "Baugesuche"],
   "Oberhof": ["partial", "http://www.oberhof.ch", "", ""],
   "Oberkulm": ["digital", "http://www.oberkulm.ch", "http://www.oberkulm.ch/verwaltung/baugesuche.html/380", "Baugesuche"],
   "Oberlunkhofen": ["partial", "https://www.oberlunkhofen.ch", "", "Baugesuch"],
@@ -370,7 +385,7 @@ const municipalitySourcePrefills = {
   "Uerkheim": ["digital", "https://www.uerkheim.ch", "https://uerkheim.ch/formulare/bauverwaltung.cfm", "Baugesuch - Formular Uerkheim"],
   "Uezwil": ["digital", "https://www.uezwil.ch", "https://www.uezwil.ch/publikationen", "Publikationen"],
   "Unterentfelden": ["partial", "https://www.unterentfelden.ch", "", "Öffentliche Auflage des Baugesuchs vom 20. März bis 20. April 2026"],
-  "Unterkulm": ["digital", "https://www.unterkulm.ch", "http://ebauportal.ag.ch", "Digitales Baugesuch"],
+  "Unterkulm": ["digital", "https://www.unterkulm.ch", "https://www.unterkulm.ch/gemeinde/aktuell/baugesuchs-publikationen.html/589", "Baugesuchs-Publikationen"],
   "Unterlunkhofen": ["partial", "https://www.unterlunkhofen.ch", "", "Amtliche Publikationen vom 10. März 2026"],
   "Untersiggenthal": ["digital", "https://www.untersiggenthal.ch", "https://www.untersiggenthal.ch/de/aktuelles/baugesuchspublikationen/", "Amtliche Publikationen / Baugesuchspublikationen"],
   "Veltheim": ["partial", "https://www.veltheim.ch", "", ""],
@@ -385,14 +400,14 @@ const municipalitySourcePrefills = {
   "Wiliberg": ["digital", "http://www.wiliberg.ch", "https://www.schoeftland.ch/aktuellesinformationen/2641552", "Baugesuch ab 2026"],
   "Windisch": ["digital", "https://www.windisch.ch", "https://www.windisch.ch/bauen-umwelt/bauen/baugesuche.html/116", "Baugesuche"],
   "Wittnau": ["partial", "https://www.wittnau.ch", "", ""],
-  "Wohlen": ["digital", "https://www.wohlen.ch", "https://www.wohlen.ch/rechtsgültigeamtlichepublikationen", "Rechtsgültige Amtliche Publikationen"],
+  "Wohlen": ["digital", "https://www.wohlen.ch", "https://www.wohlen.ch/rechtsgültigeamtlichepublikationen", "Rechtsgültige Amtliche Publikationen Baugesuch"],
   "Wohlenschwil": ["digital", "https://www.wohlenschwil.ch", "https://www.wohlenschwil.ch/aktuelles/baugesuchs-publikationen/", "Baugesuche"],
   "Wölflinswil": ["digital", "https://www.woelflinswil.ch", "https://www.woelflinswil.ch/_rte/information/2808097", "19.03.2026 Baugesuche – öffentliche Auflage +"],
   "Würenlingen": ["digital", "https://www.wuerenlingen.ch", "https://www.wuerenlingen.ch/aktuelles/projekte/gestaltungsplan-mittlere-berg/auflage/", "Auflage"],
   "Zeihen": ["digital", "https://www.zeihen.ch", "https://www.zeihen.ch/portraet/aktuelles.html/25?newsSearchParams.category=3", "Baugesuche"],
   "Zeiningen": ["digital", "http://www.zeiningen.ch", "http://www.zeiningen.ch/baupublikationen", "Baupublikationen"],
   "Zetzwil": ["partial", "http://www.zetzwil.ch", "", "öffentliche Publikation Baugesuch Maurer Roland"],
-  "Zufikon": ["digital", "http://www.zufikon.ch", "http://www.zufikon.ch/publikationen", "Publikationen"],
+  "Zufikon": ["digital", "http://www.zufikon.ch", "http://www.zufikon.ch/baugesuche", "Baugesuche"],
   "Zuzgen": ["digital", "https://www.zuzgen.ch", "https://ebauportal.ag.ch/", "eBau Aargau"],
 };
 
@@ -407,7 +422,7 @@ const htmlOfficialPublicationPattern = /amtliche publikation|amtliches publikati
 const htmlSinglePublicationPattern =
   /(?:\/_rte\/information\/\d+\b|\/news\/\d+\b|\/\d{4}\/\d{2}\/\d{2}\/|[?&]id=\d+\b)/i;
 const htmlWrongTopicPattern =
-  /einbürger|einbürger|verkehrsverbund|zvv|fahrplanprojekt|nebenamtliche funktionaere|nebenamtliche funktionäre|mitarbeiter|formulare|formular|digitalisierung des baugesuchsverfahrens|rechtsgültigeamtlichepublikationen|rechtsgültige amtliche publikationen|verschiedene dokumente|reglemente|aktenauflage|pressemitteilungen|stadtbibliothek|wohnraumstrategie|altlasten|foerderprogramm|förderprogramm|zertifizierung/i;
+  /einbürger|einbürger|verkehrsverbund|zvv|fahrplanprojekt|nebenamtliche funktionaere|nebenamtliche funktionäre|mitarbeiter|formulare|formular|digitalisierung des baugesuchsverfahrens|verschiedene dokumente|reglemente|aktenauflage|pressemitteilungen|stadtbibliothek|wohnraumstrategie|altlasten|foerderprogramm|förderprogramm|zertifizierung|erteilte baubewilligung|erteilte bewilligung|baubewilligung erteilt/i;
 const autoManagedMunicipalitySourceNotePrefixes = [
   "Automatisch erkannte",
   "Offizielle Gemeindewebseite automatisch hinterlegt.",
@@ -495,7 +510,6 @@ function slugifyMunicipality(name) {
   return String(name)
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
-    .replace(/ss/g, "ss")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");

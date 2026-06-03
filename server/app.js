@@ -38,6 +38,7 @@ import {
   protectionStatuses,
   workflowStatuses
 } from "./repository/applicationsRepository.js";
+import { createApplicationLearningRepository } from "./repository/applicationLearningRepository.js";
 import { createMailService } from "./services/mailService.js";
 import { createMaintenanceService } from "./services/maintenanceService.js";
 import { buildOtpauthUri, generateTotpSecret, verifyTotp } from "./services/totp.js";
@@ -75,6 +76,10 @@ const contentSecurityPolicy = [
   "connect-src 'self' https://www.ag.ch https://challenges.cloudflare.com",
   "frame-src https://challenges.cloudflare.com"
 ].join("; ");
+const municipalitySourcePatternMaxLength = 160;
+const municipalitySourcePatternMaxTerms = 24;
+const municipalitySourcePatternTermMaxLength = 80;
+const municipalitySourcePatternUnsupportedChars = /[\\^$*+?()[\]{}]/;
 
 function nowIso() {
   return new Date().toISOString();
@@ -110,6 +115,63 @@ function normalizeHttpUrl(value) {
   } catch {
     return null;
   }
+}
+
+function looksLikeEmailAddress(value) {
+  const email = String(value ?? "").trim();
+
+  if (!email || email.length > 120 || /\s/.test(email)) {
+    return false;
+  }
+
+  const atIndex = email.indexOf("@");
+
+  if (atIndex <= 0 || atIndex !== email.lastIndexOf("@")) {
+    return false;
+  }
+
+  const domain = email.slice(atIndex + 1);
+
+  if (!domain || domain.length > 253 || domain.startsWith(".") || domain.endsWith(".") || !domain.includes(".")) {
+    return false;
+  }
+
+  return domain
+    .split(".")
+    .every((part) => part.length > 0 && part.length <= 63 && /^[a-z0-9-]+$/i.test(part) && !part.startsWith("-") && !part.endsWith("-"));
+}
+
+function validateMunicipalitySourceSearchPattern(label, pattern) {
+  if (!pattern) {
+    return "";
+  }
+
+  if (pattern.length > municipalitySourcePatternMaxLength) {
+    return `${label} ist zu lang.`;
+  }
+
+  if (municipalitySourcePatternUnsupportedChars.test(pattern)) {
+    return `${label} darf nur einfache Suchbegriffe enthalten. Mehrere Begriffe können mit | getrennt werden.`;
+  }
+
+  const terms = pattern
+    .split("|")
+    .map((term) => term.trim())
+    .filter(Boolean);
+
+  if (terms.length === 0) {
+    return `${label} enthält keinen gültigen Suchbegriff.`;
+  }
+
+  if (terms.length > municipalitySourcePatternMaxTerms) {
+    return `${label} enthält zu viele Suchbegriffe.`;
+  }
+
+  if (terms.some((term) => term.length > municipalitySourcePatternTermMaxLength)) {
+    return `${label} enthält einen zu langen Suchbegriff.`;
+  }
+
+  return "";
 }
 
 function looksLikeMachineReadableSourceUrl(value) {
@@ -619,13 +681,13 @@ function validateRegistrationPayload(payload) {
     return { error: "Das Passwort muss mindestens 8 Zeichen lang sein." };
   }
 
-  // E-Mail ist optional, wird aber für den Self-Service-Passwort-Reset benötigt.
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { error: "Bitte eine gültige E-Mail-Adresse eingeben oder das Feld leer lassen." };
-  }
-
   if (email.length > 120) {
     return { error: "Die E-Mail-Adresse ist zu lang." };
+  }
+
+  // E-Mail ist optional, wird aber für den Self-Service-Passwort-Reset benötigt.
+  if (email && !looksLikeEmailAddress(email)) {
+    return { error: "Bitte eine gültige E-Mail-Adresse eingeben oder das Feld leer lassen." };
   }
 
   return {
@@ -759,14 +821,10 @@ function validateMunicipalitySourcePayload(payload) {
     ["Include-Muster", includePattern],
     ["Exclude-Muster", excludePattern]
   ]) {
-    if (!pattern) {
-      continue;
-    }
+    const patternError = validateMunicipalitySourceSearchPattern(label, pattern);
 
-    try {
-      new RegExp(pattern, "i");
-    } catch {
-      return { error: `${label} ist kein gültiger Suchausdruck.` };
+    if (patternError) {
+      return { error: patternError };
     }
   }
 
@@ -896,6 +954,10 @@ function validateApplicationPatch(payload) {
     sanitized.note = payload.note;
   }
 
+  if (payload.learnFromDecision !== undefined) {
+    sanitized.learnFromDecision = Boolean(payload.learnFromDecision);
+  }
+
   if (Object.keys(sanitized).length === 0) {
     return { error: "no supported fields provided" };
   }
@@ -948,6 +1010,7 @@ export function createApp(options = {}) {
     defaultLoginPassword
   });
   const repository = createApplicationsRepository(db);
+  const applicationLearningRepository = createApplicationLearningRepository(db);
   const commentsRepository = createCommentsRepository(db);
   const importNotificationsRepository = createImportNotificationsRepository(db);
   const municipalitySourcesRepository = createMunicipalitySourcesRepository(db);
@@ -1159,12 +1222,21 @@ export function createApp(options = {}) {
     repository,
     agisGeometryService
   });
-  const assessImportedApplication = agisAssessmentEnabled
-    ? async (item) => {
-        const assessment = await agisAssessmentService.assessItem(item);
-        return assessment ? { ...item, ...assessment } : item;
-      }
-    : null;
+  const assessImportedApplication = async (item) => {
+    const learned = applicationLearningRepository.applyToItem(item);
+    const learnedItem = learned.item ?? item;
+    const canUseOfficialAgis =
+      agisAssessmentEnabled &&
+      String(learnedItem.coordinates ?? "").trim() &&
+      !learnedItem.ambiguousAddress;
+
+    if (!canUseOfficialAgis) {
+      return learnedItem;
+    }
+
+    const assessment = await agisAssessmentService.assessItem(learnedItem);
+    return assessment ? { ...learnedItem, ...assessment } : learnedItem;
+  };
   const applicationsSyncService = createApplicationsSyncService({
     repository,
     sourceUrl: normalizedSyncSourceUrl,
@@ -2147,6 +2219,7 @@ export function createApp(options = {}) {
     response.json({
       ...repository.getDashboard(),
       municipalitySourcesSummary: municipalitySourcesRepository.getSummary(),
+      learningSummary: applicationLearningRepository.getSummary(),
       notifications: importNotificationsRepository.listRecent(),
       syncStatus: weeklySyncService.getStatus(),
       protectionStatuses,
@@ -2237,6 +2310,13 @@ export function createApp(options = {}) {
     if (!updated) {
       response.status(404).json({ error: "Application not found" });
       return;
+    }
+
+    if (validation.value.learnFromDecision || ["cleared", "archived"].includes(updated.workflowStatus)) {
+      applicationLearningRepository.recordFromApplication(updated, {
+        userId: request.currentUser?.id ?? "",
+        force: Boolean(validation.value.learnFromDecision)
+      });
     }
 
     response.json(updated);
