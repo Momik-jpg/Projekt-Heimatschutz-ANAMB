@@ -120,7 +120,6 @@ function collectElements() {
     sessionUserName: $("#sessionUserName"),
     sessionUserRole: $("#sessionUserRole"),
     logoutButton: $("#logoutButton"),
-    mastSearch: $("#mastSearch"),
     themeToggle: $("#themeToggle"),
     fontToggle: $("#fontToggle"),
     navWorkCount: $("#navWorkCount"),
@@ -275,6 +274,74 @@ function setMessage(node, message, ok = false) {
   node.classList.toggle("hidden", !message);
   node.classList.toggle("ok", ok);
   node.classList.toggle("error", !ok);
+}
+
+// ---- In-App-Dialoge (ersetzen die nativen confirm()/prompt()-Boxen) ----
+function openModal({
+  title,
+  message = "",
+  withInput = false,
+  inputType = "text",
+  inputValue = "",
+  label = "",
+  confirmLabel = "OK",
+  cancelLabel = "Abbrechen",
+  danger = false
+}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <h3 class="modal-title">${escapeHtml(title)}</h3>
+        ${message ? `<p class="modal-msg">${escapeHtml(message)}</p>` : ""}
+        ${withInput ? `<label class="modal-field"><span>${escapeHtml(label)}</span><input class="modal-input" type="${escapeHtml(inputType)}"></label>` : ""}
+        <div class="modal-actions">
+          <button type="button" class="modal-btn modal-btn-cancel" data-modal="cancel">${escapeHtml(cancelLabel)}</button>
+          <button type="button" class="modal-btn modal-btn-confirm${danger ? " danger" : ""}" data-modal="confirm">${escapeHtml(confirmLabel)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector(".modal-input");
+    const confirmBtn = overlay.querySelector('[data-modal="confirm"]');
+    if (input) {
+      input.value = inputValue;
+    }
+    setTimeout(() => (input || confirmBtn).focus(), 30);
+
+    function done(result) {
+      document.removeEventListener("keydown", onKey);
+      overlay.remove();
+      resolve(result);
+    }
+    const onConfirm = () => done(withInput ? input.value ?? "" : true);
+    const onCancel = () => done(withInput ? null : false);
+    function onKey(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        onConfirm();
+      }
+    }
+
+    overlay.addEventListener("mousedown", (event) => {
+      if (event.target === overlay) onCancel();
+    });
+    confirmBtn.addEventListener("click", onConfirm);
+    overlay.querySelector('[data-modal="cancel"]').addEventListener("click", onCancel);
+    document.addEventListener("keydown", onKey);
+  });
+}
+
+function uiConfirm(message, { title = "Bestätigen", confirmLabel = "OK", danger = false } = {}) {
+  return openModal({ title, message, confirmLabel, danger });
+}
+
+function uiPrompt(message, { title = "Eingabe", label = "", value = "", inputType = "text", confirmLabel = "Speichern" } = {}) {
+  return openModal({ title, message, withInput: true, label, inputValue: value, inputType, confirmLabel });
 }
 
 async function requestJson(url, options = {}) {
@@ -1461,9 +1528,18 @@ function switchPane(pane) {
 async function editSource(sourceId) {
   const source = state.municipalitySources.find((entry) => entry.id === sourceId);
   if (!source) return;
-  const sourceUrl = window.prompt(`Quelle für ${source.municipality}`, source.sourceUrl || "");
+  const sourceUrl = await uiPrompt("URL der offiziellen Publikationsquelle.", {
+    title: `Quelle für ${source.municipality}`,
+    label: "Quellen-URL",
+    value: source.sourceUrl || "",
+    inputType: "url",
+    confirmLabel: "Weiter"
+  });
   if (sourceUrl === null) return;
-  const enabled = window.confirm("Quelle automatisch aktivieren?");
+  const enabled = await uiConfirm("Quelle automatisch für den Sync aktivieren?", {
+    title: "Quelle aktivieren?",
+    confirmLabel: "Aktivieren"
+  });
   const payload = await requestJson(`/api/admin/municipality-sources/${encodeURIComponent(source.id)}`, {
     method: "PATCH",
     body: {
@@ -1628,12 +1704,6 @@ function wireEvents() {
 
   el.fltSearch.addEventListener("input", (event) => {
     state.filters.search = event.target.value;
-    el.mastSearch.value = event.target.value;
-    renderTable();
-  });
-  el.mastSearch.addEventListener("input", (event) => {
-    state.filters.search = event.target.value;
-    el.fltSearch.value = event.target.value;
     renderTable();
   });
   el.fltMun.addEventListener("change", (event) => { state.filters.municipality = event.target.value; renderTable(); });
@@ -1642,7 +1712,6 @@ function wireEvents() {
   el.resetFilters.addEventListener("click", () => {
     state.filters = { search: "", municipality: "", protection: "", workflow: "" };
     el.fltSearch.value = "";
-    el.mastSearch.value = "";
     el.fltMun.value = "";
     el.fltProt.value = "";
     el.fltWf.value = "";
@@ -1776,7 +1845,12 @@ function wireEvents() {
   });
   $("#pane-sources .adm-toolbar .tool-btn")?.addEventListener("click", async () => {
     if (!isMaster()) return;
-    const municipality = window.prompt("Welche Gemeindequelle bearbeiten?", el.srcSearch.value || "");
+    const municipality = await uiPrompt("Gemeindename eingeben.", {
+      title: "Gemeindequelle bearbeiten",
+      label: "Gemeinde",
+      value: el.srcSearch.value || "",
+      confirmLabel: "Weiter"
+    });
     if (!municipality) return;
     const source = state.municipalitySources.find((entry) =>
       entry.municipality.toLowerCase() === municipality.trim().toLowerCase()
@@ -1811,7 +1885,12 @@ function wireEvents() {
   });
   $("#pane-keys .tool-btn")?.addEventListener("click", async () => {
     if (!isMaster()) return;
-    const note = window.prompt("Notiz zum Registrierungsschlüssel", "Neue Einladung");
+    const note = await uiPrompt("Optionale Notiz zur Einladung.", {
+      title: "Registrierungsschlüssel erstellen",
+      label: "Notiz",
+      value: "Neue Einladung",
+      confirmLabel: "Erstellen"
+    });
     if (note === null) return;
     try {
       const key = await requestJson("/api/admin/registration-keys", { method: "POST", body: { note } });
@@ -1825,7 +1904,12 @@ function wireEvents() {
   el.keysBody.addEventListener("click", async (event) => {
     const resetButton = event.target.closest("[data-user-reset]");
     if (resetButton) {
-      const password = window.prompt("Neues Passwort setzen (mind. 8 Zeichen)");
+      const password = await uiPrompt("Mindestens 8 Zeichen.", {
+        title: "Neues Passwort setzen",
+        label: "Passwort",
+        inputType: "password",
+        confirmLabel: "Setzen"
+      });
       if (!password) return;
       try {
         await requestJson(`/api/admin/users/${encodeURIComponent(resetButton.dataset.userReset)}/password`, {
@@ -1842,7 +1926,16 @@ function wireEvents() {
     if (lockButton) {
       const id = lockButton.dataset.userLock;
       const next = lockButton.dataset.active !== "1"; // aktiv -> sperren (false)
-      if (!next && !window.confirm("Dieses Konto sperren? Der Zugang wird sofort deaktiviert.")) return;
+      if (
+        !next &&
+        !(await uiConfirm("Der Zugang wird sofort deaktiviert.", {
+          title: "Konto sperren?",
+          confirmLabel: "Sperren",
+          danger: true
+        }))
+      ) {
+        return;
+      }
       try {
         await requestJson(`/api/admin/users/${encodeURIComponent(id)}/active`, {
           method: "PATCH",
@@ -1860,7 +1953,15 @@ function wireEvents() {
     const userDeleteButton = event.target.closest("[data-user-delete]");
     if (userDeleteButton) {
       const id = userDeleteButton.dataset.userDelete;
-      if (!window.confirm("Konto endgültig löschen? Das kann nicht rückgängig gemacht werden.")) return;
+      if (
+        !(await uiConfirm("Das Konto wird endgültig gelöscht. Das kann nicht rückgängig gemacht werden.", {
+          title: "Konto löschen?",
+          confirmLabel: "Löschen",
+          danger: true
+        }))
+      ) {
+        return;
+      }
       try {
         await requestJson(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
         state.adminUsers = state.adminUsers.filter((user) => user.id !== id);
@@ -1872,7 +1973,13 @@ function wireEvents() {
       return;
     }
     const deleteButton = event.target.closest("[data-key-delete]");
-    if (deleteButton && window.confirm("Registrierungsschlüssel wirklich löschen?")) {
+    if (deleteButton) {
+      const confirmed = await uiConfirm("Dieser Registrierungsschlüssel kann danach nicht mehr verwendet werden.", {
+        title: "Schlüssel löschen?",
+        confirmLabel: "Löschen",
+        danger: true
+      });
+      if (!confirmed) return;
       try {
         await requestJson(`/api/admin/registration-keys/${encodeURIComponent(deleteButton.dataset.keyDelete)}`, { method: "DELETE" });
         state.registrationKeys = state.registrationKeys.filter((key) => key.id !== deleteButton.dataset.keyDelete);

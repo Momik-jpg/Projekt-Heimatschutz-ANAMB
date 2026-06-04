@@ -113,26 +113,34 @@ svg { display: block; }
 }
 
 /* ---- Kopf ---------------------------------------------------------- */
-.masthead { background: var(--panel); }
+.masthead { background: var(--panel); border-top: 3px solid var(--brand-700); }
 
 .mast-util {
   display: flex; align-items: center; justify-content: space-between;
   gap: 16px; flex-wrap: wrap;
   padding: 7px clamp(16px, 2.2vw, 30px);
+  background: var(--surface-quiet);
   border-bottom: 1px solid var(--panel-border);
   font-size: 0.78rem; color: var(--ink-500);
 }
 .mast-org b { color: var(--ink-800); font-weight: 700; }
 .mast-org .dept { margin-left: 12px; color: var(--ink-500); }
-.mast-account { display: inline-flex; align-items: center; gap: 14px; }
+.mast-account { display: inline-flex; align-items: center; gap: 12px; }
 .mast-account .user-name { color: var(--ink-900); font-weight: 700; }
-.mast-account .user-role { color: var(--ink-500); margin-left: 6px; }
-.util-link {
-  background: none; border: 0; padding: 0; cursor: pointer;
-  color: var(--brand-700); font-size: 0.78rem; font-weight: 600;
-  text-decoration: underline; text-underline-offset: 2px;
+.mast-account .user-role {
+  margin-left: 8px; padding: 1px 9px; border-radius: var(--r-pill);
+  background: var(--brand-50); border: 1px solid var(--brand-100);
+  color: var(--brand-800); font-size: 0.72rem; font-weight: 600;
 }
-.util-link:hover { color: var(--brand-800); }
+.util-link {
+  background: none; cursor: pointer;
+  border: 1px solid var(--stone-300); border-radius: var(--r-pill);
+  padding: 3px 12px;
+  color: var(--brand-700); font-size: 0.76rem; font-weight: 600;
+  text-decoration: none;
+  transition: color var(--t), border-color var(--t), background var(--t);
+}
+.util-link:hover { color: var(--brand-800); border-color: var(--brand-300); background: var(--brand-50); }
 
 .mast-main {
   display: flex; align-items: center; justify-content: space-between;
@@ -143,23 +151,6 @@ svg { display: block; }
 .brand .wappen { height: 38px; width: auto; flex: none; }
 .brand .word b { display: block; font-size: 1.16rem; font-weight: 700; color: var(--ink-900); letter-spacing: -0.015em; }
 .brand .word span { display: block; font-size: 0.82rem; color: var(--ink-500); margin-top: 1px; }
-
-.mast-search {
-  display: inline-flex; align-items: center; gap: 9px;
-  border: 1px solid var(--stone-300); border-radius: var(--r-sm);
-  padding: 9px 13px; width: min(340px, 100%);
-  color: var(--ink-400); background: var(--stone-100);
-  font-size: 0.9rem; font-weight: 500; text-align: left; cursor: text;
-  transition: border-color var(--t), background var(--t);
-}
-.mast-search:hover { border-color: var(--ink-400); }
-.mast-search:focus-within { border-color: var(--brand-500); box-shadow: var(--ring); background: #fff; }
-.mast-search svg { width: 16px; height: 16px; flex: none; }
-.mast-search input {
-  border: 0; background: none; padding: 0; width: 100%;
-  font-size: 0.9rem; color: var(--ink-900); outline: none;
-}
-.mast-search input::placeholder { color: var(--ink-400); }
 
 .mast-tools { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tool-btn {
@@ -596,7 +587,6 @@ body.dark .leaflet-container,
 body.dark .map-fallback {
   background: #16273c;
 }
-body.dark .mast-search { background: var(--panel-muted); }
 body.dark .filter-bar input, body.dark .filter-bar select,
 body.dark .form-card input, body.dark .form-card select, body.dark .form-card textarea,
 body.dark .comment-form textarea { background: var(--panel-muted); color: var(--ink-900); border-color: var(--panel-border); }
@@ -1058,7 +1048,6 @@ body.dark tbody tr.selected td { background: var(--brand-50); }
 /* Timeline */
 body.dark .tl-node { background: var(--panel-muted); border-color: var(--stone-300); }
 body.dark .tl-step.pending .tl-node { background: var(--panel-muted); border-color: var(--stone-300); }
-body.dark .mast-search:focus-within { background: var(--panel-muted); }
 body.dark .tl-line { background: var(--stone-200); }
 body.dark .tl-step.done .tl-node { background: var(--success); border-color: var(--success); }
 body.dark .tl-step.current .tl-node { box-shadow: 0 0 0 4px rgba(86,168,230,.22); }
@@ -1077,3 +1066,40 @@ body.dark .reset-btn, body.dark .btn.ghost, body.dark .map-link { background: va
 body.dark .count-tag { background: var(--brand-50); border-color: var(--brand-100); color: var(--brand-800); }
 body.dark .nav-item .nav-badge { background: var(--stone-200); border-color: var(--stone-300); color: var(--ink-700); }
 body.dark .toast { background: #0e2034; border: 1px solid var(--panel-border); }
+
+/* In-App-Dialoge (ersetzen die nativen confirm/prompt-Boxen) */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1200;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; background: rgba(16, 35, 56, 0.45);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+.modal-card {
+  width: min(440px, 100%);
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--panel-border); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 22px 22px 18px;
+}
+.modal-title { margin: 0; font-size: 1.08rem; font-weight: 700; color: var(--ink-900); letter-spacing: -0.01em; }
+.modal-msg { margin: 8px 0 0; color: var(--ink-600); font-size: 0.92rem; line-height: 1.5; }
+.modal-field { display: block; margin-top: 16px; }
+.modal-field span { display: block; font-size: 0.78rem; font-weight: 600; color: var(--ink-600); margin-bottom: 6px; }
+.modal-input {
+  width: 100%; box-sizing: border-box;
+  border: 1px solid var(--stone-300); border-radius: var(--r-sm);
+  padding: 10px 12px; font-size: 0.94rem; background: var(--panel); color: var(--text);
+}
+.modal-input:focus { outline: none; border-color: var(--brand-500); box-shadow: var(--ring); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.modal-btn {
+  border-radius: var(--r-md); padding: 8px 16px; font: inherit; font-weight: 600; font-size: 0.88rem;
+  cursor: pointer; border: 1px solid transparent;
+  transition: background var(--t), border-color var(--t), color var(--t), filter var(--t);
+}
+.modal-btn-cancel { background: var(--panel); border-color: var(--stone-300); color: var(--ink-700); }
+.modal-btn-cancel:hover { border-color: var(--ink-400); background: var(--surface-quiet); }
+.modal-btn-confirm { background: var(--brand-700); color: #fff; }
+.modal-btn-confirm:hover { filter: brightness(1.08); }
+.modal-btn-confirm.danger { background: var(--danger); }
+.modal-btn:focus-visible { outline: none; box-shadow: var(--ring); }
