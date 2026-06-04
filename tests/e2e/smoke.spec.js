@@ -61,3 +61,14 @@ test("Verwaltung: Master sieht Gemeindequellen", async ({ page }) => {
   await expect(page.locator('button.rail-item[data-pane="sources"]')).toBeVisible();
   await expect(page.locator("#view-admin h1")).toContainText("Verwaltung");
 });
+
+test("Verwaltung: Konten-Liste bietet Sperren und Löschen", async ({ page }) => {
+  await loginAsMaster(page);
+
+  await page.locator('button.nav-item[data-view="admin"]').click();
+  await page.locator('button.rail-item[data-pane="keys"]').click();
+
+  // Team-Konten zeigen Sperr- und Lösch-Aktionen (Master-/eigenes Konto nicht).
+  await expect(page.locator("#keysBody [data-user-lock]").first()).toBeVisible();
+  await expect(page.locator("#keysBody [data-user-delete]").first()).toBeVisible();
+});

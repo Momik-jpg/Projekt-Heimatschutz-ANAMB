@@ -476,6 +476,151 @@ test("master can reset a forgotten password for a team member", async (context) 
   assert.equal(newLoginResponse.status, 200);
 });
 
+test("master can lock and unlock a team member", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  const lucia = usersResponse.payload.items.find((user) => user.username === "lucia.vettori");
+  assert.ok(lucia);
+  assert.equal(lucia.active, true);
+
+  const lockResponse = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}/active`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({ active: false })
+  });
+  assert.equal(lockResponse.status, 200);
+
+  // Gesperrtes Konto kann sich nicht mehr anmelden.
+  const lockedLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
+  });
+  assert.equal(lockedLogin.status, 401);
+
+  const afterLock = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(afterLock.payload.items.find((user) => user.id === lucia.id).active, false);
+
+  const unlockResponse = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}/active`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({ active: true })
+  });
+  assert.equal(unlockResponse.status, 200);
+
+  const unlockedLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
+  });
+  assert.equal(unlockedLogin.status, 200);
+});
+
+test("master can delete a team member", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  const lucia = usersResponse.payload.items.find((user) => user.username === "lucia.vettori");
+  assert.ok(lucia);
+
+  const deleteResponse = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}`, {
+    method: "DELETE",
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(deleteResponse.status, 200);
+
+  const afterDelete = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(afterDelete.payload.items.find((user) => user.id === lucia.id), undefined);
+
+  const deletedLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
+  });
+  assert.equal(deletedLogin.status, 401);
+});
+
+test("locking and deleting accounts is guarded (own account, master, non-master)", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  const masterUser = usersResponse.payload.items.find((user) => user.role === "Master");
+  const lucia = usersResponse.payload.items.find((user) => user.username === "lucia.vettori");
+  assert.ok(masterUser);
+  assert.ok(lucia);
+
+  // Eigenes (Master-)Konto kann nicht gesperrt oder gelöscht werden.
+  const selfLock = await requestJson(testServer.baseUrl, `/api/admin/users/${masterUser.id}/active`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({ active: false })
+  });
+  assert.equal(selfLock.status, 400);
+
+  const selfDelete = await requestJson(testServer.baseUrl, `/api/admin/users/${masterUser.id}`, {
+    method: "DELETE",
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(selfDelete.status, 400);
+
+  // Ein Team-Konto darf weder sperren noch löschen.
+  const luciaCookie = await login(testServer.baseUrl, {
+    username: "lucia.vettori",
+    password: "Heimat2026!"
+  });
+
+  const teamLock = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}/active`, {
+    method: "PATCH",
+    headers: { Cookie: luciaCookie },
+    body: JSON.stringify({ active: false })
+  });
+  assert.equal(teamLock.status, 403);
+
+  const teamDelete = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}`, {
+    method: "DELETE",
+    headers: { Cookie: luciaCookie }
+  });
+  assert.equal(teamDelete.status, 403);
+});
+
 test("master can import an AGIS export JSON as a practical fallback", async (context) => {
   const testServer = createTestServer();
 

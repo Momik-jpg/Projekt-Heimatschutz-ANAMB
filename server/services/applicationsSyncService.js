@@ -472,7 +472,7 @@ function cleanProjectText(value) {
     .replace(/&(?:nbsp|amp|lt|gt|quot|#0?39|apos);/gi, " ")
     .replace(/\b[\w-]+\s*=\s*"[^"]*"/g, " ")
     .replace(/\b[\w-]+\s*=\s*'[^']*'/g, " ")
-    .replace(/[?&][\w.%\[\]+-]+=[\w.%\[\]+-]*/g, " ")
+    .replace(/[?&][\w.%[\]+-]+=[\w.%[\]+-]*/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^\s*(?:Bauvorhaben|Bauprojekt|Bauobjekt|Projekt)\s*[:.–-]\s*/i, "")

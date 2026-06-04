@@ -1862,7 +1862,7 @@ export function createApp(options = {}) {
     }
 
     response.json({
-      items: usersRepository.listForAdmin()
+      items: usersRepository.listAllForAdmin()
     });
   });
 
@@ -1893,6 +1893,83 @@ export function createApp(options = {}) {
       user: updatedUser,
       message: `Passwort für ${updatedUser.displayName} wurde aktualisiert.`
     });
+  });
+
+  // Konto sperren/entsperren (active-Flag). Nur Master; nicht das eigene Konto und
+  // kein Master-Konto. Gesperrte Konten verlieren beim nächsten Request den Zugang;
+  // laufende Sitzungen werden zusätzlich sofort beendet.
+  app.patch("/api/admin/users/:id/active", (request, response) => {
+    if (!isMasterUser(request.currentUser)) {
+      response.status(403).json({ error: "Nur das Master-Konto darf Konten sperren." });
+      return;
+    }
+
+    const targetId = request.params.id;
+
+    if (targetId === request.currentUser.id) {
+      response.status(400).json({ error: "Das eigene Konto kann nicht gesperrt werden." });
+      return;
+    }
+
+    const target = usersRepository.findByIdAnyState(targetId);
+
+    if (!target) {
+      response.status(404).json({ error: "Benutzer nicht gefunden." });
+      return;
+    }
+
+    if (isMasterUser(target)) {
+      response.status(403).json({ error: "Das Master-Konto kann nicht gesperrt werden." });
+      return;
+    }
+
+    const active = Boolean(request.body?.active);
+    usersRepository.setActive(targetId, active);
+
+    if (!active) {
+      sessionsRepository.deleteByUserId(targetId);
+    }
+
+    recordAudit(active ? "admin.user.unlock" : "admin.user.lock", request, {
+      target: target.username ?? target.displayName
+    });
+    response.json({
+      user: { ...target, active },
+      message: active ? `${target.displayName} wurde entsperrt.` : `${target.displayName} wurde gesperrt.`
+    });
+  });
+
+  // Konto löschen. Nur Master; nicht das eigene Konto und kein Master-Konto.
+  app.delete("/api/admin/users/:id", (request, response) => {
+    if (!isMasterUser(request.currentUser)) {
+      response.status(403).json({ error: "Nur das Master-Konto darf Konten löschen." });
+      return;
+    }
+
+    const targetId = request.params.id;
+
+    if (targetId === request.currentUser.id) {
+      response.status(400).json({ error: "Das eigene Konto kann nicht gelöscht werden." });
+      return;
+    }
+
+    const target = usersRepository.findByIdAnyState(targetId);
+
+    if (!target) {
+      response.status(404).json({ error: "Benutzer nicht gefunden." });
+      return;
+    }
+
+    if (isMasterUser(target)) {
+      response.status(403).json({ error: "Das Master-Konto kann nicht gelöscht werden." });
+      return;
+    }
+
+    sessionsRepository.deleteByUserId(targetId);
+    usersRepository.deleteById(targetId);
+
+    recordAudit("admin.user.delete", request, { target: target.username ?? target.displayName });
+    response.json({ deleted: true, message: `${target.displayName} wurde gelöscht.` });
   });
 
   app.get("/api/admin/audit-log", (request, response) => {

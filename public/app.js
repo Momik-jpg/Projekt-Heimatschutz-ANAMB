@@ -416,7 +416,7 @@ function cleanProjectDisplay(raw) {
     .replace(/&(?:nbsp|amp|lt|gt|quot|#0?39|apos);/gi, " ")
     .replace(/\b[\w-]+\s*=\s*"[^"]*"/g, " ")
     .replace(/\b[\w-]+\s*=\s*'[^']*'/g, " ")
-    .replace(/[?&][\w.%\[\]+-]+=[\w.%\[\]+-]*/g, " ")
+    .replace(/[?&][\w.%[\]+-]+=[\w.%[\]+-]*/g, " ")
     .replace(/^\s*(?:Bauvorhaben|Bauprojekt|Bauobjekt|Projekt)\s*[:.–-]\s*/i, "")
     .replace(
       /\s*(?:Bauherr(?:schaft)?|Grundeigentümer(?:in)?|Eigentümer(?:in)?|Projektverfasser|Bauplatz|Standort|Lage|Parzelle|Auflage(?:frist)?|Publikation|Frist|Einsprache)\s*:.*$/i,
@@ -1312,14 +1312,28 @@ function renderKeys() {
     el.keysBody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><h4>Nur Master-Konto</h4><p>Zugänge und Registrierungsschlüssel sind nur mit Master-Rechten sichtbar.</p></div></td></tr>`;
     return;
   }
-  const userRows = state.adminUsers.map((user) => `<tr>
+  const userRows = state.adminUsers.map((user) => {
+    const active = user.active !== false;
+    // Eigenes Konto und Master-Konto sind vor Sperren/Löschen geschützt.
+    const protectedAccount = user.role === "Master" || user.id === state.currentUser?.id;
+    const statusPill = active
+      ? `<span class="pill ok">Aktiv</span>`
+      : `<span class="pill warn">Gesperrt</span>`;
+    const lockBtn = protectedAccount
+      ? ""
+      : `<button class="icon-btn" title="${active ? "Konto sperren" : "Konto entsperren"}" data-user-lock="${escapeHtml(user.id)}" data-active="${active ? "1" : "0"}">${active ? "🔒" : "🔓"}</button>`;
+    const deleteBtn = protectedAccount
+      ? ""
+      : `<button class="icon-btn" title="Konto löschen" data-user-delete="${escapeHtml(user.id)}">🗑</button>`;
+    return `<tr>
     <td><div class="adm-name">${escapeHtml(user.displayName)}</div><div class="adm-sub">${escapeHtml(user.username || "")}</div></td>
     <td>${escapeHtml(user.role || "-")}</td>
     <td class="mono">Benutzerkonto</td>
     <td class="adm-sub" style="font-size:.84rem">${escapeHtml(formatDateTime(user.lastLoginAt || user.updatedAt || user.createdAt))}</td>
-    <td><span class="pill ok">Aktiv</span></td>
-    <td style="text-align:right"><span class="row-actions"><button class="icon-btn" title="Passwort setzen" data-user-reset="${escapeHtml(user.id)}">✎</button></span></td>
-  </tr>`);
+    <td>${statusPill}</td>
+    <td style="text-align:right"><span class="row-actions"><button class="icon-btn" title="Passwort setzen" data-user-reset="${escapeHtml(user.id)}">✎</button>${lockBtn}${deleteBtn}</span></td>
+  </tr>`;
+  });
   const keyRows = state.registrationKeys.map((key) => {
     const used = Boolean(key.usedAt);
     return `<tr>
@@ -1819,6 +1833,39 @@ function wireEvents() {
           body: { password }
         });
         toast("Passwort gesetzt.");
+      } catch (error) {
+        toast(error.message);
+      }
+      return;
+    }
+    const lockButton = event.target.closest("[data-user-lock]");
+    if (lockButton) {
+      const id = lockButton.dataset.userLock;
+      const next = lockButton.dataset.active !== "1"; // aktiv -> sperren (false)
+      if (!next && !window.confirm("Dieses Konto sperren? Der Zugang wird sofort deaktiviert.")) return;
+      try {
+        await requestJson(`/api/admin/users/${encodeURIComponent(id)}/active`, {
+          method: "PATCH",
+          body: { active: next }
+        });
+        const entry = state.adminUsers.find((user) => user.id === id);
+        if (entry) entry.active = next;
+        renderKeys();
+        toast(next ? "Konto entsperrt." : "Konto gesperrt.");
+      } catch (error) {
+        toast(error.message);
+      }
+      return;
+    }
+    const userDeleteButton = event.target.closest("[data-user-delete]");
+    if (userDeleteButton) {
+      const id = userDeleteButton.dataset.userDelete;
+      if (!window.confirm("Konto endgültig löschen? Das kann nicht rückgängig gemacht werden.")) return;
+      try {
+        await requestJson(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
+        state.adminUsers = state.adminUsers.filter((user) => user.id !== id);
+        renderKeys();
+        toast("Konto gelöscht.");
       } catch (error) {
         toast(error.message);
       }
