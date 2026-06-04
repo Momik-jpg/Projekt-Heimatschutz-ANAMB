@@ -24,6 +24,14 @@ data-local.sqlite-shm
 data-local.sqlite-wal
 backup/
 
+# Playwright (E2E) Artefakte + Test-DB
+test-results/
+playwright-report/
+.playwright/
+data/e2e.sqlite
+data/e2e.sqlite-shm
+data/e2e.sqlite-wal
+
 # Lokale KI-/Dev-Tool-Artefakte (nicht ins Repo)
 .claude/
 .claude-flow/

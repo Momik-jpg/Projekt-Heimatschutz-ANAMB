@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "node --watch server/app.js",
     "start": "node server/app.js",
-    "test": "node --test"
+    "test": "node --test",
+    "pretest:e2e": "node tests/e2e/clean-db.mjs",
+    "test:e2e": "playwright test"
   },
   "engines": {
     "node": ">=24"
@@ -33,5 +35,8 @@
     "express": "^5.2.1",
     "nodemailer": "^8.0.10",
     "pdf-parse": "^2.4.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
   }
 }
