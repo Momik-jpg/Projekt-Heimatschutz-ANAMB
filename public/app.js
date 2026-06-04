@@ -402,18 +402,34 @@ function isMaster() {
 // Säubert die Bauvorhaben-Beschreibung: entfernt HTML-Reste, ein vorangestelltes
 // Rubrik-Label ("Bauvorhaben: …") und angehängten Fremdtext anderer Rubriken
 // (Bauherr/Lage/Parzelle …), die beim Import manchmal mit hineinrutschen.
-function readableProject(item) {
-  let text = normalizeText(item.description || item.projectType || "");
+// Erkennt rohe HTML-/Attribut-/URL-Soup, die bei fehlerhaften Importen ins
+// Bauvorhaben-Feld geraten ist (z. B. 'box box-large" data-index="148" ...').
+function looksLikeMarkupJunk(value) {
+  return /<[a-z/!]|=\s*["']|\bdata-[\w-]+|%5[bd]|class=|box[\s-]box|tx_[a-z_]+|filter%|\/publikation/i.test(value);
+}
+
+function cleanProjectDisplay(raw) {
+  let text = normalizeText(raw || "");
+  if (!text) return "";
   text = text
     .replace(/<[^>]*>/g, " ")
     .replace(/&(?:nbsp|amp|lt|gt|quot|#0?39|apos);/gi, " ")
+    .replace(/\b[\w-]+\s*=\s*"[^"]*"/g, " ")
+    .replace(/\b[\w-]+\s*=\s*'[^']*'/g, " ")
+    .replace(/[?&][\w.%\[\]+-]+=[\w.%\[\]+-]*/g, " ")
     .replace(/^\s*(?:Bauvorhaben|Bauprojekt|Bauobjekt|Projekt)\s*[:.–-]\s*/i, "")
     .replace(
       /\s*(?:Bauherr(?:schaft)?|Grundeigentümer(?:in)?|Eigentümer(?:in)?|Projektverfasser|Bauplatz|Standort|Lage|Parzelle|Auflage(?:frist)?|Publikation|Frist|Einsprache)\s*:.*$/i,
       ""
     );
   text = normalizeText(text).replace(/[\s,;:–-]+$/, "").trim();
-  return text || normalizeText(item.projectType) || "Baugesuch";
+  // Bleiben nach dem Säubern noch Markup-/Code-Reste übrig, verwerfen.
+  if (!text || looksLikeMarkupJunk(text)) return "";
+  return text;
+}
+
+function readableProject(item) {
+  return cleanProjectDisplay(item.description) || cleanProjectDisplay(item.projectType) || "Baugesuch";
 }
 
 function itemTitle(item) {
@@ -456,6 +472,17 @@ function workflowMeta(item) {
 }
 
 function matchesTab(item) {
+  // Das Archiv zeigt alles (inkl. archivierter und überfälliger Fälle).
+  if (state.activeTab === "archive") {
+    return true;
+  }
+
+  // Ausserhalb des Archivs: archivierte UND überfällige Fälle ausblenden –
+  // überfällige sind ausschliesslich im Archiv sichtbar.
+  if (item.workflowStatus === "archived" || isOverdue(item)) {
+    return false;
+  }
+
   switch (state.activeTab) {
     case "important":
       return ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus);
@@ -464,14 +491,10 @@ function matchesTab(item) {
     case "open":
       return ["new", "under-review", "escalated"].includes(item.workflowStatus);
     case "due-soon":
-      return dueMeta(item).days <= 5 && !["cleared", "archived"].includes(item.workflowStatus);
-    case "archive":
-      return true;
+      return dueMeta(item).days <= 5 && item.workflowStatus !== "cleared";
     case "all":
     default:
-      // Standard-Arbeitsliste: ohne Archiv und ohne überfällige Fälle.
-      // Überfällige bleiben unter "Alle / Archiv" sichtbar.
-      return item.workflowStatus !== "archived" && !isOverdue(item);
+      return true;
   }
 }
 
@@ -511,11 +534,19 @@ function updateTabCounts() {
     const node = $(`[data-count="${key}"]`);
     if (node) node.textContent = String(value);
   };
-  setCount("all", count((item) => item.workflowStatus !== "archived" && !isOverdue(item)));
-  setCount("important", count((item) => ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus)));
-  setCount("manual", count((item) => item.protectionStatus === "manual-review" || Boolean(item.ambiguousAddress)));
-  setCount("due-soon", count((item) => dueMeta(item).days <= 5 && !["cleared", "archived"].includes(item.workflowStatus)));
-  el.navWorkCount.textContent = String(count((item) => item.workflowStatus !== "archived" && !isOverdue(item)));
+  // Aktive Fälle = nicht archiviert und nicht überfällig (überfällige zählen nur im Archiv).
+  const active = (item) => item.workflowStatus !== "archived" && !isOverdue(item);
+  setCount("all", count(active));
+  setCount(
+    "important",
+    count((item) => active(item) && ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus))
+  );
+  setCount(
+    "manual",
+    count((item) => active(item) && (item.protectionStatus === "manual-review" || Boolean(item.ambiguousAddress)))
+  );
+  setCount("due-soon", count((item) => active(item) && dueMeta(item).days <= 5 && item.workflowStatus !== "cleared"));
+  el.navWorkCount.textContent = String(count(active));
 }
 
 function renderMunicipalityOptions() {

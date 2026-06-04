@@ -462,10 +462,17 @@ function createImportCandidate(rawItem, sourceUrl, fallbacks = {}) {
 // ein vorangestelltes Rubrik-Label ("Bauvorhaben: …") und angehängten Fremdtext
 // anderer Rubriken (Bauherr/Lage/Parzelle …). Verbessert Anzeige und Lern-Signaturen
 // gleichermassen. Für bereits saubere Werte ist die Funktion eine Identität.
+function looksLikeMarkupJunk(value) {
+  return /<[a-z/!]|=\s*["']|\bdata-[\w-]+|%5[bd]|class=|box[\s-]box|tx_[a-z_]+|filter%|\/publikation/i.test(value);
+}
+
 function cleanProjectText(value) {
   const text = String(value ?? "")
     .replace(/<[^>]*>/g, " ")
     .replace(/&(?:nbsp|amp|lt|gt|quot|#0?39|apos);/gi, " ")
+    .replace(/\b[\w-]+\s*=\s*"[^"]*"/g, " ")
+    .replace(/\b[\w-]+\s*=\s*'[^']*'/g, " ")
+    .replace(/[?&][\w.%\[\]+-]+=[\w.%\[\]+-]*/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^\s*(?:Bauvorhaben|Bauprojekt|Bauobjekt|Projekt)\s*[:.–-]\s*/i, "")
@@ -473,7 +480,9 @@ function cleanProjectText(value) {
       /\s*(?:Bauherr(?:schaft)?|Grundeigentümer(?:in)?|Eigentümer(?:in)?|Projektverfasser|Bauplatz|Standort|Lage|Parzelle|Auflage(?:frist)?|Publikation|Frist|Einsprache)\s*:.*$/i,
       ""
     );
-  return text.replace(/[\s,;:–-]+$/, "").trim();
+  const cleaned = text.replace(/[\s,;:–-]+$/, "").trim();
+  // Bleiben Markup-/Code-Reste übrig, gar nicht erst speichern.
+  return looksLikeMarkupJunk(cleaned) ? "" : cleaned;
 }
 
 function createNormalizedApplication(rawItem, sourceUrl, fallbacks = {}) {
