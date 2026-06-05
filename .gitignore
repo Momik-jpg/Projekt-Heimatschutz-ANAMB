@@ -44,3 +44,11 @@ docs/screenshots/
 docs/*.docx
 *-check.png
 *-fix.png
+
+# Lokale Audit-/Review-Screenshots und Server-Logs (nicht ins Repo)
+audit-*.png
+design-polish-*.png
+modal-*.png
+polish-*.png
+review-*.png
+server-*.log

@@ -18,7 +18,7 @@ import { generateTotp } from "../server/services/totp.js";
 // echten Secrets und tauchen nirgends produktiv auf. Per Umgebungsvariable
 // überschreibbar, sonst neutrale Platzhalter.
 const TEST_MASTER_PASSWORD = process.env.TEST_MASTER_PASSWORD ?? "Test-Master-Pw-1!";
-const TEST_TEAM_PASSWORD = process.env.TEST_TEAM_PASSWORD ?? "Test-Team-Pw-1!";
+const TEST_TEAM_PASSWORD = process.env.TEST_TEAM_PASSWORD ?? "Heimat2026!";
 
 function createTestServer(options = {}) {
   const directory = options.directory ?? mkdtempSync(join(tmpdir(), "heimatschutz-aargau-"));
@@ -57,7 +57,7 @@ function createTestServer(options = {}) {
     defaultLoginPassword:
       "defaultLoginPassword" in options
         ? options.defaultLoginPassword
-        : process.env.DEFAULT_LOGIN_PASSWORD ?? "Heimat2026!",
+        : process.env.DEFAULT_LOGIN_PASSWORD ?? TEST_TEAM_PASSWORD,
     masterSetupEmail: options.masterSetupEmail,
     mailService: options.mailService,
     onMasterSetupKey: options.onMasterSetupKey,
@@ -207,7 +207,7 @@ async function login(baseUrl, credentials = {}) {
     method: "POST",
     body: JSON.stringify({
       username: credentials.username ?? "lucia.vettori",
-      password: credentials.password ?? "Heimat2026!"
+      password: credentials.password ?? TEST_TEAM_PASSWORD
     })
   });
 
@@ -2800,6 +2800,133 @@ test("municipality import geocodes valid addresses through the official swiss se
   assert.equal(syncResponse.payload.items[0].coordinates, "2648701,1249642");
   assert.equal(syncResponse.payload.items[0].protectionStatus, "no-hit");
   assert.match(syncResponse.payload.items[0].automatedAssessment, /Adresssuchdienst/i);
+});
+
+test("municipality import refines split house-number locations before manual review", async (context) => {
+  const syncFetchImpl = async (url) => {
+    if (
+      String(url) !== "https://wettingen.example.org/baugesuche" &&
+      String(url) !== "https://wettingen.example.org/bg-2026-120"
+    ) {
+      throw new Error(`Unexpected Wettingen sync URL: ${url}`);
+    }
+
+    return new Response(
+      `
+        <html>
+          <body>
+            <main>
+              <article>
+                <a href="/bg-2026-120">Baugesuch BG-2026-120</a>
+                <p>Bauvorhaben: Umnutzung eines Erdgeschosses ohne sichtbare Aussenveränderung.</p>
+                <p>Standort: 120</p>
+                <p>Strasse: Landstrasse</p>
+                <p>Parzelle Nr. 5220</p>
+                <p>Publiziert: 15. März 2026</p>
+              </article>
+            </main>
+          </body>
+        </html>
+      `,
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html"
+        }
+      }
+    );
+  };
+  const geocodeFetchImpl = async (url) => {
+    const requestUrl = new URL(String(url));
+    assert.match(requestUrl.searchParams.get("searchText") ?? "", /Landstrasse 120, Wettingen/i);
+
+    return createJsonResponse({
+      results: [
+        {
+          attrs: {
+            origin: "address",
+            label: "Landstrasse 120, 5430 Wettingen",
+            municipality: "Wettingen",
+            x: 2660160,
+            y: 1258505
+          }
+        }
+      ]
+    });
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl,
+    geocodeEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Wettingen");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: {
+      Cookie: masterCookie
+    },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://wettingen.example.org/baugesuche",
+      includePattern: "baugesuch|landstrasse|standort|parzelle",
+      excludePattern: "newsletter|facebook|archiv",
+      notes: "Offizielle Baugesuchseite"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(syncResponse.payload.items[0].address, "Landstrasse 120");
+  assert.equal(syncResponse.payload.items[0].parcel, "5220");
+  assert.equal(syncResponse.payload.items[0].coordinates, "2660160,1258505");
+  assert.equal(syncResponse.payload.items[0].protectionStatus, "no-hit");
+  assert.equal(syncResponse.payload.items[0].ambiguousAddress, false);
+  assert.match(syncResponse.payload.items[0].automatedAssessment, /KI-Datenprüfung/i);
+
+  const detailResponse = await requestJson(
+    testServer.baseUrl,
+    `/api/applications/${encodeURIComponent(syncResponse.payload.items[0].id)}`,
+    {
+      headers: {
+        Cookie: masterCookie
+      }
+    }
+  );
+
+  assert.equal(detailResponse.status, 200);
+  assert.equal(detailResponse.payload.address, "Landstrasse 120");
+  assert.equal(detailResponse.payload.parcel, "5220");
 });
 
 test("municipality import geocodes addresses without a street suffix and skips coarse municipality hits", async (context) => {
