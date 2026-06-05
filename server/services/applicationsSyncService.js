@@ -104,6 +104,9 @@ const unreliableProxyUrlPattern = /readspeaker\.com\/cgi-bin\/rsent/i;
 const streetLikeAddressPattern =
   /(?:strasse|strasse|weg|gasse|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)\b/i;
 const parcelLikeAddressPattern = /^Parzelle\s+\d{1,6}$/i;
+const addressPlaceholderPattern = /^Adresse\s+(?:prüfen|von\s+(?:Webseite|PDF)\s+prüfen|aus\s+Amtsblatt\s+prüfen)$/i;
+const standaloneHouseNumberPattern =
+  /^(?:Haus(?:nummer|nr\.?)?|Geb(?:äude)?(?:\s+Nr\.?)?|Nr\.?)?\s*(\d{1,4}[a-z]?)$/iu;
 // Generische "Strassenname + Hausnummer"-Adresse ohne bekanntes Strassen-Suffix
 // (z. B. "Oberdorf 12", "Im Grund 4", "Vorstadt 3a"). Hausnummern auf 1-3 Stellen
 // begrenzt, damit Jahreszahlen (2024) oder Postleitzahlen (5000) nicht fälschlich
@@ -111,6 +114,8 @@ const parcelLikeAddressPattern = /^Parzelle\s+\d{1,6}$/i;
 // Koordinaten statt "Von Hand prüfen".
 const houseNumberAddressPattern =
   /^[A-Za-zÄÖÜäöü][A-Za-zÄÖÜäöüéèà.'-]*(?:\s+[A-Za-zÄÖÜäöüéèà0-9.'-]+){0,3}\s+\d{1,3}\s?[a-z]?$/u;
+const streetAddressWithNumberPattern =
+  /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]*(?:\s+[A-ZÄÖÜa-zäöüéèà'’.-]+){0,4}(?:strasse|strasse|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)\s+\d{1,4}[A-Za-z]?)\b/gu;
 // Grobe Geocoder-Treffer (Gemeinde-, Bezirks-, Kantonsumriss, Ortschaftsname,
 // Postleitzahl) sind keine genaue Verortung. Sie werden verworfen, damit ein
 // unscharfer Treffer nie einen falschen "kein Schutz"-Befund erzeugt.
@@ -1146,15 +1151,19 @@ function sanitizeExtractedAddress(value) {
   const cleanedText = normalizeWhitespace(
     text
       .replace(
+        /\s+(?:öffentliche(?:\s+auflage)?|publiziert|publikation|veröffentlicht|frist(?:ende)?|einsprachfrist|auflage(?:frist)?|mehr lesen|zuletzt synchronisiert)\b[\s\S]*$/i,
+        ""
+      )
+      .replace(
         /^(?:Bauherrschaft|Bauherr|Gesuchsteller(?:\/in)?|Grundeigentümer(?:\/in)?)\s*:\s*[^,;]+,\s*/i,
         ""
       )
       .replace(/^[–-]\s*20\d{2}(?:[-/.]\d+)?\s*-\s*,?\s*/i, "")
       .replace(
-        /\b(?:publiziert|publikation|veröffentlicht|frist(?:ende)?|einsprachfrist|auflage(?:frist)?|mehr lesen|zuletzt synchronisiert)\b[\s\S]*$/i,
+        /\b(?:öffentliche(?:\s+auflage)?|publiziert|publikation|veröffentlicht|frist(?:ende)?|einsprachfrist|auflage(?:frist)?|mehr lesen|zuletzt synchronisiert)\b[\s\S]*$/i,
         ""
       )
-      .replace(/\.\s*(?:publiziert|publikation|veröffentlicht|frist(?:ende)?|einsprachfrist|auflage(?:frist)?).*$/i, "")
+      .replace(/\.\s*(?:öffentliche(?:\s+auflage)?|publiziert|publikation|veröffentlicht|frist(?:ende)?|einsprachfrist|auflage(?:frist)?).*$/i, "")
       .replace(/\b(?:Zone(?:\(n\))?|Weitere Bewilligungen?|Kant(?:onale)?\.?\s+Zustimmung|Planauflage|Zusatzgesuche?)\b[\s\S]*$/i, "")
       .replace(/\bGebäude\s+Nr\.?\s*\d+[A-Za-z]?\b[;,]?\s*/gi, "")
       .replace(/\(\s*ohne Profilierung\s*\)/gi, "")
@@ -2100,11 +2109,12 @@ function evaluateMunicipalityCandidateDetails(resolvedUrl, candidateText, pageDe
   const coordinates = extractSwissCoordinatesFromText(`${resolvedUrl} ${candidateText}`);
   const publicationDate = extractPublicationDateFromText(candidateText) || pageDefaults.publicationDate || "";
   const deadlineDate = extractDeadlineDateFromText(candidateText) || pageDefaults.deadlineDate || "";
+  const hasRecoverableLocation = hasRecoverableLocationFragments(candidateText);
   const hasStrongKeyword = /\b(baugesuch|baugesuche|baupublikation|baubewilligung)\b/i.test(
     `${resolvedUrl} ${candidateText}`
   );
   const looksLikePdf = looksLikePdfUrl(resolvedUrl);
-  const hasStableIdentifiers = Boolean(address || parcel || coordinates);
+  const hasStableIdentifiers = Boolean(address || parcel || coordinates || hasRecoverableLocation);
   const hasPublicationMetadata = Boolean(publicationDate || deadlineDate);
   const looksLikeAdministrativePermitTemplate = administrativePermitTemplatePattern.test(
     `${resolvedUrl} ${candidateText}`
@@ -2130,6 +2140,7 @@ function evaluateMunicipalityCandidateDetails(resolvedUrl, candidateText, pageDe
     coordinates,
     publicationDate,
     deadlineDate,
+    hasRecoverableLocation,
     hasStrongKeyword,
     looksLikePdf,
     hasStableIdentifiers,
@@ -2444,7 +2455,7 @@ async function geocodeMunicipalityAddress(address, municipality, fetchImpl, requ
     return cache.get(cacheKey);
   }
 
-    const pending = (async () => {
+  const pending = (async () => {
     const response = await fetchWithTimeout(
       fetchImpl,
       buildSwissGeocodeQueryUrl(address, municipality),
@@ -2537,6 +2548,323 @@ async function geocodeMunicipalityParcel(parcelNumber, municipality, fetchImpl, 
 
   cache.set(cacheKey, pending);
   return pending;
+}
+
+function isWeakImportedAddress(address) {
+  const text = normalizeWhitespace(address);
+
+  if (!text || addressPlaceholderPattern.test(text) || standaloneHouseNumberPattern.test(text)) {
+    return true;
+  }
+
+  if (parcelLikeAddressPattern.test(text)) {
+    return true;
+  }
+
+  if (/^\d{1,4}[A-Za-z]?\s+\S+/u.test(text)) {
+    return true;
+  }
+
+  if (!/\d/.test(text)) {
+    return true;
+  }
+
+  return !streetLikeAddressPattern.test(text) && !houseNumberAddressPattern.test(text);
+}
+
+function extractStandaloneHouseNumber(value) {
+  const text = normalizeWhitespace(value);
+  const standaloneMatch = text.match(standaloneHouseNumberPattern);
+
+  if (standaloneMatch?.[1]) {
+    return standaloneMatch[1];
+  }
+
+  const leadingMatch = text.match(/^(\d{1,4}[A-Za-z]?)\b/u);
+
+  if (leadingMatch?.[1]) {
+    return leadingMatch[1];
+  }
+
+  const labeledMatch = text.match(
+    /\b(?:Haus(?:nummer|nr\.?)?|Geb(?:äude)?(?:\s*(?:Nr\.?|Nummer))?|Gebäudenummer|Objekt\s*Nr\.?|Standort|Bauplatz|Lage)\s*:?\s*(\d{1,4}[A-Za-z]?)\b/iu
+  );
+
+  return labeledMatch?.[1] ?? "";
+}
+
+function extractStreetNameFromContext(value) {
+  const streetTrailingLabels = [
+    "Hausnummer",
+    "Hausnr.",
+    "Gebäude Nr.",
+    "Gebäudenummer",
+    "Objekt Nr.",
+    "Parzelle",
+    "Parz. Nr.",
+    "Bauherr",
+    "Bauherrschaft",
+    "Bauobjekt",
+    "Bauvorhaben",
+    "Frist",
+    "Publiziert",
+    "Publikation"
+  ];
+  const labeledValues = [
+    extractLabeledValue(value, "Strasse", streetTrailingLabels),
+    extractLabeledValue(value, "Strassenname", streetTrailingLabels),
+    extractLabeledValue(value, "Strasse / Weg", streetTrailingLabels),
+    extractLabeledValue(value, "Bauplatz", streetTrailingLabels),
+    extractLabeledValue(value, "Standort", streetTrailingLabels),
+    extractLabeledValue(value, "Lage", streetTrailingLabels)
+  ];
+
+  for (const labeledValue of labeledValues) {
+    const candidate = normalizeWhitespace(labeledValue)
+      .replace(/\b(?:Haus(?:nummer|nr\.?)?|Geb(?:äude)?(?:\s*(?:Nr\.?|Nummer))?|Gebäudenummer)\s*:?\s*\d{1,4}[A-Za-z]?\b/giu, "")
+      .replace(/\bParz(?:elle|\.| Nr\.?)?\s*(?:Nr\.?\s*)?\d{1,6}\b/gi, "")
+      .replace(/[;,].*$/u, "")
+      .trim();
+    const sanitized = sanitizeExtractedAddress(candidate);
+
+    if (
+      sanitized &&
+      sanitized.length <= 80 &&
+      /[A-Za-zÄÖÜäöü]/u.test(sanitized) &&
+      !/\d/.test(sanitized) &&
+      !projectLikeAddressPattern.test(sanitized) &&
+      !genericLocationTermPattern.test(sanitized) &&
+      !looksLikeStandaloneDate(sanitized)
+    ) {
+      return formatImportedMunicipalityAddress(sanitized);
+    }
+  }
+
+  return "";
+}
+
+function extractAddressRefinementFromContext(address, context) {
+  const text = normalizeWhitespace(context);
+  const currentAddress = normalizeImportedMunicipalityAddress(address);
+  const directCandidate = normalizeImportedMunicipalityAddress(
+    chooseMoreSpecificAddress(extractAddressFromPublicationTitle(text), extractAddressFromText(text))
+  );
+  const houseNumber = extractStandaloneHouseNumber(address) || extractStandaloneHouseNumber(text);
+
+  if (houseNumber) {
+    streetAddressWithNumberPattern.lastIndex = 0;
+    const matchingStreetAddress = [...text.matchAll(streetAddressWithNumberPattern)]
+      .map((match) => normalizeImportedMunicipalityAddress(match[1]))
+      .find((candidate) => new RegExp(`\\b${escapeRegExp(houseNumber)}\\b`, "i").test(candidate));
+
+    if (matchingStreetAddress) {
+      return matchingStreetAddress;
+    }
+
+    const streetName = extractStreetNameFromContext(text);
+
+    if (streetName) {
+      const combined = normalizeImportedMunicipalityAddress(`${streetName} ${houseNumber}`);
+
+      if (combined && !isWeakImportedAddress(combined)) {
+        return combined;
+      }
+    }
+  }
+
+  if (directCandidate && !isWeakImportedAddress(directCandidate)) {
+    return directCandidate;
+  }
+
+  if (currentAddress && !isWeakImportedAddress(currentAddress)) {
+    return chooseMoreSpecificAddress(currentAddress, directCandidate);
+  }
+
+  return directCandidate || currentAddress;
+}
+
+function normalizeAddressWithContext(address, parcel, context) {
+  const originalAddress = normalizeImportedMunicipalityAddress(address, parcel);
+  const refinedAddress = normalizeImportedMunicipalityAddress(extractAddressRefinementFromContext(address, context), parcel);
+
+  if (
+    originalAddress &&
+    streetLikeAddressPattern.test(originalAddress) &&
+    refinedAddress &&
+    parcelLikeAddressPattern.test(refinedAddress)
+  ) {
+    return originalAddress;
+  }
+
+  if (
+    originalAddress &&
+    streetLikeAddressPattern.test(originalAddress) &&
+    !/\d/.test(originalAddress) &&
+    refinedAddress &&
+    !normalizeText(refinedAddress).includes(normalizeText(originalAddress))
+  ) {
+    return originalAddress;
+  }
+
+  return (
+    refinedAddress ||
+    originalAddress ||
+    (parcel ? `Parzelle ${parcel}` : "")
+  );
+}
+
+function hasRecoverableLocationFragments(value) {
+  const text = normalizeWhitespace(value);
+
+  if (!text) {
+    return false;
+  }
+
+  if (extractAddressRefinementFromContext("", text)) {
+    return true;
+  }
+
+  return Boolean(extractParcelFromText(text) || (extractStandaloneHouseNumber(text) && extractStreetNameFromContext(text)));
+}
+
+function appendAutomatedAssessment(base, notes) {
+  const existing = normalizeWhitespace(base);
+  const uniqueNotes = [...new Set(notes.map((note) => normalizeWhitespace(note)).filter(Boolean))]
+    .filter((note) => !existing.includes(note));
+  return normalizeWhitespace([existing, ...uniqueNotes].filter(Boolean).join(" "));
+}
+
+function buildRefinementContext(item, sourceConfig = {}) {
+  return normalizeWhitespace(
+    [
+      item.sourceReference,
+      item.sourceUrl,
+      item.address,
+      item.parcel ? `Parzelle ${item.parcel}` : "",
+      item.projectType,
+      item.description,
+      sourceConfig.sourceUrl,
+      sourceConfig.municipality
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+}
+
+async function refineImportedItemData(item, options = {}) {
+  const { sourceConfig = {}, geocodeFetchImpl = null, requestTimeoutMs = defaultSyncRequestTimeoutMs, geocodeCache = new Map() } = options;
+  const refined = { ...item };
+  const notes = [];
+  const context = buildRefinementContext(refined, sourceConfig);
+  const protectedStatuses = new Set(["protected-point", "protected-zone", "combined-hit"]);
+
+  let parcel = String(refined.parcel ?? "").trim();
+
+  if (!parcel) {
+    parcel = extractParcelFromText(context);
+
+    if (parcel) {
+      refined.parcel = parcel;
+      notes.push(`KI-Datenprüfung: Parzelle ${parcel} aus Quellkontext ergänzt.`);
+    }
+  }
+
+  const originalAddress = String(refined.address ?? "").trim();
+  const refinedAddress = normalizeAddressWithContext(originalAddress, parcel, context);
+
+  if (refinedAddress && normalizeText(refinedAddress) !== normalizeText(originalAddress)) {
+    refined.address = refinedAddress;
+    notes.push(`KI-Datenprüfung: Adresse aus Quellkontext ergänzt: ${refinedAddress}.`);
+  } else if (!refined.address && parcel) {
+    refined.address = `Parzelle ${parcel}`;
+  }
+
+  if (!refined.publicationDate) {
+    const publicationDate = extractPublicationDateFromText(context);
+
+    if (publicationDate) {
+      refined.publicationDate = publicationDate;
+      notes.push(`KI-Datenprüfung: Publikationsdatum ergänzt: ${publicationDate}.`);
+    }
+  }
+
+  if (!refined.deadlineDate) {
+    const deadlineDate = extractDeadlineDateFromText(context) || (refined.publicationDate ? addDays(refined.publicationDate, 30) : "");
+
+    if (deadlineDate) {
+      refined.deadlineDate = deadlineDate;
+      notes.push(`KI-Datenprüfung: Fristdatum ergänzt: ${deadlineDate}.`);
+    }
+  }
+
+  const municipality = String(refined.municipality ?? sourceConfig.municipality ?? "").trim();
+  const address = String(refined.address ?? "").trim();
+
+  if (!refined.coordinates && municipality && geocodeFetchImpl) {
+    if (
+      address &&
+      !isWeakImportedAddress(address) &&
+      (streetLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
+    ) {
+      refined.coordinates = await geocodeMunicipalityAddress(
+        address,
+        municipality,
+        geocodeFetchImpl,
+        requestTimeoutMs,
+        geocodeCache
+      );
+    }
+
+    if (!refined.coordinates && parcel) {
+      refined.coordinates = await geocodeMunicipalityParcel(
+        parcel,
+        municipality,
+        geocodeFetchImpl,
+        requestTimeoutMs,
+        geocodeCache
+      );
+    }
+
+    if (refined.coordinates) {
+      notes.push("KI-Datenprüfung: Standort über die amtliche Suche ergänzt.");
+    }
+  }
+
+  const locationStillWeak = !refined.coordinates || isWeakImportedAddress(refined.address);
+  const missingDeadline = !refined.deadlineDate;
+  const needsManualReview = locationStillWeak || missingDeadline;
+
+  if (locationStillWeak) {
+    notes.push("KI-Datenprüfung: Standortangaben bleiben unvollständig - bitte von Hand prüfen.");
+  }
+
+  if (missingDeadline) {
+    notes.push("KI-Datenprüfung: Frist fehlt weiterhin - bitte von Hand prüfen.");
+  }
+
+  if (!protectedStatuses.has(refined.protectionStatus)) {
+    refined.protectionStatus = needsManualReview ? "manual-review" : "no-hit";
+    refined.agisMatch = needsManualReview ? "Noch nicht eindeutig zugeordnet" : "Kein Schutztreffer";
+  }
+
+  refined.ambiguousAddress = locationStillWeak ? 1 : 0;
+  if (!notes.length) {
+    notes.push("KI-Datenprüfung: Importdaten auf Adresse, Parzelle, Standort und Frist geprüft.");
+  }
+  refined.automatedAssessment = appendAutomatedAssessment(refined.automatedAssessment, notes);
+
+  return refined;
+}
+
+async function refineImportedItems(items, options = {}) {
+  const geocodeCache = new Map();
+  const refinedItems = [];
+
+  for (const item of items) {
+    refinedItems.push(await refineImportedItemData(item, { ...options, geocodeCache }));
+  }
+
+  return refinedItems;
 }
 
 async function loadMunicipalityDetailPageData(
@@ -2745,7 +3073,7 @@ async function buildXmlFeedImportedItems(
     let coordinates = candidateDetails.coordinates;
     const parcel = candidateDetails.parcel;
     const address =
-      normalizeImportedMunicipalityAddress(candidateDetails.address, parcel) ||
+      normalizeAddressWithContext(candidateDetails.address, parcel, matchingText) ||
       (parcel ? `Parzelle ${parcel}` : "Adresse von Webseite prüfen");
 
     if (address === "Adresse von Webseite prüfen") {
@@ -2755,6 +3083,7 @@ async function buildXmlFeedImportedItems(
     if (
       !coordinates &&
       geocodeFetchImpl &&
+      !isWeakImportedAddress(address) &&
       (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
     ) {
       coordinates = await geocodeMunicipalityAddress(
@@ -2867,7 +3196,7 @@ async function buildXmlSitemapImportedItems(
     let coordinates = extractSwissCoordinatesFromText(candidateText);
     const parcel = extractParcelFromText(candidateText);
     const address =
-      normalizeImportedMunicipalityAddress(extractAddressFromText(candidateText), parcel) ||
+      normalizeAddressWithContext(extractAddressFromText(candidateText), parcel, candidateText) ||
       (parcel ? `Parzelle ${parcel}` : "Adresse von Webseite prüfen");
 
     if (address === "Adresse von Webseite prüfen") {
@@ -2877,6 +3206,7 @@ async function buildXmlSitemapImportedItems(
     if (
       !coordinates &&
       geocodeFetchImpl &&
+      !isWeakImportedAddress(address) &&
       (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
     ) {
       coordinates = await geocodeMunicipalityAddress(
@@ -3084,9 +3414,13 @@ async function buildTabularImportedItems(relevantHtml, source, requestTimeoutMs,
     const timingCell = row.at(-1) ?? "";
     const parcel = extractParcelFromText(`${projectCell} ${applicantCell}`);
     const address =
-      chooseMoreSpecificAddress(
-        extractAddressFromText(`${projectCell} ${applicantCell}`),
-        extractAddressFromText(`${applicantCell} ${projectCell}`)
+      normalizeAddressWithContext(
+        chooseMoreSpecificAddress(
+          extractAddressFromText(`${projectCell} ${applicantCell}`),
+          extractAddressFromText(`${applicantCell} ${projectCell}`)
+        ),
+        parcel,
+        rowText
       ) || (parcel ? `Parzelle ${parcel}` : "");
     const projectType =
       cleanTabularProjectText(projectCell, address) ||
@@ -3097,6 +3431,7 @@ async function buildTabularImportedItems(relevantHtml, source, requestTimeoutMs,
     if (
       geocodeFetchImpl &&
       address &&
+      !isWeakImportedAddress(address) &&
       (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
     ) {
       coordinates = await geocodeMunicipalityAddress(
@@ -3252,9 +3587,10 @@ async function buildStructuredPublicationImportedItems(
 
     const parcel = extractParcelFromText(bauplatz || blockText);
     const address =
-      normalizeImportedMunicipalityAddress(
+      normalizeAddressWithContext(
         chooseMoreSpecificAddress(extractAddressFromText(bauplatz), extractAddressFromText(blockText)),
-        parcel
+        parcel,
+        blockText
       ) || (parcel ? `Parzelle ${parcel}` : "");
 
     if (!bauobjekt || !address) {
@@ -3266,6 +3602,7 @@ async function buildStructuredPublicationImportedItems(
     if (
       !coordinates &&
       geocodeFetchImpl &&
+      !isWeakImportedAddress(address) &&
       (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
     ) {
       coordinates = await geocodeMunicipalityAddress(
@@ -3564,7 +3901,7 @@ async function buildHtmlImportedItems(
     let coordinates = candidateDetails.coordinates;
     const parcel = candidateDetails.parcel;
     const address =
-      normalizeImportedMunicipalityAddress(candidateDetails.address, parcel) ||
+      normalizeAddressWithContext(candidateDetails.address, parcel, matchingContextText) ||
       (parcel ? `Parzelle ${parcel}` : "Adresse von Webseite prüfen");
     const publicationDate = candidateDetails.publicationDate;
     const deadlineDate = candidateDetails.deadlineDate || (publicationDate ? addDays(publicationDate, 30) : "");
@@ -3583,6 +3920,7 @@ async function buildHtmlImportedItems(
       geocodeFetchImpl &&
       address &&
       address !== "Adresse von Webseite prüfen" &&
+      !isWeakImportedAddress(address) &&
       (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
     ) {
       coordinates = await geocodeMunicipalityAddress(
@@ -3682,7 +4020,7 @@ async function buildHtmlImportedItems(
       let coordinates = extractSwissCoordinatesFromText(`${source.sourceUrl} ${sourcePageText}`);
       const parcel = extractParcelFromText(sourcePageText);
       const address =
-        normalizeImportedMunicipalityAddress(extractAddressFromText(sourcePageText), parcel) ||
+        normalizeAddressWithContext(extractAddressFromText(sourcePageText), parcel, sourcePageText) ||
         (parcel ? `Parzelle ${parcel}` : "Adresse von Webseite prüfen");
 
       if (
@@ -3690,6 +4028,7 @@ async function buildHtmlImportedItems(
         geocodeFetchImpl &&
         address &&
         address !== "Adresse von Webseite prüfen" &&
+        !isWeakImportedAddress(address) &&
         (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
       ) {
         coordinates = await geocodeMunicipalityAddress(
@@ -3836,7 +4175,7 @@ async function buildPdfImportedItems(
   let coordinates = extractSwissCoordinatesFromText(`${source.sourceUrl} ${candidateText}`);
   const parcel = extractParcelFromText(candidateText);
   const address =
-    normalizeImportedMunicipalityAddress(extractAddressFromText(candidateText), parcel) ||
+    normalizeAddressWithContext(extractAddressFromText(candidateText), parcel, candidateText) ||
     (parcel ? `Parzelle ${parcel}` : "Adresse von PDF prüfen");
 
   if (address === "Adresse von PDF prüfen") {
@@ -3849,6 +4188,7 @@ async function buildPdfImportedItems(
   if (
     !coordinates &&
     geocodeFetchImpl &&
+    !isWeakImportedAddress(address) &&
     (streetLikeAddressPattern.test(address) || parcelLikeAddressPattern.test(address) || houseNumberAddressPattern.test(address))
   ) {
     coordinates = await geocodeMunicipalityAddress(
@@ -5584,7 +5924,12 @@ export function createApplicationsSyncService({
       geocodeFetchImpl,
       pdfTextExtractImpl
     );
-    const assessedItems = await assessImportedItems(collected.items, assessApplication);
+    const refinedItems = await refineImportedItems(collected.items, {
+      sourceConfig,
+      geocodeFetchImpl,
+      requestTimeoutMs
+    });
+    const assessedItems = await assessImportedItems(refinedItems, assessApplication);
     const result = repository.importItems(assessedItems, new Date().toISOString());
     const removedCount =
       sourceConfig.pruneStale && sourceConfig.source === "Gemeinde-Webseite" && sourceConfig.municipality && assessedItems.length > 0

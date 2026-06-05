@@ -4,11 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>Heimatschutz Aargau — Arbeitsplatz</title>
+  <title>Heimatschutz Aargau - Arbeitsplatz</title>
   <link rel="icon" href="wappen.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700;800&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="redesign.css">
 </head>
@@ -29,7 +30,16 @@
         <form id="loginForm" class="auth-form">
           <h2>Login</h2>
           <label><span>Benutzername</span><input id="loginUsername" type="text" autocomplete="username" placeholder="lucia.vettori"></label>
-          <label><span>Passwort</span><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Passwort"></label>
+          <div class="auth-field password-field">
+            <label for="loginPassword">Passwort</label>
+            <span class="password-input-wrap">
+              <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Passwort">
+              <button class="password-toggle" type="button" data-password-toggle="loginPassword" aria-label="Passwort anzeigen" aria-pressed="false" title="Passwort anzeigen">
+                <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m3 3 18 18"/><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2"/><path d="M9.9 5.2A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3 3.8"/><path d="M6.6 6.6C3.7 8.3 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.8-.8"/></svg>
+              </button>
+            </span>
+          </div>
           <label id="loginTotpField" class="hidden"><span>2FA-Code</span><input id="loginTotp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-stelliger Code"></label>
           <div id="loginTurnstile" class="turnstile-slot hidden"></div>
           <button id="loginButton" class="btn" type="submit">Anmelden</button>
@@ -45,7 +55,16 @@
           <label><span>Vollständiger Name</span><input id="registerDisplayName" type="text" autocomplete="name"></label>
           <label><span>Benutzername</span><input id="registerUsername" type="text" autocomplete="username"></label>
           <label><span>E-Mail</span><input id="registerEmail" type="email" autocomplete="email"></label>
-          <label><span>Passwort</span><input id="registerPassword" type="password" autocomplete="new-password"></label>
+          <div class="auth-field password-field">
+            <label for="registerPassword">Passwort</label>
+            <span class="password-input-wrap">
+              <input id="registerPassword" type="password" autocomplete="new-password">
+              <button class="password-toggle" type="button" data-password-toggle="registerPassword" aria-label="Passwort anzeigen" aria-pressed="false" title="Passwort anzeigen">
+                <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m3 3 18 18"/><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2"/><path d="M9.9 5.2A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3 3.8"/><path d="M6.6 6.6C3.7 8.3 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.8-.8"/></svg>
+              </button>
+            </span>
+          </div>
           <label><span>Registrierungsschlüssel</span><input id="registerAccessKey" type="text" autocomplete="one-time-code"></label>
           <div id="registerTurnstile" class="turnstile-slot hidden"></div>
           <button id="registerButton" class="btn" type="submit">Konto erstellen</button>
@@ -69,7 +88,16 @@
         <form id="resetPasswordForm" class="auth-form hidden">
           <h2>Neues Passwort</h2>
           <label><span>Reset-Schlüssel</span><input id="resetPasswordKey" type="text" autocomplete="one-time-code"></label>
-          <label><span>Neues Passwort</span><input id="resetPasswordValue" type="password" autocomplete="new-password"></label>
+          <div class="auth-field password-field">
+            <label for="resetPasswordValue">Neues Passwort</label>
+            <span class="password-input-wrap">
+              <input id="resetPasswordValue" type="password" autocomplete="new-password">
+              <button class="password-toggle" type="button" data-password-toggle="resetPasswordValue" aria-label="Passwort anzeigen" aria-pressed="false" title="Passwort anzeigen">
+                <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m3 3 18 18"/><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2"/><path d="M9.9 5.2A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3 3.8"/><path d="M6.6 6.6C3.7 8.3 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.8-.8"/></svg>
+              </button>
+            </span>
+          </div>
           <button id="resetPasswordButton" class="btn" type="submit">Passwort speichern</button>
           <p id="resetPasswordError" class="auth-message error hidden" role="alert"></p>
           <p id="resetPasswordSuccess" class="auth-message ok hidden" role="status"></p>
@@ -79,7 +107,16 @@
         <form id="masterSetupForm" class="auth-form hidden">
           <h2>Master-Konto einrichten</h2>
           <label><span>Setup-Schlüssel</span><input id="masterSetupKey" type="text" autocomplete="one-time-code"></label>
-          <label><span>Neues Master-Passwort</span><input id="masterSetupPassword" type="password" autocomplete="new-password"></label>
+          <div class="auth-field password-field">
+            <label for="masterSetupPassword">Neues Master-Passwort</label>
+            <span class="password-input-wrap">
+              <input id="masterSetupPassword" type="password" autocomplete="new-password">
+              <button class="password-toggle" type="button" data-password-toggle="masterSetupPassword" aria-label="Passwort anzeigen" aria-pressed="false" title="Passwort anzeigen">
+                <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m3 3 18 18"/><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2"/><path d="M9.9 5.2A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3 3.8"/><path d="M6.6 6.6C3.7 8.3 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.8-.8"/></svg>
+              </button>
+            </span>
+          </div>
           <button id="masterSetupButton" class="btn" type="submit">Master-Passwort setzen</button>
           <p id="masterSetupError" class="auth-message error hidden" role="alert"></p>
           <p id="masterSetupSuccess" class="auth-message ok hidden" role="status"></p>
@@ -166,8 +203,8 @@
           <button class="tab" data-tab="archive" type="button">Alle / Archiv</button>
         </nav>
         <form class="filter-bar" onsubmit="return false">
-          <label class="fb-search"><span>Suche</span><input id="fltSearch" type="search" placeholder="Ort, Adresse oder Bauvorhaben"></label>
-          <label><span>Ort</span><select id="fltMun"><option value="">Alle Gemeinden</option></select></label>
+          <label class="fb-search"><span>Suche</span><input id="fltSearch" type="search" placeholder="Ort, Adresse"></label>
+          <label class="fb-municipality"><span>Ort</span><select id="fltMun"><option value="">Alle Gemeinden</option></select></label>
           <label><span>AGIS-Treffer</span>
             <select id="fltProt">
               <option value="">Alle Treffer</option>
@@ -216,7 +253,7 @@
             <button id="printBtn" class="icon-btn sm" type="button" title="Fall drucken / als PDF">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <button id="nextOpen" class="btn ghost" type="button" style="padding:6px 11px;font-size:0.82rem">Nächstes offenes →</button>
+            <button id="nextOpen" class="btn ghost detail-next-btn" type="button">Nächstes offenes →</button>
           </div>
         </div>
 
@@ -263,7 +300,8 @@
               <span id="recBadge" class="badge neutral">–</span>
               <span id="dueBadge" class="badge neutral">–</span>
             </div>
-            <p id="srcMeta" class="src-meta" style="margin-top:10px">–</p>
+            <div id="aiMeta" class="ai-meta hidden" aria-live="polite"></div>
+            <p id="srcMeta" class="src-meta assessment-source">–</p>
           </section>
 
           <section class="timeline-card">
@@ -342,7 +380,7 @@
           <div class="adm-card">
             <div class="stat-row">
               <div class="stat"><p class="k">Gemeinden total</p><p class="v">213</p><p class="d mut">Kanton Aargau</p></div>
-              <div class="stat"><p class="k">Quelle aktiv</p><p class="v">198<small> /213</small></p><div class="progress"><span style="width:93%"></span></div></div>
+              <div class="stat"><p class="k">Quelle aktiv</p><p class="v">198<small> /213</small></p><div class="progress progress-93" role="progressbar" aria-label="Aktive Quellen" aria-valuemin="0" aria-valuemax="100" aria-valuenow="93"><span></span></div></div>
               <div class="stat"><p class="k">Datenqualität Ø</p><p class="v">Hoch</p><p class="d up">181 strukturiert</p></div>
               <div class="stat"><p class="k">Wartung nötig</p><p class="v">11</p><p class="d warn">Quelle prüfen</p></div>
               <div class="stat"><p class="k">Ohne Quelle</p><p class="v">4</p><p class="d mut">manuell erfassen</p></div>
@@ -358,7 +396,7 @@
             </div>
             <div class="adm-card-body flush">
               <table class="adm-table">
-                <thead><tr><th>Gemeinde</th><th>Quelltyp</th><th>Datenqualität</th><th>Trend (7 T.)</th><th>Letzter Abruf</th><th>Treffer</th><th>Status</th><th style="text-align:right">Aktion</th></tr></thead>
+                <thead><tr><th>Gemeinde</th><th>Quelltyp</th><th>Datenqualität</th><th>Trend (7 T.)</th><th>Letzter Abruf</th><th>Treffer</th><th>Status</th><th class="cell-actions">Aktion</th></tr></thead>
                 <tbody id="srcBody"></tbody>
               </table>
             </div>
@@ -373,7 +411,7 @@
               <button class="btn" type="button" id="runImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>Import jetzt starten</button>
             </div>
             <div class="stat-row">
-              <div class="stat"><p class="k">Letzter Lauf</p><p class="v" style="font-size:1.25rem">heute 06:10</p><p class="d up">erfolgreich</p></div>
+              <div class="stat"><p class="k">Letzter Lauf</p><p class="v stat-time">heute 06:10</p><p class="d up">erfolgreich</p></div>
               <div class="stat"><p class="k">Neue Baugesuche</p><p class="v">37</p><p class="d up">in 24 Std.</p></div>
               <div class="stat"><p class="k">AGIS-Treffer</p><p class="v">14</p><p class="d warn">zu prüfen</p></div>
               <div class="stat"><p class="k">Fehlerquellen</p><p class="v">2</p><p class="d warn">Zofingen, Frick</p></div>
@@ -394,7 +432,7 @@
             </div>
             <div class="adm-card-body flush">
               <table class="adm-table">
-                <thead><tr><th>Person / Dienst</th><th>Rolle</th><th>Schlüssel</th><th>Letzter Zugriff</th><th>Status</th><th style="text-align:right">Aktion</th></tr></thead>
+                <thead><tr><th>Person / Dienst</th><th>Rolle</th><th>Schlüssel</th><th>Letzter Zugriff</th><th>Status</th><th class="cell-actions">Aktion</th></tr></thead>
                 <tbody id="keysBody"></tbody>
               </table>
             </div>
@@ -411,25 +449,25 @@
   <div class="print-area" id="printArea">
     <div class="pa-head">
       <img src="wappen.svg" alt="Wappen Kanton Aargau">
-      <div class="pa-org"><b>Kanton Aargau · Kantonale Denkmalpflege</b><span>Heimatschutz Aargau — Prüfbericht Baugesuch</span></div>
-      <div class="pa-id" id="paId">—</div>
+      <div class="pa-org"><b>Kanton Aargau · Kantonale Denkmalpflege</b><span>Heimatschutz Aargau: Prüfbericht Baugesuch</span></div>
+      <div class="pa-id" id="paId">-</div>
     </div>
-    <h2 class="pa-title" id="paTitle">—</h2>
-    <p class="pa-sub" id="paSub">—</p>
+    <h2 class="pa-title" id="paTitle">-</h2>
+    <p class="pa-sub" id="paSub">-</p>
     <dl class="pa-grid">
-      <div class="pa-f"><dt>Gemeinde</dt><dd id="paMun">—</dd></div>
-      <div class="pa-f"><dt>Adresse</dt><dd id="paAddr">—</dd></div>
-      <div class="pa-f"><dt>Parzelle</dt><dd id="paParcel">—</dd></div>
-      <div class="pa-f"><dt>Publiziert</dt><dd id="paPub">—</dd></div>
-      <div class="pa-f"><dt>Fristende</dt><dd id="paDue">—</dd></div>
-      <div class="pa-f"><dt>AGIS-Treffer</dt><dd id="paAgis">—</dd></div>
-      <div class="pa-f wide"><dt>Bauvorhaben</dt><dd id="paProject">—</dd></div>
+      <div class="pa-f"><dt>Gemeinde</dt><dd id="paMun">-</dd></div>
+      <div class="pa-f"><dt>Adresse</dt><dd id="paAddr">-</dd></div>
+      <div class="pa-f"><dt>Parzelle</dt><dd id="paParcel">-</dd></div>
+      <div class="pa-f"><dt>Publiziert</dt><dd id="paPub">-</dd></div>
+      <div class="pa-f"><dt>Fristende</dt><dd id="paDue">-</dd></div>
+      <div class="pa-f"><dt>AGIS-Treffer</dt><dd id="paAgis">-</dd></div>
+      <div class="pa-f wide"><dt>Bauvorhaben</dt><dd id="paProject">-</dd></div>
     </dl>
     <div class="pa-block">
       <h5>Einschätzung der Denkmalpflege</h5>
-      <p id="paRec">—</p>
+      <p id="paRec">-</p>
       <h5>Quelle</h5>
-      <p id="paSource">—</p>
+      <p id="paSource">-</p>
     </div>
     <div class="pa-foot"><span id="paFoot">Heimatschutz Aargau</span><span>Bearbeitung: Lucia Vettori, Kantonale Denkmalpflege</span></div>
   </div>
