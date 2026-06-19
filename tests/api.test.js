@@ -1372,6 +1372,9 @@ test("database startup normalizes legacy swapped LV95 application coordinates", 
     ],
     "2026-03-01T00:00:00.000Z"
   );
+  // Migration als noch nicht angewendet markieren, damit der naechste Start die
+  // Legacy-Daten wie bei einer echten Bestands-DB normalisiert.
+  initialDb.prepare("DELETE FROM schema_migrations WHERE id = 'normalize-legacy-coordinates'").run();
   initialDb.close();
 
   const migratedDb = createDatabase(dbPath);
@@ -1416,6 +1419,9 @@ test("database startup clears deadlines before publication dates", async (contex
     ],
     "2026-05-05T00:00:00.000Z"
   );
+  // Migration als noch nicht angewendet markieren, damit der naechste Start die
+  // ungueltige Frist wie bei einer echten Bestands-DB bereinigt.
+  initialDb.prepare("DELETE FROM schema_migrations WHERE id = 'clear-invalid-deadlines'").run();
   initialDb.close();
 
   const migratedDb = createDatabase(dbPath);
@@ -1436,6 +1442,96 @@ test("database startup clears deadlines before publication dates", async (contex
   // Schutzstatus bleibt erhalten, damit AGIS den Fall weiterhin prüfen kann.
   assert.equal(row.protection_status, "no-hit");
   assert.match(row.automated_assessment, /Fristdatum liegt vor Publikationsdatum/i);
+});
+
+test("destructive startup migrations are recorded and do not re-run on restart", () => {
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-migrate-"));
+  const dbPath = join(directory, "migrate.sqlite");
+  const db = createDatabase(dbPath, { seedDemoApplications: false });
+
+  const recorded = db
+    .prepare("SELECT id FROM schema_migrations")
+    .all()
+    .map((entry) => entry.id);
+  assert.ok(recorded.includes("cleanup-seed-artifacts-and-junk"));
+  assert.ok(recorded.includes("clear-invalid-deadlines"));
+
+  // Eine Junk-Zeile, die die Bereinigung normalerweise entfernen wuerde.
+  const repository = createApplicationsRepository(db);
+  repository.importItems(
+    [
+      {
+        id: "BG-MIGRATE-JUNK",
+        source: "Gemeinde-Webseite",
+        sourceReference: "MIGRATE-JUNK",
+        sourceUrl: "https://aarau.example.org/baugesuche",
+        municipality: "Aarau",
+        address: "Adresse von Webseite prüfen",
+        coordinates: "",
+        publicationDate: "2026-03-01",
+        deadlineDate: "",
+        projectType: "Baugesuch",
+        description: "Junk",
+        protectionStatus: "manual-review",
+        agisMatch: "Noch nicht eindeutig zugeordnet",
+        agisLayers: [],
+        ambiguousAddress: 1
+      }
+    ],
+    "2026-03-01T00:00:00.000Z"
+  );
+  db.close();
+
+  // Marker bleibt bestehen -> Bereinigung laeuft beim Neustart nicht erneut.
+  const reopened = createDatabase(dbPath, { seedDemoApplications: false });
+  const remaining = reopened
+    .prepare("SELECT COUNT(*) AS n FROM applications WHERE id = 'BG-MIGRATE-JUNK'")
+    .get().n;
+  reopened.close();
+  rmSync(directory, { recursive: true, force: true });
+
+  assert.equal(remaining, 1, "Einmalige Migration darf beim Neustart nicht erneut loeschen");
+});
+
+test("destructive startup migration writes a pre-migration backup when data exists", () => {
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-migrate-bak-"));
+  const dbPath = join(directory, "migrate.sqlite");
+  const seedDb = createDatabase(dbPath, { seedDemoApplications: false });
+
+  const repository = createApplicationsRepository(seedDb);
+  repository.importItems(
+    [
+      {
+        id: "BG-BACKUP-001",
+        source: "Gemeinde-Webseite",
+        sourceReference: "BACKUP-001",
+        sourceUrl: "https://aarau.example.org/baugesuche",
+        municipality: "Aarau",
+        address: "Teststrasse 9",
+        coordinates: "2650000,1250000",
+        publicationDate: "2026-03-01",
+        deadlineDate: "2026-03-30",
+        projectType: "Baugesuch",
+        description: "Bestehender Fall",
+        protectionStatus: "no-hit",
+        agisMatch: "Kein Schutztreffer",
+        agisLayers: []
+      }
+    ],
+    "2026-03-01T00:00:00.000Z"
+  );
+  // Marker entfernen, damit die destruktive Migration beim Neustart laeuft.
+  seedDb.prepare("DELETE FROM schema_migrations WHERE id = 'cleanup-seed-artifacts-and-junk'").run();
+  seedDb.close();
+
+  const reopened = createDatabase(dbPath, { seedDemoApplications: false });
+  reopened.close();
+
+  const backupDir = join(directory, "backups");
+  const backups = existsSync(backupDir) ? readdirSync(backupDir).filter((name) => name.endsWith(".bak")) : [];
+  rmSync(directory, { recursive: true, force: true });
+
+  assert.ok(backups.length >= 1, "Vor der destruktiven Migration wird ein Backup angelegt");
 });
 
 test("municipality website sources can be configured and imported automatically", async (context) => {
@@ -7334,6 +7430,9 @@ test("startup cleanup keeps junk-pattern rows that carry team comments", () => {
     `INSERT INTO application_comments (id, application_id, user_id, message, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run("C-JUNK-1", "BG-JUNK-COMMENTED", userId, "Trotz Mülladresse hier bereits geprüft.", "2026-03-02T08:00:00.000Z", "2026-03-02T08:00:00.000Z");
+  // Die Bereinigung ist eine einmalige Migration; Marker entfernen, damit sie
+  // beim erneuten Öffnen (wie bei einer Bestands-DB) noch einmal läuft.
+  seedDb.prepare("DELETE FROM schema_migrations WHERE id = 'cleanup-seed-artifacts-and-junk'").run();
   seedDb.close();
 
   // Erneutes Öffnen führt die Startup-Bereinigung aus.

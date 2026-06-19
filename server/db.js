@@ -1,5 +1,5 @@
-import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { copyFileSync, mkdirSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -83,6 +83,11 @@ const schema = `
     last_sync_at TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    id TEXT PRIMARY KEY,
+    applied_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS users (
@@ -786,6 +791,82 @@ function syncConfiguredMasterPassword(db, masterAccountPassword) {
   `).run(passwordRecord.salt, passwordRecord.hash, updatedAt, masterUser.id);
 }
 
+function hasAppliedMigration(db, id) {
+  return Boolean(db.prepare("SELECT 1 FROM schema_migrations WHERE id = ?").get(id));
+}
+
+function recordAppliedMigration(db, id) {
+  db.prepare("INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)").run(
+    id,
+    new Date().toISOString()
+  );
+}
+
+function applicationsCount(db) {
+  return Number(db.prepare("SELECT COUNT(*) AS count FROM applications").get()?.count ?? 0);
+}
+
+/**
+ * Legt vor einer destruktiven Migration eine Sicherungskopie der SQLite-Datei
+ * an (best effort). Per MIGRATION_BACKUP=false abschaltbar; bei In-Memory-DB,
+ * fehlendem Pfad oder Fehlern wird kein Backup erstellt.
+ */
+function backupDatabaseBeforeMigration(db, dbPath, migrationId) {
+  if (!dbPath || dbPath === ":memory:") {
+    return null;
+  }
+
+  if (String(process.env.MIGRATION_BACKUP ?? "").trim().toLowerCase() === "false") {
+    return null;
+  }
+
+  try {
+    try {
+      db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+    } catch {
+      // Checkpoint ist best effort.
+    }
+
+    const directory = join(dirname(dbPath), "backups");
+    mkdirSync(directory, { recursive: true });
+    const stamp = new Date().toISOString().replaceAll(/[:.]/g, "-");
+    const target = join(directory, `${basename(dbPath)}.pre-${migrationId}.${stamp}.bak`);
+    copyFileSync(dbPath, target);
+    return target;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Führt eine Datenmigration genau einmal pro Datenbank aus und vermerkt sie in
+ * schema_migrations. So werden Fachdaten nicht bei jedem Start verändert oder
+ * gelöscht. Vor destruktiven Migrationen wird – sofern bereits Daten vorhanden
+ * sind – ein Backup angelegt. Der Lauf selbst ist in eine Transaktion gekapselt.
+ */
+function applyMigrationOnce(db, { id, dbPath = "", destructive = false } = {}, run) {
+  if (!id || typeof run !== "function" || hasAppliedMigration(db, id)) {
+    return false;
+  }
+
+  if (destructive && applicationsCount(db) > 0) {
+    backupDatabaseBeforeMigration(db, dbPath, id);
+  }
+
+  db.exec("BEGIN");
+
+  try {
+    run(db);
+    recordAppliedMigration(db, id);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
+  return true;
+}
+
 /**
  * @param {string} [dbPath]
  * @param {CreateDatabaseOptions} [options]
@@ -801,18 +882,17 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
   db.exec(schema);
   ensureColumn(db, "users", "email", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "applications", "location_precision", "TEXT NOT NULL DEFAULT ''");
-  db.exec("BEGIN");
-
-  try {
-    normalizeLegacyApplicationCoordinates(db);
-    normalizeInvalidApplicationDeadlines(db);
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
-
-  db.exec(`
+  // Datenmigrationen laufen einmalig pro Datenbank (vermerkt in
+  // schema_migrations), nicht bei jedem Start. Vor destruktiven Schritten wird
+  // – sofern Daten vorhanden sind – ein Backup angelegt.
+  applyMigrationOnce(db, { id: "normalize-legacy-coordinates", dbPath }, normalizeLegacyApplicationCoordinates);
+  applyMigrationOnce(
+    db,
+    { id: "clear-invalid-deadlines", dbPath, destructive: true },
+    normalizeInvalidApplicationDeadlines
+  );
+  applyMigrationOnce(db, { id: "cleanup-seed-artifacts-and-junk", dbPath, destructive: true }, (database) => {
+    database.exec(`
     UPDATE applications
     SET workflow_status = 'new'
     WHERE workflow_status = 'escalated';
@@ -1037,7 +1117,8 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
       AND municipality = 'Kulm'
       AND source_type = 'manual'
       AND IFNULL(source_url, '') = '';
-  `);
+    `);
+  });
 
   /** @type {{ count?: number } | undefined} */
   const countRow = db.prepare("SELECT COUNT(*) AS count FROM applications").get();
