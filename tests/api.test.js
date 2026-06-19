@@ -12,6 +12,7 @@ import {
 } from "../server/app.js";
 import { createDatabase } from "../server/db.js";
 import { createApplicationsRepository } from "../server/repository/applicationsRepository.js";
+import { createAgisAssessmentService } from "../server/services/agisAssessmentService.js";
 import { generateTotp } from "../server/services/totp.js";
 
 // Test-Zugangsdaten für die ephemere In-Memory-Testdatenbank. Das sind KEINE
@@ -828,7 +829,10 @@ test("manual JSON import sends impossible deadline dates to manual review", asyn
   assert.equal(importResponse.status, 200);
   assert.equal(importResponse.payload.importedCount, 1);
   assert.equal(importResponse.payload.items[0].deadlineDate, "");
-  assert.equal(importResponse.payload.items[0].protectionStatus, "manual-review");
+  // Ein ungültiges Fristdatum ist ein Datenqualitätsproblem und darf den
+  // Schutzstatus nicht überschreiben: der ursprüngliche Status bleibt erhalten,
+  // damit ein möglicher Schutztreffer nicht verdeckt wird.
+  assert.equal(importResponse.payload.items[0].protectionStatus, "no-hit");
   assert.match(importResponse.payload.items[0].automatedAssessment, /Fristdatum liegt vor Publikationsdatum/i);
 });
 
@@ -1428,7 +1432,9 @@ test("database startup clears deadlines before publication dates", async (contex
     .get();
 
   assert.equal(row.deadline_date, "");
-  assert.equal(row.protection_status, "manual-review");
+  // Die Migration bereinigt nur das ungültige Fristdatum und vermerkt es; der
+  // Schutzstatus bleibt erhalten, damit AGIS den Fall weiterhin prüfen kann.
+  assert.equal(row.protection_status, "no-hit");
   assert.match(row.automated_assessment, /Fristdatum liegt vor Publikationsdatum/i);
 });
 
@@ -6754,6 +6760,54 @@ test("startup AGIS refresh replaces stale seed hits with official hits", async (
   assert.equal(bruggResponse.status, 200);
   assert.equal(bruggResponse.payload.protectionStatus, "combined-hit");
   assert.equal(bruggResponse.payload.agisMatch, "ISOS-Fläche und Gebäude im Inventar");
+});
+
+test("AGIS re-assesses manual-review items that still have valid coordinates", async () => {
+  // Regression für den kritischen Datenintegritäts-Befund: ein Fall, der nur
+  // wegen eines Datenqualitätsproblems (z. B. ungültiges Fristdatum) auf
+  // "manual-review" stand, aber gültige Koordinaten besitzt, muss bei der
+  // AGIS-Neubewertung wieder geprüft werden - sonst bleibt ein echter
+  // Schutztreffer dauerhaft verdeckt.
+  const service = createAgisAssessmentService({
+    repository: { getById: () => null, list: () => [], updateAssessment: () => null },
+    agisGeometryService: {
+      getOfficialFeatures: async () => ({ matched: { points: true } })
+    }
+  });
+
+  const assessment = await service.assessItem({
+    id: "BG-STICKY-001",
+    coordinates: "2651766,1250865",
+    protectionStatus: "manual-review",
+    ambiguousAddress: 0
+  });
+
+  assert.equal(assessment.protectionStatus, "protected-point");
+  assert.equal(assessment.agisMatch, "Treffer im Gebäudeinventar");
+});
+
+test("AGIS leaves genuinely ambiguous addresses in manual review without querying", async () => {
+  // Die legitime Hand-Prüfung (kein verwertbarer Standort) bleibt erhalten und
+  // ruft AGIS gar nicht erst auf.
+  let geometryCalled = false;
+  const service = createAgisAssessmentService({
+    repository: { getById: () => null, list: () => [], updateAssessment: () => null },
+    agisGeometryService: {
+      getOfficialFeatures: async () => {
+        geometryCalled = true;
+        return { matched: { points: true } };
+      }
+    }
+  });
+
+  const assessment = await service.assessItem({
+    id: "BG-AMBIG-001",
+    coordinates: "2651766,1250865",
+    ambiguousAddress: 1
+  });
+
+  assert.equal(assessment.protectionStatus, "manual-review");
+  assert.equal(geometryCalled, false);
 });
 
 test("application updates persist workflow and note", async (context) => {

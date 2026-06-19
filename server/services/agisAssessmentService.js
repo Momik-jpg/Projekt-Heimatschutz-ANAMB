@@ -257,7 +257,14 @@ export function createAgisAssessmentService({ repository, agisGeometryService, l
         return null;
       }
 
-      if (item.ambiguousAddress || item.protectionStatus === "manual-review") {
+      // Nur eine wirklich uneindeutige Adresse (kein verwertbarer Standort) wird
+      // hier kurzgeschlossen. Der frühere Kurzschluss auf protectionStatus ===
+      // "manual-review" war gefährlich: Fälle, die nur wegen eines reinen
+      // Datenqualitätsproblems (z. B. ungültiges Fristdatum) auf "manual-review"
+      // standen, aber gültige Koordinaten besitzen, wären nie wieder durch AGIS
+      // geprüft worden. Ein echter Schutztreffer konnte dadurch dauerhaft
+      // verdeckt bleiben. Solange Koordinaten vorhanden sind, bewertet AGIS neu.
+      if (item.ambiguousAddress) {
         return {
           protectionStatus: "manual-review",
           agisMatch: "Noch nicht eindeutig zugeordnet",

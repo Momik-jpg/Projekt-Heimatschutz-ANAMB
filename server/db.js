@@ -416,11 +416,15 @@ function normalizeLegacyApplicationCoordinates(db) {
 function normalizeInvalidApplicationDeadlines(db) {
   const assessmentNote = "Fristdatum liegt vor Publikationsdatum und muss von Hand geprüft werden.";
 
+  // Ein Fristdatum vor dem Publikationsdatum ist ein reines Datenqualitäts-
+  // problem. Es wird geleert und als Hinweis vermerkt, der Schutzstatus bleibt
+  // aber unangetastet: sonst würde ein möglicher Schutztreffer pauschal auf
+  // "manual-review" gesetzt, danach nicht mehr durch AGIS geprüft und aus der
+  // Prioritätsliste entfernt.
   db.prepare(
     `
       UPDATE applications
       SET deadline_date = '',
-          protection_status = 'manual-review',
           automated_assessment = CASE
             WHEN IFNULL(automated_assessment, '') = '' THEN ?
             WHEN automated_assessment LIKE '%' || ? || '%' THEN automated_assessment
