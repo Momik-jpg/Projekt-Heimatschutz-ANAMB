@@ -227,6 +227,7 @@ export function createApplicationsRepository(db) {
       AND workflow_status = 'new'
       AND IFNULL(assignee, '') = ''
       AND IFNULL(note, '') = ''
+      AND id NOT IN (SELECT application_id FROM application_comments)
   `);
 
   return {
@@ -448,6 +449,7 @@ export function createApplicationsRepository(db) {
                 AND workflow_status = 'new'
                 AND IFNULL(assignee, '') = ''
                 AND IFNULL(note, '') = ''
+                AND id NOT IN (SELECT application_id FROM application_comments)
                 AND source_reference NOT IN (${placeholders})
             `)
             .run(normalizedSource, normalizedMunicipality, ...keptReferences);
