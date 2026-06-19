@@ -6162,8 +6162,7 @@ export function createApplicationsSyncService({
   assessApplication = null,
   notifyImportChanges = null,
   requestTimeoutMs = defaultSyncRequestTimeoutMs,
-  municipalitySourceConcurrency = defaultMunicipalitySourceConcurrency,
-  applicationRetentionDays = Number(process.env.APPLICATION_RETENTION_DAYS ?? 0)
+  municipalitySourceConcurrency = defaultMunicipalitySourceConcurrency
 }) {
   const normalizedSourceUrl = String(sourceUrl ?? "").trim();
   const normalizedSourceToken = String(sourceToken ?? "").trim();
@@ -6435,11 +6434,11 @@ export function createApplicationsSyncService({
 
       const merged = mergeSyncResults(syncResults);
 
-      // Ablaufdatum/Aufbewahrung: abgelaufene, unberührte Fälle entfernen.
+      // Nach einem Import die verbindliche Fristaufbewahrung sofort anwenden.
       let removedExpiredCount = 0;
 
-      if (applicationRetentionDays > 0 && typeof repository.pruneExpiredApplications === "function") {
-        removedExpiredCount = repository.pruneExpiredApplications({ retentionDays: applicationRetentionDays });
+      if (typeof repository.pruneExpiredApplications === "function") {
+        removedExpiredCount = repository.pruneExpiredApplications();
       }
 
       return {

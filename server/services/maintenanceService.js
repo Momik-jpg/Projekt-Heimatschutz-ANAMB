@@ -11,6 +11,7 @@ export function createMaintenanceService({
   masterSetupKeysRepository,
   passwordResetKeysRepository,
   auditLogRepository,
+  applicationsRepository,
   enabled = true,
   intervalMs = 24 * 60 * 60 * 1000,
   runOnStart = true,
@@ -30,6 +31,7 @@ export function createMaintenanceService({
     removed += registrationKeysRepository?.deleteStale?.(now) ?? 0;
     removed += masterSetupKeysRepository?.deleteStale?.(now) ?? 0;
     removed += passwordResetKeysRepository?.deleteStale?.(now) ?? 0;
+    removed += applicationsRepository?.pruneExpiredApplications?.({ referenceDate: new Date() }) ?? 0;
 
     if (auditRetentionDays > 0 && auditLogRepository?.deleteOlderThan) {
       const cutoff = new Date(Date.now() - auditRetentionDays * 24 * 60 * 60 * 1000).toISOString();

@@ -473,30 +473,45 @@ export function createApplicationsRepository(db) {
       }
     },
 
-    // Ablaufdatum / Aufbewahrung: löscht unberührte Fälle, deren Auflagefrist
-    // länger als retentionDays zurückliegt. Vom Team bearbeitete Fälle (Status
-    // ungleich "new", mit Notiz, Zuständiger oder Kommentar) bleiben erhalten.
-    pruneExpiredApplications({ retentionDays = 90, referenceDate = new Date() } = {}) {
-      const days = Number(retentionDays);
+    // Einen Tag nach der Frist verschwindet der komplette Fall. Fälle ohne
+    // verlässliche Frist bleiben erhalten und müssen in der Oberfläche auffallen.
+    pruneExpiredApplications({ referenceDate = new Date() } = {}) {
+      const date = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
 
-      if (!Number.isFinite(days) || days < 0) {
+      if (Number.isNaN(date.getTime())) {
         return 0;
       }
 
-      const cutoff = new Date(referenceDate.getTime() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const result = db
-        .prepare(`
-          DELETE FROM applications
-          WHERE workflow_status = 'new'
-            AND IFNULL(assignee, '') = ''
-            AND IFNULL(note, '') = ''
-            AND IFNULL(deadline_date, '') <> ''
-            AND date(deadline_date) < date(?)
-            AND id NOT IN (SELECT application_id FROM application_comments)
-        `)
-        .run(cutoff);
+      const referenceDateOnly = [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getDate()).padStart(2, "0")
+      ].join("-");
 
-      return result.changes ?? 0;
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        db.prepare(`
+          DELETE FROM application_learning_rules
+          WHERE created_from_application_id IN (
+            SELECT id
+            FROM applications
+            WHERE IFNULL(deadline_date, '') <> ''
+              AND date(deadline_date) < date(?)
+          )
+        `).run(referenceDateOnly);
+
+        const result = db.prepare(`
+          DELETE FROM applications
+          WHERE IFNULL(deadline_date, '') <> ''
+            AND date(deadline_date) < date(?)
+        `).run(referenceDateOnly);
+
+        db.exec("COMMIT");
+        return result.changes ?? 0;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     },
 
     getDashboard({ referenceDate = new Date() } = {}) {

@@ -1289,11 +1289,12 @@ export function createApp(options = {}) {
     masterSetupKeysRepository,
     passwordResetKeysRepository,
     auditLogRepository,
+    applicationsRepository: repository,
     enabled: options.maintenanceEnabled ?? process.env.MAINTENANCE_ENABLED !== "false",
     intervalMs:
       options.maintenanceIntervalMs ??
       Number(process.env.MAINTENANCE_INTERVAL_HOURS ?? 24) * 60 * 60 * 1000,
-    runOnStart: options.maintenanceRunOnStart ?? false,
+    runOnStart: options.maintenanceRunOnStart ?? true,
     backupEnabled: options.backupEnabled ?? process.env.BACKUP_ENABLED === "true",
     backupDir: normalizeEnvString(options.backupDir ?? process.env.BACKUP_DIR ?? ""),
     backupRetention: Number(options.backupRetention ?? process.env.BACKUP_RETENTION ?? 7),
