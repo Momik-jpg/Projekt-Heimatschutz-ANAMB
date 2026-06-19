@@ -6434,12 +6434,8 @@ export function createApplicationsSyncService({
 
       const merged = mergeSyncResults(syncResults);
 
-      // Nach einem Import die verbindliche Fristaufbewahrung sofort anwenden.
-      let removedExpiredCount = 0;
-
-      if (typeof repository.pruneExpiredApplications === "function") {
-        removedExpiredCount = repository.pruneExpiredApplications();
-      }
+      // Die Fristaufbewahrung läuft zentral beim Start und danach täglich.
+      const removedExpiredCount = 0;
 
       return {
         ...merged,

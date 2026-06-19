@@ -197,11 +197,15 @@
         <nav class="tabs" aria-label="Schnellauswahl">
           <button class="tab active" data-tab="all" type="button">Arbeitsliste <span class="tab-count" data-count="all">0</span></button>
           <button class="tab" data-tab="important" type="button">Schutztreffer <span class="tab-count" data-count="important">0</span></button>
-          <button class="tab" data-tab="manual" type="button">Von Hand prüfen <span class="tab-count" data-count="manual">0</span></button>
-          <button class="tab" data-tab="open" type="button">Nur offen</button>
-          <button class="tab" data-tab="due-soon" type="button">Frist bald <span class="tab-count" data-count="due-soon">0</span></button>
-          <button class="tab" data-tab="archive" type="button">Alle / Archiv</button>
         </nav>
+        <div class="region-filters" role="group" aria-label="Regionen filtern">
+          <span class="region-label">Region</span>
+          <button class="region-filter" data-region="Berner Aargau" type="button" aria-pressed="false">Berner Aargau</button>
+          <button class="region-filter" data-region="Fricktal" type="button" aria-pressed="false">Fricktal</button>
+          <button class="region-filter" data-region="Baden" type="button" aria-pressed="false">Baden</button>
+          <button class="region-filter" data-region="Freiamt" type="button" aria-pressed="false">Freiamt</button>
+          <span class="region-hint">Keine Auswahl zeigt alle Regionen.</span>
+        </div>
         <form class="filter-bar" onsubmit="return false">
           <label class="fb-search"><span>Suche</span><input id="fltSearch" type="search" placeholder="Ort, Adresse"></label>
           <label class="fb-municipality"><span>Ort</span><select id="fltMun"><option value="">Alle Gemeinden</option></select></label>
@@ -278,7 +282,13 @@
             <div class="fact"><dt>Publiziert</dt><dd id="fPub">–</dd></div>
             <div class="fact"><dt>Fristende</dt><dd id="fDue">–</dd></div>
             <div class="fact"><dt>AGIS-Treffer</dt><dd id="fAgis">–</dd></div>
-            <div class="fact wide"><dt>Bauvorhaben</dt><dd id="fProject">–</dd></div>
+            <div class="fact wide"><dt>Bauvorhaben</dt><dd>
+              <span id="fProject">–</span>
+              <span class="project-detail-meta">
+                <span id="projectScale" class="project-scale">Mittel</span>
+                <a id="sourceLink" class="source-link" href="#" target="_blank" rel="noreferrer">Originaldokument öffnen</a>
+              </span>
+            </dd></div>
           </dl>
 
           <section class="map-card">

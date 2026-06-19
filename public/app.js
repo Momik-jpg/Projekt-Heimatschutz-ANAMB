@@ -27,11 +27,7 @@ const SOURCE_TYPE = {
 
 const TAB_SUB = {
   all: "Aktuell: offene und laufende Fälle.",
-  important: "Aktuell: Fälle mit Schutztreffer.",
-  manual: "Aktuell: Fälle mit offener Klärung.",
-  open: "Aktuell: offene Fälle.",
-  "due-soon": "Aktuell: nahe Fristen.",
-  archive: "Aktuell: alle erfassten Baugesuche inkl. Archiv."
+  important: "Aktuell: Fälle mit Schutztreffer."
 };
 
 const ONLINEKARTEN_URL = "https://www.ag.ch/geoportal/apps/onlinekarten/";
@@ -50,9 +46,11 @@ const state = {
   selectedId: null,
   comments: [],
   activeTab: "all",
+  selectedRegions: new Set(),
+  showOlder: false,
   filters: { search: "", municipality: "", protection: "", workflow: "" },
-  sortKey: "dueDays",
-  sortDir: 1,
+  sortKey: "publicationDate",
+  sortDir: -1,
   municipalitySources: [],
   sourceCatalog: [],
   sourceReport: null,
@@ -153,6 +151,8 @@ function collectElements() {
     fDue: $("#fDue"),
     fAgis: $("#fAgis"),
     fProject: $("#fProject"),
+    projectScale: $("#projectScale"),
+    sourceLink: $("#sourceLink"),
     agisLink: $("#agisLink"),
     mapStatus: $("#mapStatus"),
     detailMap: $("#detailMap"),
@@ -676,7 +676,7 @@ function dueMeta(item) {
   const workflow = item.workflowStatus;
   const days = daysUntil(item.deadlineDate);
   if (workflow === "cleared" || workflow === "archived") return { cls: "due-ok", txt: "abgeschlossen", days };
-  if (!Number.isFinite(days)) return { cls: "due-soon", txt: "Frist prüfen", days };
+  if (!Number.isFinite(days)) return { cls: "due-soon", txt: "Frist fehlt", days };
   if (days <= 0) return { cls: "due-over", txt: formatDueRelative(days), days };
   if (days <= 5) return { cls: "due-soon", txt: formatDueRelative(days), days };
   return { cls: "due-ok", txt: formatDueRelative(days), days };
@@ -699,33 +699,14 @@ function workflowMeta(item) {
 }
 
 function matchesTab(item) {
-  // Das Archiv zeigt alles (inkl. archivierter und überfälliger Fälle).
-  if (state.activeTab === "archive") {
-    return true;
+  if (state.activeTab === "important") {
+    return ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus);
   }
-
-  // Ausserhalb des Archivs: archivierte UND überfällige Fälle ausblenden –
-  // überfällige sind ausschliesslich im Archiv sichtbar.
-  if (item.workflowStatus === "archived" || isOverdue(item)) {
-    return false;
-  }
-
-  switch (state.activeTab) {
-    case "important":
-      return ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus);
-    case "manual":
-      return item.protectionStatus === "manual-review" || Boolean(item.ambiguousAddress);
-    case "open":
-      return ["new", "under-review", "escalated"].includes(item.workflowStatus);
-    case "due-soon":
-      return dueMeta(item).days <= 5 && item.workflowStatus !== "cleared";
-    case "all":
-    default:
-      return true;
-  }
+  return true;
 }
 
 function matchesFilters(item) {
+  if (state.selectedRegions.size > 0 && !state.selectedRegions.has(item.region)) return false;
   if (state.filters.municipality && item.municipality !== state.filters.municipality) return false;
   if (state.filters.protection && item.protectionStatus !== state.filters.protection) return false;
   if (state.filters.workflow && item.workflowStatus !== state.filters.workflow) return false;
@@ -755,25 +736,26 @@ function visibleItems() {
     });
 }
 
+function publicationAgeDays(item, referenceDate = new Date()) {
+  if (!item.publicationDate) return 0;
+  const published = new Date(`${item.publicationDate}T00:00:00`);
+  if (Number.isNaN(published.getTime())) return 0;
+  const today = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+  return Math.floor((today.getTime() - published.getTime()) / 86400000);
+}
+
 function updateTabCounts() {
   const count = (fn) => state.items.filter(fn).length;
   const setCount = (key, value) => {
     const node = $(`[data-count="${key}"]`);
     if (node) node.textContent = String(value);
   };
-  // Aktive Fälle = nicht archiviert und nicht überfällig (überfällige zählen nur im Archiv).
-  const active = (item) => item.workflowStatus !== "archived" && !isOverdue(item);
-  setCount("all", count(active));
+  setCount("all", state.items.length);
   setCount(
     "important",
-    count((item) => active(item) && ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus))
+    count((item) => ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus))
   );
-  setCount(
-    "manual",
-    count((item) => active(item) && (item.protectionStatus === "manual-review" || Boolean(item.ambiguousAddress)))
-  );
-  setCount("due-soon", count((item) => active(item) && dueMeta(item).days <= 5 && item.workflowStatus !== "cleared"));
-  el.navWorkCount.textContent = String(count(active));
+  el.navWorkCount.textContent = String(state.items.length);
 }
 
 function renderMunicipalityOptions() {
@@ -801,22 +783,35 @@ function renderTable() {
     return;
   }
 
-  el.tbody.innerHTML = rows
+  const recentRows = rows.filter((item) => publicationAgeDays(item) <= 14);
+  const olderRows = rows.filter((item) => publicationAgeDays(item) > 14);
+  const scaleLabel = (scale) => ({ klein: "Klein", mittel: "Mittel", gross: "Gross" })[scale] || "Mittel";
+  const renderRows = (items) => items
     .map((item) => {
       const protection = protectionMeta(item);
       const workflow = workflowMeta(item);
       const due = dueMeta(item);
-      const selected = item.id === state.selectedId ? " selected" : "";
-      const urgency = due.cls === "due-over" ? " urg-over" : due.cls === "due-soon" ? " urg-soon" : "";
-      return `<tr tabindex="0" data-id="${escapeHtml(item.id)}" class="${selected}${urgency}">
-        <td><span class="cell-mun">${escapeHtml(item.municipality || "-")}</span><span class="cell-mun-sub">${escapeHtml(item.source || "Baugesuch")}</span></td>
-        <td><span class="cell-app-title">${escapeHtml(itemTitle(item))}</span><span class="cell-app-sub">${escapeHtml(readableAddress(item))}</span></td>
+      const classes = [
+        item.id === state.selectedId ? "selected" : "",
+        item.isRead ? "" : "unread",
+        due.cls === "due-over" ? "urg-over" : due.cls === "due-soon" ? "urg-soon" : ""
+      ].filter(Boolean).join(" ");
+      return `<tr tabindex="0" data-id="${escapeHtml(item.id)}" class="${classes}">
+        <td><span class="unread-dot" aria-label="Ungelesen"></span><span class="cell-mun">${escapeHtml(item.municipality || "-")}</span><span class="cell-mun-sub">${escapeHtml(item.region || item.source || "Baugesuch")}</span></td>
+        <td><span class="cell-app-title">${escapeHtml(itemTitle(item))}</span><span class="cell-app-sub">${escapeHtml(readableAddress(item))}</span><span class="cell-app-meta">Publiziert ${escapeHtml(formatDate(item.publicationDate))} · ${escapeHtml(scaleLabel(item.projectScale))}</span></td>
         <td><span class="hit ${protection.cls}">${escapeHtml(protection.label)}</span></td>
         <td><span class="cell-due">${escapeHtml(formatDate(item.deadlineDate))}</span><span class="cell-due-meta ${due.cls}">${escapeHtml(due.txt)}</span></td>
         <td><span class="cell-status-wrap"><span class="wf ${workflow.cls}">${escapeHtml(workflow.label)}</span><span class="row-go"><svg class="row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span></td>
       </tr>`;
     })
     .join("");
+
+  const recentMarkup = renderRows(recentRows);
+  const olderMarkup = state.showOlder ? renderRows(olderRows) : "";
+  const olderControl = olderRows.length
+    ? `<tr class="older-control-row"><td colspan="5"><button class="show-older" type="button" data-show-older aria-expanded="${state.showOlder}">${state.showOlder ? "Ältere Publikationen ausblenden" : `Mehr anzeigen · ${olderRows.length} vor über 14 Tagen publiziert`}</button></td></tr>`
+    : "";
+  el.tbody.innerHTML = `${recentMarkup}${olderControl}${olderMarkup}`;
 }
 
 function recommendationTitle(item) {
@@ -1462,6 +1457,13 @@ function renderDetail() {
   el.fDue.innerHTML = `${escapeHtml(formatDate(item.deadlineDate))} <span class="cell-due-meta cell-due-meta-inline ${due.cls}">· ${escapeHtml(due.txt)}</span>`;
   el.fAgis.textContent = item.agisMatch || protection.label;
   el.fProject.textContent = readableProject(item);
+  el.projectScale.textContent = ({ klein: "Klein", mittel: "Mittel", gross: "Gross" })[item.projectScale] || "Mittel";
+  el.projectScale.className = `project-scale scale-${item.projectScale || "mittel"}`;
+  const sourceUrl = String(item.sourceUrl || "").trim();
+  const hasSourceUrl = /^https?:\/\//i.test(sourceUrl);
+  el.sourceLink.classList.toggle("hidden", !hasSourceUrl);
+  el.sourceLink.href = hasSourceUrl ? sourceUrl : "#";
+  el.sourceLink.textContent = /\.pdf(?:$|[?#])/i.test(sourceUrl) ? "Original-PDF öffnen" : "Originalquelle öffnen";
   el.agisLink.href = agisHref(item);
   el.agisLink.textContent = buildDataLinkLabel(item);
   el.recTitle.textContent = recommendationTitle(item);
@@ -1492,11 +1494,23 @@ async function loadComments(applicationId) {
   }
 }
 
-function selectItem(id) {
+async function selectItem(id) {
   state.selectedId = id;
+  const item = state.items.find((entry) => entry.id === id);
+  const wasUnread = item && !item.isRead;
+  if (wasUnread) item.isRead = true;
   renderTable();
   renderDetail();
   loadComments(id);
+  if (wasUnread) {
+    try {
+      await requestJson(`/api/applications/${encodeURIComponent(id)}/read`, { method: "POST" });
+    } catch (error) {
+      item.isRead = false;
+      renderTable();
+      toast(`Lesestatus konnte nicht gespeichert werden: ${error.message}`);
+    }
+  }
 }
 
 function renderDashboard() {
@@ -1968,6 +1982,7 @@ function wireEvents() {
 
   $$(".tab").forEach((button) => button.addEventListener("click", () => {
     state.activeTab = button.dataset.tab;
+    state.showOlder = false;
     $$(".tab").forEach((entry) => entry.classList.toggle("active", entry === button));
     const first = visibleItems()[0];
     if (first) state.selectedId = first.id;
@@ -1976,24 +1991,46 @@ function wireEvents() {
     if (state.selectedId) loadComments(state.selectedId);
   }));
 
+  $$(".region-filter").forEach((button) => button.addEventListener("click", () => {
+    const region = button.dataset.region;
+    if (state.selectedRegions.has(region)) state.selectedRegions.delete(region);
+    else state.selectedRegions.add(region);
+    state.showOlder = false;
+    button.classList.toggle("active", state.selectedRegions.has(region));
+    button.setAttribute("aria-pressed", String(state.selectedRegions.has(region)));
+    renderTable();
+  }));
+
   el.fltSearch.addEventListener("input", (event) => {
     state.filters.search = event.target.value;
+    state.showOlder = false;
     renderTable();
   });
-  el.fltMun.addEventListener("change", (event) => { state.filters.municipality = event.target.value; renderTable(); });
-  el.fltProt.addEventListener("change", (event) => { state.filters.protection = event.target.value; renderTable(); });
-  el.fltWf.addEventListener("change", (event) => { state.filters.workflow = event.target.value; renderTable(); });
+  el.fltMun.addEventListener("change", (event) => { state.filters.municipality = event.target.value; state.showOlder = false; renderTable(); });
+  el.fltProt.addEventListener("change", (event) => { state.filters.protection = event.target.value; state.showOlder = false; renderTable(); });
+  el.fltWf.addEventListener("change", (event) => { state.filters.workflow = event.target.value; state.showOlder = false; renderTable(); });
   el.resetFilters.addEventListener("click", () => {
     state.filters = { search: "", municipality: "", protection: "", workflow: "" };
+    state.selectedRegions.clear();
+    state.showOlder = false;
     el.fltSearch.value = "";
     el.fltMun.value = "";
     el.fltProt.value = "";
     el.fltWf.value = "";
+    $$(".region-filter").forEach((button) => {
+      button.classList.remove("active");
+      button.setAttribute("aria-pressed", "false");
+    });
     renderTable();
   });
   el.tbody.addEventListener("click", (event) => {
     if (event.target.closest("[data-reset-empty]")) {
       el.resetFilters.click();
+      return;
+    }
+    if (event.target.closest("[data-show-older]")) {
+      state.showOlder = !state.showOlder;
+      renderTable();
       return;
     }
     const row = event.target.closest("tr[data-id]");

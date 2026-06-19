@@ -1802,6 +1802,178 @@ body.dark .tab.active .tab-count {
   color: #eef7ff;
 }
 
+/* Regionale Arbeitsliste und Mail-ähnlicher Lesestatus */
+.region-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--panel-border);
+  background: #fff;
+}
+
+.region-label {
+  margin-right: 3px;
+  color: var(--ink-600);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.region-filter {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid #cbd6df;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: var(--ink-700);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.region-filter:hover {
+  border-color: var(--brand-500);
+  color: var(--brand-700);
+}
+
+.region-filter.active,
+.region-filter[aria-pressed="true"] {
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: #fff;
+}
+
+.region-hint {
+  margin-left: auto;
+  color: var(--ink-500);
+  font-size: 11px;
+}
+
+tbody tr.unread td {
+  background: #f1f8fd;
+}
+
+tbody tr.unread .cell-mun,
+tbody tr.unread .cell-app-title {
+  font-weight: 850;
+}
+
+.unread-dot {
+  display: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 7px 1px 0;
+  border-radius: 50%;
+  background: var(--brand-700);
+  vertical-align: middle;
+}
+
+tr.unread .unread-dot {
+  display: inline-block;
+}
+
+.cell-app-meta {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink-500);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.older-control-row td {
+  padding: 11px 16px;
+  text-align: center;
+  background: var(--panel-muted) !important;
+}
+
+.show-older {
+  min-height: 34px;
+  padding: 7px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--brand-700);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.show-older:hover {
+  border-color: var(--brand-500);
+  background: var(--brand-soft);
+}
+
+.project-detail-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 8px;
+}
+
+.project-scale {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border: 1px solid #b9c8d5;
+  border-radius: 999px;
+  background: #f3f6f8;
+  color: var(--ink-700);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.project-scale.scale-gross {
+  border-color: #dc9ea4;
+  background: #fff0f1;
+  color: #9f2833;
+}
+
+.project-scale.scale-klein {
+  border-color: #9dc9b2;
+  background: #eef9f3;
+  color: #1f7350;
+}
+
+.source-link {
+  color: var(--brand-700);
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+body.dark .region-filters,
+body.dark .region-filter,
+body.dark .show-older,
+body.dark .project-scale {
+  border-color: var(--panel-border);
+  background: var(--panel-muted);
+  color: var(--ink-800);
+}
+
+body.dark .region-filter.active,
+body.dark .region-filter[aria-pressed="true"] {
+  border-color: var(--brand-500);
+  background: rgba(86,168,230,.22);
+  color: #eef7ff;
+}
+
+body.dark tbody tr.unread td {
+  background: rgba(86,168,230,.10);
+}
+
+@media (max-width: 900px) {
+  .region-hint { width: 100%; margin-left: 0; }
+}
+
 /* Dark-Mode: keine weissen Top-Highlights oder Glas-Kanten auf Controls.
    Die Oberfläche bleibt flach, dunkel und amtlich; Fokus nutzt weiter den Ring. */
 body.dark .tool-btn,
