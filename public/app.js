@@ -78,6 +78,16 @@ const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selec
 
 const el = {};
 
+function applyProgressBars(root = document) {
+  $$(".progress[data-progress]", root).forEach((progress) => {
+    const value = Math.max(0, Math.min(100, Number(progress.dataset.progress) || 0));
+    const bar = progress.querySelector("span");
+    if (!bar) return;
+    bar.style.width = `${value}%`;
+    progress.setAttribute("aria-valuenow", String(value));
+  });
+}
+
 function collectElements() {
   Object.assign(el, {
     authShell: $("#authShell"),
@@ -120,7 +130,6 @@ function collectElements() {
     sessionUserName: $("#sessionUserName"),
     sessionUserRole: $("#sessionUserRole"),
     logoutButton: $("#logoutButton"),
-    mastSearch: $("#mastSearch"),
     themeToggle: $("#themeToggle"),
     fontToggle: $("#fontToggle"),
     navWorkCount: $("#navWorkCount"),
@@ -154,6 +163,7 @@ function collectElements() {
     recText: $("#recText"),
     recBadge: $("#recBadge"),
     dueBadge: $("#dueBadge"),
+    aiMeta: $("#aiMeta"),
     srcMeta: $("#srcMeta"),
     timeline: $("#timeline"),
     fWorkflow: $("#fWorkflow"),
@@ -248,6 +258,17 @@ function daysUntil(value) {
   return Math.ceil((target.getTime() - today.getTime()) / 86400000);
 }
 
+function formatDueRelative(days) {
+  if (days < 0) {
+    const overdueDays = Math.abs(days);
+    return overdueDays === 1 ? "1 Tag überfällig" : `${overdueDays} Tage überfällig`;
+  }
+
+  if (days === 0) return "heute fällig";
+  if (days === 1) return "in 1 Tag";
+  return `in ${days} Tagen`;
+}
+
 function busy(button, on, label) {
   if (!button) return;
   if (on) {
@@ -275,6 +296,204 @@ function setMessage(node, message, ok = false) {
   node.classList.toggle("hidden", !message);
   node.classList.toggle("ok", ok);
   node.classList.toggle("error", !ok);
+}
+
+function applyThemePreference(on, persist = true) {
+  const enabled = Boolean(on);
+  document.body.classList.toggle("dark", enabled);
+  el.themeToggle?.setAttribute("aria-pressed", String(enabled));
+  if (persist) localStorage.setItem("hsa-dark", enabled ? "1" : "0");
+}
+
+function applyLargeTextPreference(on, persist = true) {
+  const enabled = Boolean(on);
+  document.documentElement.classList.toggle("large-text", enabled);
+  el.fontToggle?.setAttribute("aria-pressed", String(enabled));
+  if (persist) localStorage.setItem("hsa-large", enabled ? "1" : "0");
+}
+
+function passwordToggleButtonMarkup(targetId = "") {
+  const target = targetId ? ` data-password-toggle="${escapeHtml(targetId)}"` : " data-password-toggle";
+  return `<button class="password-toggle" type="button"${target} aria-label="Passwort anzeigen" aria-pressed="false" title="Passwort anzeigen">
+    <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+    <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m3 3 18 18"></path><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2"></path><path d="M9.9 5.2A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3 3.8"></path><path d="M6.6 6.6C3.7 8.3 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.8-.8"></path></svg>
+  </button>`;
+}
+
+function wirePasswordToggles(root = document) {
+  $$("[data-password-toggle]", root).forEach((button) => {
+    if (button.dataset.passwordToggleReady === "1") return;
+    button.dataset.passwordToggleReady = "1";
+    button.addEventListener("click", () => {
+      const targetId = button.dataset.passwordToggle;
+      const input = targetId
+        ? document.getElementById(targetId)
+        : button.closest(".password-input-wrap")?.querySelector("input");
+      if (!(input instanceof HTMLInputElement)) return;
+
+      const isVisible = input.type === "text";
+      input.type = isVisible ? "password" : "text";
+      button.classList.toggle("is-visible", !isVisible);
+      button.setAttribute("aria-pressed", String(!isVisible));
+      const label = isVisible ? "Passwort anzeigen" : "Passwort verbergen";
+      button.setAttribute("aria-label", label);
+      button.title = label;
+      input.focus({ preventScroll: true });
+      const caret = input.value.length;
+      input.setSelectionRange?.(caret, caret);
+    });
+  });
+}
+
+// ---- In-App-Dialoge (ersetzen die nativen confirm()/prompt()-Boxen) ----
+function openModal({
+  title,
+  message = "",
+  eyebrow = "",
+  facts = [],
+  withInput = false,
+  inputType = "text",
+  inputValue = "",
+  label = "",
+  confirmLabel = "OK",
+  cancelLabel = "Abbrechen",
+  danger = false
+}) {
+  return new Promise((resolve) => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const appShellWasInert = Boolean(el.appShell?.inert);
+    const appShellAriaHidden = el.appShell?.getAttribute("aria-hidden");
+    const overlay = document.createElement("div");
+    overlay.className = `modal-overlay${danger ? " danger" : ""}`;
+    const factItems = Array.isArray(facts)
+      ? facts
+          .filter((fact) => fact?.label || fact?.value)
+          .map(
+            (fact) => `
+          <div>
+            <dt>${escapeHtml(fact.label ?? "")}</dt>
+            <dd>${escapeHtml(fact.value ?? "")}</dd>
+          </div>`
+          )
+          .join("")
+      : "";
+    const inputHtml = !withInput
+      ? ""
+      : inputType === "password"
+        ? `<label class="modal-field"><span>${escapeHtml(label)}</span><span class="password-input-wrap modal-password-wrap"><input class="modal-input" type="password">${passwordToggleButtonMarkup()}</span></label>`
+        : `<label class="modal-field"><span>${escapeHtml(label)}</span><input class="modal-input" type="${escapeHtml(inputType)}"></label>`;
+    overlay.innerHTML = `
+      <div class="modal-card${danger ? " danger" : ""}" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-head">
+          <span class="modal-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 9v4" stroke-linecap="round"></path>
+              <path d="M12 17h.01" stroke-linecap="round"></path>
+              <path d="M10.3 4.4 2.8 17.2A2 2 0 0 0 4.5 20h15a2 2 0 0 0 1.7-2.8L13.7 4.4a2 2 0 0 0-3.4 0Z" stroke-linejoin="round"></path>
+            </svg>
+          </span>
+          <div>
+            ${eyebrow ? `<p class="modal-eyebrow">${escapeHtml(eyebrow)}</p>` : ""}
+            <h3 class="modal-title" id="modalTitle">${escapeHtml(title)}</h3>
+          </div>
+        </div>
+        ${message ? `<p class="modal-msg">${escapeHtml(message)}</p>` : ""}
+        ${factItems ? `<dl class="modal-facts">${factItems}</dl>` : ""}
+        ${inputHtml}
+        <div class="modal-actions">
+          <button type="button" class="modal-btn modal-btn-cancel" data-modal="cancel">${escapeHtml(cancelLabel)}</button>
+          <button type="button" class="modal-btn modal-btn-confirm${danger ? " danger" : ""}" data-modal="confirm">${escapeHtml(confirmLabel)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector(".modal-input");
+    const confirmBtn = overlay.querySelector('[data-modal="confirm"]');
+    const cancelBtn = overlay.querySelector('[data-modal="cancel"]');
+    const focusableSelector = [
+      "a[href]",
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])"
+    ].join(",");
+    const getFocusable = () => Array.from(overlay.querySelectorAll(focusableSelector))
+      .filter((node) => node instanceof HTMLElement && node.offsetParent !== null);
+    if (input) {
+      input.value = inputValue;
+    }
+    wirePasswordToggles(overlay);
+    const initialFocusTarget = input || confirmBtn;
+    initialFocusTarget?.focus({ preventScroll: true });
+    if (el.appShell) {
+      el.appShell.inert = true;
+      el.appShell.setAttribute("aria-hidden", "true");
+    }
+    setTimeout(() => initialFocusTarget?.focus({ preventScroll: true }), 30);
+
+    let closed = false;
+    function done(result) {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener("keydown", onKey);
+      overlay.remove();
+      if (el.appShell) {
+        el.appShell.inert = appShellWasInert;
+        if (appShellAriaHidden === null) {
+          el.appShell.removeAttribute("aria-hidden");
+        } else {
+          el.appShell.setAttribute("aria-hidden", appShellAriaHidden);
+        }
+      }
+      if (previousFocus?.isConnected) {
+        previousFocus.focus({ preventScroll: true });
+      }
+      resolve(result);
+    }
+    const onConfirm = () => done(withInput ? input.value ?? "" : true);
+    const onCancel = () => done(withInput ? null : false);
+    function onKey(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+      } else if (event.key === "Tab") {
+        const focusable = getFocusable();
+        if (!focusable.length) {
+          event.preventDefault();
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      } else if (event.key === "Enter") {
+        if (document.activeElement instanceof HTMLButtonElement) return;
+        event.preventDefault();
+        onConfirm();
+      }
+    }
+
+    overlay.addEventListener("mousedown", (event) => {
+      if (event.target === overlay) onCancel();
+    });
+    confirmBtn.addEventListener("click", onConfirm);
+    cancelBtn.addEventListener("click", onCancel);
+    document.addEventListener("keydown", onKey);
+  });
+}
+
+function uiConfirm(message, { title = "Bestätigen", eyebrow = "", facts = [], confirmLabel = "OK", cancelLabel = "Abbrechen", danger = false } = {}) {
+  return openModal({ title, message, eyebrow, facts, confirmLabel, cancelLabel, danger });
+}
+
+function uiPrompt(message, { title = "Eingabe", label = "", value = "", inputType = "text", confirmLabel = "Speichern" } = {}) {
+  return openModal({ title, message, withInput: true, label, inputValue: value, inputType, confirmLabel });
 }
 
 async function requestJson(url, options = {}) {
@@ -402,18 +621,43 @@ function isMaster() {
 // Säubert die Bauvorhaben-Beschreibung: entfernt HTML-Reste, ein vorangestelltes
 // Rubrik-Label ("Bauvorhaben: …") und angehängten Fremdtext anderer Rubriken
 // (Bauherr/Lage/Parzelle …), die beim Import manchmal mit hineinrutschen.
-function readableProject(item) {
-  let text = normalizeText(item.description || item.projectType || "");
+// Erkennt rohe HTML-/Attribut-/URL-Soup, die bei fehlerhaften Importen ins
+// Bauvorhaben-Feld geraten ist (z. B. 'box box-large" data-index="148" ...').
+function looksLikeMarkupJunk(value) {
+  return /<[a-z/!]|=\s*["']|\bdata-[\w-]+|%5[bd]|class=|box[\s-]box|tx_[a-z_]+|filter%|\/publikation/i.test(value);
+}
+
+function looksLikeDocumentJunk(value) {
+  const replacementChars = Array.from(value).filter((char) => char.charCodeAt(0) === 0xfffd).length;
+  return /^%PDF-\d/i.test(value)
+    || /\b(?:obj|endobj|xref|trailer|startxref)\b/i.test(value)
+    || /\/(?:Type|Metadata|OutputIntents|Catalog|Pages)\b/i.test(value)
+    || replacementChars >= 2;
+}
+
+function cleanProjectDisplay(raw) {
+  let text = normalizeText(raw || "");
+  if (!text) return "";
+  if (looksLikeDocumentJunk(text)) return "";
   text = text
     .replace(/<[^>]*>/g, " ")
     .replace(/&(?:nbsp|amp|lt|gt|quot|#0?39|apos);/gi, " ")
+    .replace(/\b[\w-]+\s*=\s*"[^"]*"/g, " ")
+    .replace(/\b[\w-]+\s*=\s*'[^']*'/g, " ")
+    .replace(/[?&][\w.%[\]+-]+=[\w.%[\]+-]*/g, " ")
     .replace(/^\s*(?:Bauvorhaben|Bauprojekt|Bauobjekt|Projekt)\s*[:.–-]\s*/i, "")
     .replace(
       /\s*(?:Bauherr(?:schaft)?|Grundeigentümer(?:in)?|Eigentümer(?:in)?|Projektverfasser|Bauplatz|Standort|Lage|Parzelle|Auflage(?:frist)?|Publikation|Frist|Einsprache)\s*:.*$/i,
       ""
     );
   text = normalizeText(text).replace(/[\s,;:–-]+$/, "").trim();
-  return text || normalizeText(item.projectType) || "Baugesuch";
+  // Bleiben nach dem Säubern noch Markup-/Code-Reste übrig, verwerfen.
+  if (!text || looksLikeMarkupJunk(text) || looksLikeDocumentJunk(text)) return "";
+  return text;
+}
+
+function readableProject(item) {
+  return cleanProjectDisplay(item.description) || cleanProjectDisplay(item.projectType) || "Baugesuch";
 }
 
 function itemTitle(item) {
@@ -433,10 +677,9 @@ function dueMeta(item) {
   const days = daysUntil(item.deadlineDate);
   if (workflow === "cleared" || workflow === "archived") return { cls: "due-ok", txt: "abgeschlossen", days };
   if (!Number.isFinite(days)) return { cls: "due-soon", txt: "Frist prüfen", days };
-  if (days < 0) return { cls: "due-over", txt: `${Math.abs(days)} T. überfällig`, days };
-  if (days === 0) return { cls: "due-over", txt: "heute fällig", days };
-  if (days <= 5) return { cls: "due-soon", txt: `in ${days} Tagen`, days };
-  return { cls: "due-ok", txt: `in ${days} Tagen`, days };
+  if (days <= 0) return { cls: "due-over", txt: formatDueRelative(days), days };
+  if (days <= 5) return { cls: "due-soon", txt: formatDueRelative(days), days };
+  return { cls: "due-ok", txt: formatDueRelative(days), days };
 }
 
 function isOverdue(item) {
@@ -456,6 +699,17 @@ function workflowMeta(item) {
 }
 
 function matchesTab(item) {
+  // Das Archiv zeigt alles (inkl. archivierter und überfälliger Fälle).
+  if (state.activeTab === "archive") {
+    return true;
+  }
+
+  // Ausserhalb des Archivs: archivierte UND überfällige Fälle ausblenden –
+  // überfällige sind ausschliesslich im Archiv sichtbar.
+  if (item.workflowStatus === "archived" || isOverdue(item)) {
+    return false;
+  }
+
   switch (state.activeTab) {
     case "important":
       return ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus);
@@ -464,14 +718,10 @@ function matchesTab(item) {
     case "open":
       return ["new", "under-review", "escalated"].includes(item.workflowStatus);
     case "due-soon":
-      return dueMeta(item).days <= 5 && !["cleared", "archived"].includes(item.workflowStatus);
-    case "archive":
-      return true;
+      return dueMeta(item).days <= 5 && item.workflowStatus !== "cleared";
     case "all":
     default:
-      // Standard-Arbeitsliste: ohne Archiv und ohne überfällige Fälle.
-      // Überfällige bleiben unter "Alle / Archiv" sichtbar.
-      return item.workflowStatus !== "archived" && !isOverdue(item);
+      return true;
   }
 }
 
@@ -511,11 +761,19 @@ function updateTabCounts() {
     const node = $(`[data-count="${key}"]`);
     if (node) node.textContent = String(value);
   };
-  setCount("all", count((item) => item.workflowStatus !== "archived" && !isOverdue(item)));
-  setCount("important", count((item) => ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus)));
-  setCount("manual", count((item) => item.protectionStatus === "manual-review" || Boolean(item.ambiguousAddress)));
-  setCount("due-soon", count((item) => dueMeta(item).days <= 5 && !["cleared", "archived"].includes(item.workflowStatus)));
-  el.navWorkCount.textContent = String(count((item) => item.workflowStatus !== "archived" && !isOverdue(item)));
+  // Aktive Fälle = nicht archiviert und nicht überfällig (überfällige zählen nur im Archiv).
+  const active = (item) => item.workflowStatus !== "archived" && !isOverdue(item);
+  setCount("all", count(active));
+  setCount(
+    "important",
+    count((item) => active(item) && ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus))
+  );
+  setCount(
+    "manual",
+    count((item) => active(item) && (item.protectionStatus === "manual-review" || Boolean(item.ambiguousAddress)))
+  );
+  setCount("due-soon", count((item) => active(item) && dueMeta(item).days <= 5 && item.workflowStatus !== "cleared"));
+  el.navWorkCount.textContent = String(count(active));
 }
 
 function renderMunicipalityOptions() {
@@ -579,7 +837,8 @@ function recommendationTitle(item) {
 }
 
 function recommendationText(item) {
-  if (item.automatedAssessment) return item.automatedAssessment;
+  const assessment = currentAssessmentText(item);
+  if (assessment) return assessment;
   if (item.protectionStatus === "no-hit") {
     return "Die automatische Prüfung hat keinen Schutztreffer gefunden. Bei unvollständigen Adressdaten kurz plausibilisieren.";
   }
@@ -587,6 +846,98 @@ function recommendationText(item) {
     return "Die Adresse oder Quelle ist nicht eindeutig genug für eine automatische Zuordnung. Unterlagen und Gemeindequelle manuell prüfen.";
   }
   return "Schutztreffer vorhanden. Eingriff, Sichtbarkeit und Schutzumfang vor Bewilligung fachlich prüfen.";
+}
+
+function isWeakDisplayAddress(value) {
+  const text = normalizeText(value);
+  return (
+    !text ||
+    text === "Adresse prüfen" ||
+    /^Adresse\s+(?:von\s+(?:Webseite|PDF)\s+prüfen|aus\s+Amtsblatt\s+prüfen)$/i.test(text) ||
+    /^Parzelle\s+\d{1,6}$/i.test(text) ||
+    /^(?:Haus(?:nummer|nr\.?)?|Geb(?:äude)?(?:\s+Nr\.?)?|Nr\.?)?\s*\d{1,4}[A-Za-z]?$/.test(text)
+  );
+}
+
+function dataQualityChecks(item) {
+  const address = readableAddress(item);
+  const hasCoordinates = Boolean(parseSwissCoordinates(item.coordinates));
+  const hasParcel = Boolean(normalizeText(item.parcel));
+  const addressIsWeak = isWeakDisplayAddress(address);
+  const addressIsCoveredByParcel = addressIsWeak && hasParcel && hasCoordinates;
+  const addressOk = !addressIsWeak || addressIsCoveredByParcel;
+
+  return [
+    {
+      label: "Adresse",
+      ok: addressOk,
+      detail: addressOk ? (addressIsCoveredByParcel ? "über Parzelle" : "ok") : "prüfen"
+    },
+    {
+      label: "Parzelle",
+      ok: hasParcel,
+      detail: item.parcel || "fehlt"
+    },
+    {
+      label: "Standort",
+      ok: hasCoordinates,
+      detail: hasCoordinates ? "verortet" : "prüfen"
+    },
+    {
+      label: "Frist",
+      ok: Boolean(item.deadlineDate),
+      detail: item.deadlineDate ? formatDate(item.deadlineDate) : "fehlt"
+    }
+  ];
+}
+
+function currentAssessmentText(item, checks = dataQualityChecks(item)) {
+  let text = normalizeText(item.automatedAssessment);
+
+  if (!text) return "";
+
+  const hasLocation = checks.find((check) => check.label === "Standort")?.ok;
+  const hasDeadline = checks.find((check) => check.label === "Frist")?.ok;
+
+  if (hasLocation) {
+    text = text.replaceAll("KI-Datenprüfung: Standortangaben bleiben unvollständig - bitte von Hand prüfen.", "");
+  }
+
+  if (hasDeadline) {
+    text = text.replaceAll("KI-Datenprüfung: Frist fehlt weiterhin - bitte von Hand prüfen.", "");
+  }
+
+  return normalizeText(text);
+}
+
+function renderAiMeta(item) {
+  if (!el.aiMeta) return;
+
+  const checks = dataQualityChecks(item);
+  const needsReview = checks.some((check) => !check.ok) || item.protectionStatus === "manual-review";
+  const summary =
+    currentAssessmentText(item, checks) ||
+    (needsReview
+      ? "KI-Datenprüfung: Einzelne Angaben brauchen noch eine kurze manuelle Prüfung."
+      : "KI-Datenprüfung: Die wichtigsten Importdaten sind vollständig.");
+
+  el.aiMeta.classList.remove("hidden");
+  el.aiMeta.classList.toggle("warn", needsReview);
+  el.aiMeta.innerHTML = `
+    <div class="ai-meta-head">
+      <span class="ai-meta-title">KI-Datenprüfung</span>
+      <span class="ai-meta-state ${needsReview ? "warn" : "ok"}">${needsReview ? "Von Hand prüfen" : "Vollständig"}</span>
+    </div>
+    <p class="ai-meta-summary">${escapeHtml(summary)}</p>
+    <div class="ai-checks">
+      ${checks
+        .map(
+          (check) =>
+            `<span class="ai-check ${check.ok ? "ok" : "warn"}"><b>${escapeHtml(check.label)}</b>${escapeHtml(check.detail)}</span>`
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function normalizeLayerName(value) {
@@ -1084,11 +1435,17 @@ function renderComments() {
 
 function renderDetail() {
   const item = state.items.find((entry) => entry.id === state.selectedId) ?? null;
+  // Druck-Button nur aktiv, wenn ein Fall geöffnet ist - sonst täte er stumm nichts.
+  if (el.printBtn) {
+    el.printBtn.disabled = !item;
+    el.printBtn.title = item ? "Fall drucken / als PDF" : "Zum Drucken zuerst einen Fall öffnen";
+  }
   if (!item) {
     el.detailEmpty.classList.remove("hidden");
     el.detailBody.classList.add("hidden");
     el.detailStatusBadge.textContent = "Keine Auswahl";
     el.detailHelper.textContent = "Entscheidung, Karte und interne Bearbeitung.";
+    el.aiMeta?.classList.add("hidden");
     return;
   }
 
@@ -1102,7 +1459,7 @@ function renderDetail() {
   el.fAddr.textContent = readableAddress(item);
   el.fParcel.textContent = item.parcel || "-";
   el.fPub.textContent = formatDate(item.publicationDate);
-  el.fDue.innerHTML = `${escapeHtml(formatDate(item.deadlineDate))} <span class="cell-due-meta ${due.cls}" style="display:inline">· ${escapeHtml(due.txt)}</span>`;
+  el.fDue.innerHTML = `${escapeHtml(formatDate(item.deadlineDate))} <span class="cell-due-meta cell-due-meta-inline ${due.cls}">· ${escapeHtml(due.txt)}</span>`;
   el.fAgis.textContent = item.agisMatch || protection.label;
   el.fProject.textContent = readableProject(item);
   el.agisLink.href = agisHref(item);
@@ -1114,6 +1471,7 @@ function renderDetail() {
   el.dueBadge.className = `badge ${due.cls === "due-over" ? "danger" : due.cls === "due-soon" ? "warning" : "neutral"}`;
   el.dueBadge.textContent = `Frist ${formatDate(item.deadlineDate)} · ${due.txt}`;
   el.srcMeta.textContent = `Quelle: ${item.source || "unbekannt"}${item.sourceReference ? ` · ${item.sourceReference}` : ""}`;
+  renderAiMeta(item);
   el.fWorkflow.value = item.workflowStatus in WORKFLOW ? item.workflowStatus : "new";
   el.fAssignee.value = item.assignee || "";
   el.fNote.value = item.note || "";
@@ -1163,17 +1521,18 @@ function renderSourceStats() {
   const total = report.totalMunicipalities ?? summary.totalCount ?? 0;
   const enabled = summary.enabledCount ?? 0;
   const high = report.ratings?.A ?? summary.digitalCount ?? 0;
-  const warn = report.uncertainMunicipalities ?? 0;
+  const maintenance = Math.max(0, total - enabled);
   const missing = Math.max(0, total - (summary.configuredCount ?? 0));
   const statRow = $("#pane-sources .stat-row");
   if (!statRow) return;
   const pct = total ? Math.round((enabled / total) * 100) : 0;
   statRow.innerHTML = `
     <div class="stat"><p class="k">Gemeinden total</p><p class="v">${escapeHtml(total)}</p><p class="d mut">Kanton Aargau</p></div>
-    <div class="stat"><p class="k">Quelle aktiv</p><p class="v">${escapeHtml(enabled)}<small> /${escapeHtml(total)}</small></p><div class="progress"><span style="width:${pct}%"></span></div></div>
+    <div class="stat"><p class="k">Quelle aktiv</p><p class="v">${escapeHtml(enabled)}<small> /${escapeHtml(total)}</small></p><div class="progress" role="progressbar" aria-label="Aktive Quellen" aria-valuemin="0" aria-valuemax="100" data-progress="${escapeHtml(pct)}"><span></span></div></div>
     <div class="stat"><p class="k">Datenqualität Ø</p><p class="v">${high ? "Hoch" : "Offen"}</p><p class="d up">${escapeHtml(high)} strukturiert</p></div>
-    <div class="stat"><p class="k">Wartung nötig</p><p class="v">${escapeHtml(warn)}</p><p class="d warn">Quelle prüfen</p></div>
+    <div class="stat"><p class="k">Wartung nötig</p><p class="v">${escapeHtml(maintenance)}</p><p class="d warn">nicht aktiv</p></div>
     <div class="stat"><p class="k">Ohne Quelle</p><p class="v">${escapeHtml(missing)}</p><p class="d mut">manuell erfassen</p></div>`;
+  applyProgressBars(statRow);
   const railCount = $('[data-pane="sources"] .rc');
   if (railCount) railCount.textContent = String(total);
 }
@@ -1223,6 +1582,19 @@ function sparkSVG(source, hits) {
   return `<svg class="spark" viewBox="0 0 ${width} ${height}" aria-hidden="true"><path class="ar" d="${area}"/><path class="ln" d="${line}"/></svg>`;
 }
 
+function iconSvg(name) {
+  const attrs = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"';
+  const icons = {
+    edit: `<svg ${attrs}><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>`,
+    lock: `<svg ${attrs}><rect x="4" y="11" width="16" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>`,
+    unlock: `<svg ${attrs}><rect x="4" y="11" width="16" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 7.5-2"></path></svg>`,
+    trash: `<svg ${attrs}><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v5M14 11v5"></path></svg>`,
+    close: `<svg ${attrs}><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>`,
+    external: `<svg ${attrs}><path d="M14 3h7v7"></path><path d="M10 14 21 3"></path><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"></path></svg>`
+  };
+  return icons[name] ?? "";
+}
+
 function renderSources() {
   renderSourceStats();
   if (!isMaster()) {
@@ -1238,19 +1610,19 @@ function renderSources() {
       const quality = qualityMeta(source);
       const operational = source.operational ?? {};
       const hits = hitsByMunicipality.get(source.municipality) ?? 0;
-      const status = source.enabled ? (source.uncertain ? ["warn", "Verzögert"] : ["ok", "Aktiv"]) : ["off", "Keine Quelle"];
+      const status = source.enabled ? (source.uncertain ? ["warn", "Indirekt"] : ["ok", "Aktiv"]) : ["off", "Keine Quelle"];
       const bars = [1, 2, 3].map((index) => `<span class="qbar ${index <= quality.level ? "on" : ""}"></span>`).join("");
       return `<tr>
         <td><div class="adm-name">${escapeHtml(source.municipality)}</div><div class="adm-sub">${escapeHtml(source.primarySourceOperator || "Region Aargau")}</div></td>
         <td>${escapeHtml(SOURCE_TYPE[source.sourceType] ?? source.sourceType ?? "-")}</td>
         <td><div class="qmeter ${quality.cls}"><span class="qbars">${bars}</span><span class="qlabel">${escapeHtml(quality.label)}</span></div><div class="adm-sub">${escapeHtml(quality.note)}</div></td>
         <td><div class="spark-wrap">${sparkSVG(source, hits)}<span class="spark-sum">${escapeHtml(hits)}<small>diese Woche</small></span></div></td>
-        <td class="adm-sub" style="font-size:.84rem">${escapeHtml(formatDateTime(operational.updatedAt))}</td>
+        <td class="adm-sub adm-sub-compact">${escapeHtml(formatDateTime(operational.updatedAt))}</td>
         <td><span class="adm-name">${escapeHtml(hits)}</span></td>
         <td><span class="pill ${status[0]}">${escapeHtml(status[1])}</span></td>
-        <td style="text-align:right"><span class="row-actions">
-          <button class="icon-btn" title="Quelle öffnen" data-source-open="${escapeHtml(source.primaryDirectUrl || operational.sourceUrl || "")}">↗</button>
-          <button class="icon-btn" title="Bearbeiten" data-source-edit="${escapeHtml(source.operationalId || operational.id || "")}">✎</button>
+        <td class="cell-actions"><span class="row-actions">
+          <button class="icon-btn" title="Quelle öffnen" aria-label="Quelle öffnen" data-source-open="${escapeHtml(source.primaryDirectUrl || operational.sourceUrl || "")}">${iconSvg("external")}</button>
+          <button class="icon-btn" title="Bearbeiten" aria-label="Quelle bearbeiten" data-source-edit="${escapeHtml(source.operationalId || operational.id || "")}">${iconSvg("edit")}</button>
         </span></td>
       </tr>`;
     })
@@ -1263,17 +1635,20 @@ function renderImportPane() {
   const statRow = $("#pane-import .stat-row");
   const protectionHits = state.items.filter((item) => item.protectionStatus && item.protectionStatus !== "no-hit").length;
   const statusLabel = job.status === "error" ? "Fehler" : job.status === "success" ? "Erfolgreich" : job.status ? job.status : "Bereit";
-  const nextRunLabel = job.nextRunAt ? formatDateTime(job.nextRunAt) : "Noch nicht geplant";
+  const syncPaused = sync.enabled === false;
+  const nextRunLabel = job.nextRunAt ? formatDateTime(job.nextRunAt) : syncPaused ? "Automatik pausiert" : "Noch nicht geplant";
+  const intervalValue = job.nextRunAt ? (sync.intervalHours ?? 168) : "-";
+  const intervalUnit = job.nextRunAt ? "Std." : syncPaused ? "pausiert" : "offen";
   if (statRow) {
     statRow.innerHTML = `
-      <div class="stat"><p class="k">Letzter Lauf</p><p class="v" style="font-size:1.25rem">${escapeHtml(formatDateTime(job.lastSuccessAt || job.lastRunAt))}</p><p class="d ${job.status === "error" ? "warn" : "up"}">${escapeHtml(statusLabel)}</p></div>
+      <div class="stat"><p class="k">Letzter Lauf</p><p class="v stat-time">${escapeHtml(formatDateTime(job.lastSuccessAt || job.lastRunAt))}</p><p class="d ${job.status === "error" ? "warn" : "up"}">${escapeHtml(statusLabel)}</p></div>
       <div class="stat"><p class="k">Neue Baugesuche</p><p class="v">${escapeHtml(job.lastImportedCount ?? 0)}</p><p class="d up">letzter Import</p></div>
       <div class="stat"><p class="k">AGIS-Treffer</p><p class="v">${escapeHtml(protectionHits)}</p><p class="d warn">zu prüfen</p></div>
       <div class="stat"><p class="k">Fehlerquellen</p><p class="v">${job.lastError ? "1" : "0"}</p><p class="d ${job.lastError ? "warn" : "mut"}">${escapeHtml(job.lastError ? truncate(job.lastError, 38) : "keine")}</p></div>`;
   }
   el.runList.innerHTML = `
     <div class="run-item"><span class="run-dot ${job.status === "error" ? "err" : "ok"}"></span><div class="run-main"><div class="t">${escapeHtml(sync.sourceLabel || "Gemeindequellen")}</div><div class="m">Letzter Lauf: ${escapeHtml(formatDateTime(job.lastRunAt))}</div></div><div class="run-num"><div class="n">${escapeHtml(job.lastImportedCount ?? 0)}</div><div class="u">Importe</div></div></div>
-    <div class="run-item"><span class="run-dot run-now"></span><div class="run-main"><div class="t">Nächster geplanter Lauf</div><div class="m">${escapeHtml(nextRunLabel)}</div></div><div class="run-num"><div class="n">${escapeHtml(sync.intervalHours ?? 168)}</div><div class="u">Std.</div></div></div>`;
+    <div class="run-item"><span class="run-dot run-now"></span><div class="run-main"><div class="t">Nächster geplanter Lauf</div><div class="m">${escapeHtml(nextRunLabel)}</div></div><div class="run-num"><div class="n">${escapeHtml(intervalValue)}</div><div class="u">${escapeHtml(intervalUnit)}</div></div></div>`;
 }
 
 function renderKeys() {
@@ -1281,23 +1656,37 @@ function renderKeys() {
     el.keysBody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><h4>Nur Master-Konto</h4><p>Zugänge und Registrierungsschlüssel sind nur mit Master-Rechten sichtbar.</p></div></td></tr>`;
     return;
   }
-  const userRows = state.adminUsers.map((user) => `<tr>
+  const userRows = state.adminUsers.map((user) => {
+    const active = user.active !== false;
+    // Eigenes Konto und Master-Konto sind vor Sperren/Löschen geschützt.
+    const protectedAccount = user.role === "Master" || user.id === state.currentUser?.id;
+    const statusPill = active
+      ? `<span class="pill ok">Aktiv</span>`
+      : `<span class="pill warn">Gesperrt</span>`;
+    const lockBtn = protectedAccount
+      ? ""
+      : `<button class="icon-btn" title="${active ? "Konto sperren" : "Konto entsperren"}" aria-label="${active ? "Konto sperren" : "Konto entsperren"}" data-user-lock="${escapeHtml(user.id)}" data-active="${active ? "1" : "0"}">${active ? iconSvg("lock") : iconSvg("unlock")}</button>`;
+    const deleteBtn = protectedAccount
+      ? ""
+      : `<button class="icon-btn danger" title="Konto löschen" aria-label="Konto löschen" data-user-delete="${escapeHtml(user.id)}">${iconSvg("trash")}</button>`;
+    return `<tr>
     <td><div class="adm-name">${escapeHtml(user.displayName)}</div><div class="adm-sub">${escapeHtml(user.username || "")}</div></td>
     <td>${escapeHtml(user.role || "-")}</td>
     <td class="mono">Benutzerkonto</td>
-    <td class="adm-sub" style="font-size:.84rem">${escapeHtml(formatDateTime(user.lastLoginAt || user.updatedAt || user.createdAt))}</td>
-    <td><span class="pill ok">Aktiv</span></td>
-    <td style="text-align:right"><span class="row-actions"><button class="icon-btn" title="Passwort setzen" data-user-reset="${escapeHtml(user.id)}">✎</button></span></td>
-  </tr>`);
+    <td class="adm-sub adm-sub-compact">${escapeHtml(formatDateTime(user.lastLoginAt || user.updatedAt || user.createdAt))}</td>
+    <td>${statusPill}</td>
+    <td class="cell-actions"><span class="row-actions"><button class="icon-btn" title="Passwort setzen" aria-label="Passwort setzen" data-user-reset="${escapeHtml(user.id)}">${iconSvg("edit")}</button>${lockBtn}${deleteBtn}</span></td>
+  </tr>`;
+  });
   const keyRows = state.registrationKeys.map((key) => {
     const used = Boolean(key.usedAt);
     return `<tr>
       <td><div class="adm-name">${used ? "Verwendeter Registrierungsschlüssel" : "Registrierungsschlüssel"}</div><div class="adm-sub">${escapeHtml(key.note || "Einladung")}</div></td>
       <td>Registrierung</td>
       <td class="mono">${escapeHtml(key.keyCode)}</td>
-      <td class="adm-sub" style="font-size:.84rem">${escapeHtml(used ? formatDateTime(key.usedAt) : `gültig bis ${formatDateTime(key.expiresAt)}`)}</td>
+      <td class="adm-sub adm-sub-compact">${escapeHtml(used ? formatDateTime(key.usedAt) : `gültig bis ${formatDateTime(key.expiresAt)}`)}</td>
       <td><span class="pill ${used ? "warn" : "ok"}">${used ? "Verwendet" : "Offen"}</span></td>
-      <td style="text-align:right"><span class="row-actions">${used ? "" : `<button class="icon-btn" title="Löschen" data-key-delete="${escapeHtml(key.id)}">×</button>`}</span></td>
+      <td class="cell-actions"><span class="row-actions">${used ? "" : `<button class="icon-btn danger" title="Löschen" aria-label="Schlüssel löschen" data-key-delete="${escapeHtml(key.id)}">${iconSvg("close")}</button>`}</span></td>
     </tr>`;
   });
   el.keysBody.innerHTML = [...userRows, ...keyRows].join("") || `<tr><td colspan="6"><div class="empty-state"><h4>Keine Zugänge gefunden</h4></div></td></tr>`;
@@ -1358,8 +1747,7 @@ async function loadAdminData() {
 }
 
 async function refreshAll() {
-  await loadDashboard();
-  await loadApplications();
+  await Promise.all([loadDashboard(), loadApplications()]);
   await loadAdminData();
   renderAll();
   if (state.selectedId) loadComments(state.selectedId);
@@ -1416,9 +1804,18 @@ function switchPane(pane) {
 async function editSource(sourceId) {
   const source = state.municipalitySources.find((entry) => entry.id === sourceId);
   if (!source) return;
-  const sourceUrl = window.prompt(`Quelle für ${source.municipality}`, source.sourceUrl || "");
+  const sourceUrl = await uiPrompt("URL der offiziellen Publikationsquelle.", {
+    title: `Quelle für ${source.municipality}`,
+    label: "Quellen-URL",
+    value: source.sourceUrl || "",
+    inputType: "url",
+    confirmLabel: "Weiter"
+  });
   if (sourceUrl === null) return;
-  const enabled = window.confirm("Quelle automatisch aktivieren?");
+  const enabled = await uiConfirm("Quelle automatisch für den Sync aktivieren?", {
+    title: "Quelle aktivieren?",
+    confirmLabel: "Aktivieren"
+  });
   const payload = await requestJson(`/api/admin/municipality-sources/${encodeURIComponent(source.id)}`, {
     method: "PATCH",
     body: {
@@ -1583,12 +1980,6 @@ function wireEvents() {
 
   el.fltSearch.addEventListener("input", (event) => {
     state.filters.search = event.target.value;
-    el.mastSearch.value = event.target.value;
-    renderTable();
-  });
-  el.mastSearch.addEventListener("input", (event) => {
-    state.filters.search = event.target.value;
-    el.fltSearch.value = event.target.value;
     renderTable();
   });
   el.fltMun.addEventListener("change", (event) => { state.filters.municipality = event.target.value; renderTable(); });
@@ -1597,7 +1988,6 @@ function wireEvents() {
   el.resetFilters.addEventListener("click", () => {
     state.filters = { search: "", municipality: "", protection: "", workflow: "" };
     el.fltSearch.value = "";
-    el.mastSearch.value = "";
     el.fltMun.value = "";
     el.fltProt.value = "";
     el.fltWf.value = "";
@@ -1714,14 +2104,10 @@ function wireEvents() {
   });
 
   el.themeToggle.addEventListener("click", () => {
-    const on = document.body.classList.toggle("dark");
-    el.themeToggle.setAttribute("aria-pressed", String(on));
-    localStorage.setItem("hsa-dark", on ? "1" : "0");
+    applyThemePreference(!document.body.classList.contains("dark"));
   });
   el.fontToggle.addEventListener("click", () => {
-    const on = document.documentElement.classList.toggle("large-text");
-    el.fontToggle.setAttribute("aria-pressed", String(on));
-    localStorage.setItem("hsa-large", on ? "1" : "0");
+    applyLargeTextPreference(!document.documentElement.classList.contains("large-text"));
   });
   $$(".nav-item").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
   $$(".rail-item").forEach((button) => button.addEventListener("click", () => switchPane(button.dataset.pane)));
@@ -1731,7 +2117,12 @@ function wireEvents() {
   });
   $("#pane-sources .adm-toolbar .tool-btn")?.addEventListener("click", async () => {
     if (!isMaster()) return;
-    const municipality = window.prompt("Welche Gemeindequelle bearbeiten?", el.srcSearch.value || "");
+    const municipality = await uiPrompt("Gemeindename eingeben.", {
+      title: "Gemeindequelle bearbeiten",
+      label: "Gemeinde",
+      value: el.srcSearch.value || "",
+      confirmLabel: "Weiter"
+    });
     if (!municipality) return;
     const source = state.municipalitySources.find((entry) =>
       entry.municipality.toLowerCase() === municipality.trim().toLowerCase()
@@ -1766,7 +2157,12 @@ function wireEvents() {
   });
   $("#pane-keys .tool-btn")?.addEventListener("click", async () => {
     if (!isMaster()) return;
-    const note = window.prompt("Notiz zum Registrierungsschlüssel", "Neue Einladung");
+    const note = await uiPrompt("Optionale Notiz zur Einladung.", {
+      title: "Registrierungsschlüssel erstellen",
+      label: "Notiz",
+      value: "Neue Einladung",
+      confirmLabel: "Erstellen"
+    });
     if (note === null) return;
     try {
       const key = await requestJson("/api/admin/registration-keys", { method: "POST", body: { note } });
@@ -1780,7 +2176,12 @@ function wireEvents() {
   el.keysBody.addEventListener("click", async (event) => {
     const resetButton = event.target.closest("[data-user-reset]");
     if (resetButton) {
-      const password = window.prompt("Neues Passwort setzen (mind. 8 Zeichen)");
+      const password = await uiPrompt("Mindestens 8 Zeichen.", {
+        title: "Neues Passwort setzen",
+        label: "Passwort",
+        inputType: "password",
+        confirmLabel: "Setzen"
+      });
       if (!password) return;
       try {
         await requestJson(`/api/admin/users/${encodeURIComponent(resetButton.dataset.userReset)}/password`, {
@@ -1793,8 +2194,83 @@ function wireEvents() {
       }
       return;
     }
+    const lockButton = event.target.closest("[data-user-lock]");
+    if (lockButton) {
+      const id = lockButton.dataset.userLock;
+      const next = lockButton.dataset.active !== "1"; // aktiv -> sperren (false)
+      const entry = state.adminUsers.find((user) => user.id === id);
+      if (
+        !next &&
+        !(await uiConfirm("Der Zugang wird sofort deaktiviert.", {
+          title: "Konto sperren?",
+          eyebrow: "Zugangsverwaltung",
+          facts: [
+            { label: "Person", value: entry?.displayName || "Unbekannt" },
+            { label: "Benutzername", value: entry?.username || "-" },
+            { label: "Rolle", value: entry?.role || "-" }
+          ],
+          confirmLabel: "Sperren",
+          danger: true
+        }))
+      ) {
+        return;
+      }
+      try {
+        await requestJson(`/api/admin/users/${encodeURIComponent(id)}/active`, {
+          method: "PATCH",
+          body: { active: next }
+        });
+        if (entry) entry.active = next;
+        renderKeys();
+        toast(next ? "Konto entsperrt." : "Konto gesperrt.");
+      } catch (error) {
+        toast(error.message);
+      }
+      return;
+    }
+    const userDeleteButton = event.target.closest("[data-user-delete]");
+    if (userDeleteButton) {
+      const id = userDeleteButton.dataset.userDelete;
+      const entry = state.adminUsers.find((user) => user.id === id);
+      if (
+        !(await uiConfirm("Das Konto wird endgültig gelöscht. Konten mit Kommentaren oder erstellten Registrierungsschlüsseln können nicht gelöscht werden; sperren Sie solche Konten stattdessen.", {
+          title: "Konto löschen?",
+          eyebrow: "Zugangsverwaltung",
+          facts: [
+            { label: "Person", value: entry?.displayName || "Unbekannt" },
+            { label: "Benutzername", value: entry?.username || "-" },
+            { label: "Rolle", value: entry?.role || "-" }
+          ],
+          confirmLabel: "Löschen",
+          danger: true
+        }))
+      ) {
+        return;
+      }
+      try {
+        await requestJson(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
+        state.adminUsers = state.adminUsers.filter((user) => user.id !== id);
+        renderKeys();
+        toast("Konto gelöscht.");
+      } catch (error) {
+        toast(error.message);
+      }
+      return;
+    }
     const deleteButton = event.target.closest("[data-key-delete]");
-    if (deleteButton && window.confirm("Registrierungsschlüssel wirklich löschen?")) {
+    if (deleteButton) {
+      const key = state.registrationKeys.find((item) => item.id === deleteButton.dataset.keyDelete);
+      const confirmed = await uiConfirm("Dieser Registrierungsschlüssel kann danach nicht mehr verwendet werden.", {
+        title: "Schlüssel löschen?",
+        eyebrow: "Registrierung",
+        facts: [
+          { label: "Schlüssel", value: key?.keyCode || "-" },
+          { label: "Notiz", value: key?.note || "Einladung" }
+        ],
+        confirmLabel: "Löschen",
+        danger: true
+      });
+      if (!confirmed) return;
       try {
         await requestJson(`/api/admin/registration-keys/${encodeURIComponent(deleteButton.dataset.keyDelete)}`, { method: "DELETE" });
         state.registrationKeys = state.registrationKeys.filter((key) => key.id !== deleteButton.dataset.keyDelete);
@@ -1836,10 +2312,13 @@ async function restoreSession() {
 
 async function init() {
   collectElements();
+  wirePasswordToggles();
   wireEvents();
-  if (localStorage.getItem("hsa-dark") === "1") el.themeToggle.click();
-  if (localStorage.getItem("hsa-large") === "1") el.fontToggle.click();
+  applyThemePreference(localStorage.getItem("hsa-dark") === "1", false);
+  applyLargeTextPreference(localStorage.getItem("hsa-large") === "1", false);
   await restoreSession();
+  applyThemePreference(localStorage.getItem("hsa-dark") === "1", false);
+  applyLargeTextPreference(localStorage.getItem("hsa-large") === "1", false);
 }
 
 document.addEventListener("DOMContentLoaded", () => {

@@ -68,6 +68,11 @@ export function createSessionsRepository(db) {
       db.prepare("DELETE FROM user_sessions WHERE id = ?").run(id);
     },
 
+    // Beendet alle Sitzungen eines Kontos (z. B. nach Sperren/Löschen durch Master).
+    deleteByUserId(userId) {
+      return db.prepare("DELETE FROM user_sessions WHERE user_id = ?").run(userId).changes;
+    },
+
     deleteExpired(now) {
       db.prepare("DELETE FROM user_sessions WHERE expires_at <= ?").run(now);
     }

@@ -73,7 +73,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: https:",
-  "connect-src 'self' https://www.ag.ch https://challenges.cloudflare.com",
+  "connect-src 'self' https://www.ag.ch https://unpkg.com https://challenges.cloudflare.com",
   "frame-src https://challenges.cloudflare.com"
 ].join("; ");
 const municipalitySourcePatternMaxLength = 160;
@@ -1862,7 +1862,7 @@ export function createApp(options = {}) {
     }
 
     response.json({
-      items: usersRepository.listForAdmin()
+      items: usersRepository.listAllForAdmin()
     });
   });
 
@@ -1893,6 +1893,102 @@ export function createApp(options = {}) {
       user: updatedUser,
       message: `Passwort für ${updatedUser.displayName} wurde aktualisiert.`
     });
+  });
+
+  // Konto sperren/entsperren (active-Flag). Nur Master; nicht das eigene Konto und
+  // kein Master-Konto. Gesperrte Konten verlieren beim nächsten Request den Zugang;
+  // laufende Sitzungen werden zusätzlich sofort beendet.
+  app.patch("/api/admin/users/:id/active", (request, response) => {
+    if (!isMasterUser(request.currentUser)) {
+      response.status(403).json({ error: "Nur das Master-Konto darf Konten sperren." });
+      return;
+    }
+
+    const targetId = request.params.id;
+
+    if (targetId === request.currentUser.id) {
+      response.status(400).json({ error: "Das eigene Konto kann nicht gesperrt werden." });
+      return;
+    }
+
+    const target = usersRepository.findByIdAnyState(targetId);
+
+    if (!target) {
+      response.status(404).json({ error: "Benutzer nicht gefunden." });
+      return;
+    }
+
+    if (isMasterUser(target)) {
+      response.status(403).json({ error: "Das Master-Konto kann nicht gesperrt werden." });
+      return;
+    }
+
+    if (typeof request.body?.active !== "boolean") {
+      response.status(400).json({ error: "active muss ein boolescher Wert sein." });
+      return;
+    }
+
+    const active = request.body.active;
+    usersRepository.setActive(targetId, active);
+
+    if (!active) {
+      sessionsRepository.deleteByUserId(targetId);
+    }
+
+    recordAudit(active ? "admin.user.unlock" : "admin.user.lock", request, {
+      target: target.username ?? target.displayName
+    });
+    response.json({
+      user: { ...target, active },
+      message: active ? `${target.displayName} wurde entsperrt.` : `${target.displayName} wurde gesperrt.`
+    });
+  });
+
+  // Konto löschen. Nur Master; nicht das eigene Konto und kein Master-Konto.
+  app.delete("/api/admin/users/:id", (request, response) => {
+    if (!isMasterUser(request.currentUser)) {
+      response.status(403).json({ error: "Nur das Master-Konto darf Konten löschen." });
+      return;
+    }
+
+    const targetId = request.params.id;
+
+    if (targetId === request.currentUser.id) {
+      response.status(400).json({ error: "Das eigene Konto kann nicht gelöscht werden." });
+      return;
+    }
+
+    const target = usersRepository.findByIdAnyState(targetId);
+
+    if (!target) {
+      response.status(404).json({ error: "Benutzer nicht gefunden." });
+      return;
+    }
+
+    if (isMasterUser(target)) {
+      response.status(403).json({ error: "Das Master-Konto kann nicht gelöscht werden." });
+      return;
+    }
+
+    const deletion = usersRepository.deleteById(targetId);
+
+    if (!deletion.deleted) {
+      const hasProtectedContent = deletion.blockers.comments > 0 || deletion.blockers.registrationKeys > 0;
+
+      if (hasProtectedContent) {
+        response.status(409).json({
+          error: "Dieses Konto enthält Kommentare oder erstellte Registrierungsschlüssel. Sperren Sie es stattdessen.",
+          blockers: deletion.blockers
+        });
+        return;
+      }
+
+      response.status(404).json({ error: "Benutzer nicht gefunden." });
+      return;
+    }
+
+    recordAudit("admin.user.delete", request, { target: target.username ?? target.displayName });
+    response.json({ deleted: true, message: `${target.displayName} wurde gelöscht.` });
   });
 
   app.get("/api/admin/audit-log", (request, response) => {

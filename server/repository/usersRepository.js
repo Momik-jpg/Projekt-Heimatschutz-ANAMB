@@ -276,6 +276,69 @@ export function createUsersRepository(db) {
       `).run(passwordRecord.salt, passwordRecord.hash, updatedAt, id);
 
       return result.changes > 0;
+    },
+
+    // Admin-Liste inklusive gesperrter Konten (mit active-Flag), damit das
+    // Master-Konto gesperrte Nutzer auch wieder entsperren kann.
+    listAllForAdmin() {
+      return db
+        .prepare(`
+          SELECT id, username, display_name, role, active
+          FROM users
+          ORDER BY active DESC, display_name ASC
+        `)
+        .all()
+        .map((row) => ({
+          id: row.id,
+          username: row.username,
+          displayName: row.display_name,
+          role: row.role,
+          active: row.active === 1
+        }));
+    },
+
+    // Lookup unabhängig vom active-Status – für Master-Aktionen und Guards.
+    findByIdAnyState(id) {
+      const row = db
+        .prepare("SELECT id, username, display_name, role, active FROM users WHERE id = ?")
+        .get(id);
+
+      if (!row) {
+        return null;
+      }
+
+      return {
+        id: row.id,
+        username: row.username,
+        displayName: row.display_name,
+        role: row.role,
+        active: row.active === 1
+      };
+    },
+
+    setActive(id, active, updatedAt = new Date().toISOString()) {
+      const result = db
+        .prepare("UPDATE users SET active = ?, updated_at = ? WHERE id = ?")
+        .run(active ? 1 : 0, updatedAt, id);
+
+      return result.changes > 0;
+    },
+
+    deleteById(id) {
+      const comments = Number(
+        db.prepare("SELECT COUNT(*) AS count FROM application_comments WHERE user_id = ?").get(id)?.count ?? 0
+      );
+      const registrationKeys = Number(
+        db.prepare("SELECT COUNT(*) AS count FROM registration_keys WHERE created_by_user_id = ?").get(id)?.count ?? 0
+      );
+      const blockers = { comments, registrationKeys };
+
+      if (comments > 0 || registrationKeys > 0) {
+        return { deleted: false, blockers };
+      }
+
+      const result = db.prepare("DELETE FROM users WHERE id = ?").run(id);
+      return { deleted: result.changes > 0, blockers };
     }
   };
 }
