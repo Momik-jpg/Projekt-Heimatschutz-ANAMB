@@ -6,7 +6,7 @@ Interne Webanwendung für den Heimatschutz Aargau zur Sichtung, Prüfung und Tea
 
 Die Anwendung sammelt offizielle Baugesuchs-Publikationen, ordnet sie wenn möglich automatisch einem Standort zu und prüft den Fall gegen amtliche AGIS-Schutzdaten. Das Team sieht links die Arbeitsliste und rechts die fachliche Einschätzung, Karte und interne Bearbeitung.
 
-## Vertrauenswürdige Quellenn
+## Vertrauenswürdige Quellen
 
 Die Anwendung ist bewusst auf offizielle Quellen ausgerichtet.
 
