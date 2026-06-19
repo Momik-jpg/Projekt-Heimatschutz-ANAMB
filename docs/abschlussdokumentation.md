@@ -123,7 +123,7 @@ Nicht als Hauptquelle vorgesehen:
 
 Der Endstand wurde lokal geprüft:
 
-- `89` automatisierte Tests erfolgreich
+- `111` automatisierte Tests erfolgreich
 - Syntaxprüfung von Frontend und Backend erfolgreich
 - manuelle UI-Prüfung mit Playwright MCP erfolgreich
 - Screenshots stammen aus der laufenden lokalen Anwendung

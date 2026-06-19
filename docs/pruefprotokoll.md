@@ -19,7 +19,7 @@ node --check server/app.js
 ```
 
 Ergebnis:
-- 50 Tests erfolgreich
+- 111 Tests erfolgreich
 - 0 Tests fehlgeschlagen
 
 Wichtige abgedeckte Bereiche:
