@@ -189,7 +189,7 @@
           </div>
           <div class="ph-actions">
             <button id="syncBtn" class="icon-btn sm" type="button" title="Liste aktualisieren">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <span id="resultCount" class="count-tag">0 Baugesuche</span>
           </div>
@@ -230,10 +230,10 @@
           <table>
             <colgroup><col class="c-mun"><col class="c-app"><col class="c-hit"><col class="c-due"><col class="c-stat"></colgroup>
             <thead><tr>
-              <th class="sortable" data-sort="municipality"><span class="th-inner">Gemeinde <svg class="sort-ind" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
+              <th class="sortable" data-sort="municipality"><span class="th-inner">Gemeinde <svg class="sort-ind" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
               <th>Baugesuch</th>
               <th>AGIS-Treffer</th>
-              <th class="sortable" data-sort="dueDays"><span class="th-inner">Frist <svg class="sort-ind" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
+              <th class="sortable" data-sort="dueDays"><span class="th-inner">Frist <svg class="sort-ind" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
               <th>Status</th>
             </tr></thead>
             <tbody id="tbody"></tbody>
@@ -251,7 +251,7 @@
           <div class="detail-status-row">
             <span id="detailStatusBadge" class="detail-badge-slot">Keine Auswahl</span>
             <button id="printBtn" class="icon-btn sm" type="button" title="Fall drucken / als PDF">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <button id="nextOpen" class="btn ghost detail-next-btn" type="button">Nächstes offenes →</button>
           </div>
@@ -390,8 +390,8 @@
             <div class="adm-card-head">
               <div><h2>Gemeindequellen</h2><p class="sub">Woher die Baugesuche je Gemeinde bezogen werden. Status und Quelle pflegen.</p></div>
               <div class="adm-toolbar">
-                <span class="search-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5" stroke-linecap="round"/></svg><input id="srcSearch" type="search" placeholder="Gemeinde suchen …"></span>
-                <button class="tool-btn" type="button" data-toast="Neue Gemeindequelle – Formular geöffnet."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Quelle hinzufügen</button>
+                <span class="search-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5" stroke-linecap="round"/></svg><input id="srcSearch" type="search" placeholder="Gemeinde suchen …"></span>
+                <button class="tool-btn" type="button" data-toast="Neue Gemeindequelle – Formular geöffnet."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Quelle hinzufügen</button>
               </div>
             </div>
             <div class="adm-card-body flush">
@@ -408,7 +408,7 @@
           <div class="adm-card">
             <div class="adm-card-head">
               <div><h2>Import &amp; Sync</h2><p class="sub">Automatischer Abgleich von Amtsblatt und Gemeindeportalen. Manuell auslösbar.</p></div>
-              <button class="btn" type="button" id="runImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>Import jetzt starten</button>
+              <button class="btn" type="button" id="runImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>Import jetzt starten</button>
             </div>
             <div class="stat-row">
               <div class="stat"><p class="k">Letzter Lauf</p><p class="v stat-time">heute 06:10</p><p class="d up">erfolgreich</p></div>
@@ -428,7 +428,7 @@
           <div class="adm-card">
             <div class="adm-card-head">
               <div><h2>Zugänge &amp; Schlüssel</h2><p class="sub">Benutzerkonten der Denkmalpflege und API-Schlüssel für AGIS und Datenquellen.</p></div>
-              <button class="tool-btn" type="button" data-toast="Neuer Zugang – Einladung versendet."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Zugang einladen</button>
+              <button class="tool-btn" type="button" data-toast="Neuer Zugang – Einladung versendet."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Zugang einladen</button>
             </div>
             <div class="adm-card-body flush">
               <table class="adm-table">
