@@ -835,13 +835,21 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
     WHERE source = 'Gemeinde-Webseite'
       AND address = 'Adresse von Webseite prüfen'
       AND IFNULL(parcel, '') = ''
-      AND IFNULL(coordinates, '') = '';
+      AND IFNULL(coordinates, '') = ''
+      AND workflow_status = 'new'
+      AND IFNULL(assignee, '') = ''
+      AND IFNULL(note, '') = ''
+      AND id NOT IN (SELECT application_id FROM application_comments);
 
     DELETE FROM applications
     WHERE source = 'Gemeinde-Webseite'
       AND ambiguous_address = 1
       AND IFNULL(parcel, '') = ''
       AND IFNULL(coordinates, '') = ''
+      AND workflow_status = 'new'
+      AND IFNULL(assignee, '') = ''
+      AND IFNULL(note, '') = ''
+      AND id NOT IN (SELECT application_id FROM application_comments)
       AND (
         address LIKE 'Januar 20%'
         OR address LIKE 'Februar 20%'
@@ -891,6 +899,7 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
       AND workflow_status = 'new'
       AND IFNULL(assignee, '') = ''
       AND IFNULL(note, '') = ''
+      AND id NOT IN (SELECT application_id FROM application_comments)
       AND (
         source_url LIKE '%/category/%'
         OR source_url LIKE '%/author/%'
@@ -908,6 +917,7 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
       AND workflow_status = 'new'
       AND IFNULL(assignee, '') = ''
       AND IFNULL(note, '') = ''
+      AND id NOT IN (SELECT application_id FROM application_comments)
       AND (
         source_url LIKE '%/suche%'
         OR source_url LIKE '%/search%'

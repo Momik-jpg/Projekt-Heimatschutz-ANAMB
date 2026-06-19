@@ -7243,6 +7243,110 @@ test("team comments can be stored and read for an application", async (context) 
   assert.equal(listResponse.payload.items[0].message, "Ich habe die Unterlagen geprüft und bitte um Zweitmeinung.");
 });
 
+test("sync prune keeps untouched municipality imports that carry team comments", () => {
+  // Regression für den Datenverlust-Befund: der Sync-Prune darf einen Fall, zu
+  // dem das Team bereits einen Kommentar erfasst hat, nicht entfernen - sonst
+  // wuerde der Kommentar via ON DELETE CASCADE ebenfalls verschwinden.
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-prune-"));
+  const dbPath = join(directory, "prune.sqlite");
+  const db = createDatabase(dbPath, { seedDemoApplications: false });
+  const repository = createApplicationsRepository(db);
+
+  const baseItem = (id, reference, address) => ({
+    id,
+    source: "Gemeinde-Webseite",
+    sourceReference: reference,
+    sourceUrl: `https://aarau.example.org/baugesuche/${reference}`,
+    municipality: "Aarau",
+    address,
+    coordinates: "",
+    publicationDate: "2026-03-01",
+    deadlineDate: "",
+    projectType: "Baugesuch",
+    description: "Importierter Fall",
+    protectionStatus: "manual-review",
+    agisMatch: "Noch nicht eindeutig zugeordnet",
+    agisLayers: [],
+    ambiguousAddress: 1
+  });
+
+  repository.importItems(
+    [
+      baseItem("BG-PRUNE-COMMENTED", "PRUNE-COMMENTED", "Teststrasse 1"),
+      baseItem("BG-PRUNE-PLAIN", "PRUNE-PLAIN", "Teststrasse 2")
+    ],
+    "2026-03-01T00:00:00.000Z"
+  );
+
+  const userId = db.prepare("SELECT id FROM users LIMIT 1").get().id;
+  db.prepare(
+    `INSERT INTO application_comments (id, application_id, user_id, message, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run("C-PRUNE-1", "BG-PRUNE-COMMENTED", userId, "Bereits besprochen, bitte aufbewahren.", "2026-03-02T08:00:00.000Z", "2026-03-02T08:00:00.000Z");
+
+  repository.pruneUntouchedMunicipalityImports({ source: "Gemeinde-Webseite", municipality: "Aarau" });
+
+  const commented = db.prepare("SELECT COUNT(*) AS n FROM applications WHERE id = 'BG-PRUNE-COMMENTED'").get().n;
+  const plain = db.prepare("SELECT COUNT(*) AS n FROM applications WHERE id = 'BG-PRUNE-PLAIN'").get().n;
+  const comment = db.prepare("SELECT COUNT(*) AS n FROM application_comments WHERE application_id = 'BG-PRUNE-COMMENTED'").get().n;
+
+  db.close();
+  rmSync(directory, { recursive: true, force: true });
+
+  assert.equal(commented, 1, "Fall mit Team-Kommentar darf vom Sync nicht entfernt werden");
+  assert.equal(plain, 0, "Unberührter Fall ohne Kommentar wird wie bisher entfernt");
+  assert.equal(comment, 1, "Der Kommentar bleibt erhalten");
+});
+
+test("startup cleanup keeps junk-pattern rows that carry team comments", () => {
+  // Regression: die Startup-Bereinigung loescht HTML-/URL-Muell, darf dabei aber
+  // keine Zeile entfernen, an der das Team schon gearbeitet hat (Kommentar).
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-cleanup-"));
+  const dbPath = join(directory, "cleanup.sqlite");
+  const seedDb = createDatabase(dbPath, { seedDemoApplications: false });
+  const repository = createApplicationsRepository(seedDb);
+
+  const junkItem = (id, reference) => ({
+    id,
+    source: "Gemeinde-Webseite",
+    sourceReference: reference,
+    sourceUrl: "https://aarau.example.org/baugesuche",
+    municipality: "Aarau",
+    address: "Adresse von Webseite prüfen",
+    coordinates: "",
+    publicationDate: "2026-03-01",
+    deadlineDate: "",
+    projectType: "Baugesuch",
+    description: "HTML-Müll ohne verwertbaren Standort",
+    protectionStatus: "manual-review",
+    agisMatch: "Noch nicht eindeutig zugeordnet",
+    agisLayers: [],
+    ambiguousAddress: 1
+  });
+
+  repository.importItems(
+    [junkItem("BG-JUNK-COMMENTED", "JUNK-COMMENTED"), junkItem("BG-JUNK-PLAIN", "JUNK-PLAIN")],
+    "2026-03-01T00:00:00.000Z"
+  );
+
+  const userId = seedDb.prepare("SELECT id FROM users LIMIT 1").get().id;
+  seedDb.prepare(
+    `INSERT INTO application_comments (id, application_id, user_id, message, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run("C-JUNK-1", "BG-JUNK-COMMENTED", userId, "Trotz Mülladresse hier bereits geprüft.", "2026-03-02T08:00:00.000Z", "2026-03-02T08:00:00.000Z");
+  seedDb.close();
+
+  // Erneutes Öffnen führt die Startup-Bereinigung aus.
+  const reopened = createDatabase(dbPath, { seedDemoApplications: false });
+  const commented = reopened.prepare("SELECT COUNT(*) AS n FROM applications WHERE id = 'BG-JUNK-COMMENTED'").get().n;
+  const plain = reopened.prepare("SELECT COUNT(*) AS n FROM applications WHERE id = 'BG-JUNK-PLAIN'").get().n;
+  reopened.close();
+  rmSync(directory, { recursive: true, force: true });
+
+  assert.equal(commented, 1, "Junk-Zeile mit Team-Kommentar bleibt beim Startup-Cleanup erhalten");
+  assert.equal(plain, 0, "Junk-Zeile ohne Team-Arbeit wird wie bisher bereinigt");
+});
+
 test("sync imports the next queued Amtsblatt record", async (context) => {
   const testServer = createTestServer();
 
