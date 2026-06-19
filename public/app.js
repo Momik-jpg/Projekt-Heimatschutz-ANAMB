@@ -1653,7 +1653,7 @@ function renderImportPane() {
 
 function renderKeys() {
   if (!isMaster()) {
-    el.keysBody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><h4>Nur Master-Konto</h4><p>Zugänge und Registrierungsschlüssel sind nur mit Master-Rechten sichtbar.</p></div></td></tr>`;
+    el.keysBody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><h4>Nur Master-Konto</h4><p>Zugänge und Registrierungsschlüssel sind nur mit Master-Rechten sichtbar.</p></div></td></tr>`;
     return;
   }
   const userRows = state.adminUsers.map((user) => {
@@ -1673,7 +1673,6 @@ function renderKeys() {
     <td><div class="adm-name">${escapeHtml(user.displayName)}</div><div class="adm-sub">${escapeHtml(user.username || "")}</div></td>
     <td>${escapeHtml(user.role || "-")}</td>
     <td class="mono">Benutzerkonto</td>
-    <td class="adm-sub adm-sub-compact">${escapeHtml(formatDateTime(user.lastLoginAt || user.updatedAt || user.createdAt))}</td>
     <td>${statusPill}</td>
     <td class="cell-actions"><span class="row-actions"><button class="icon-btn" title="Passwort setzen" aria-label="Passwort setzen" data-user-reset="${escapeHtml(user.id)}">${iconSvg("edit")}</button>${lockBtn}${deleteBtn}</span></td>
   </tr>`;
@@ -1681,15 +1680,14 @@ function renderKeys() {
   const keyRows = state.registrationKeys.map((key) => {
     const used = Boolean(key.usedAt);
     return `<tr>
-      <td><div class="adm-name">${used ? "Verwendeter Registrierungsschlüssel" : "Registrierungsschlüssel"}</div><div class="adm-sub">${escapeHtml(key.note || "Einladung")}</div></td>
+      <td><div class="adm-name">${used ? "Verwendeter Registrierungsschlüssel" : "Registrierungsschlüssel"}</div><div class="adm-sub">${escapeHtml(key.note || "Einladung")} · ${escapeHtml(used ? `verwendet ${formatDateTime(key.usedAt)}` : `gültig bis ${formatDateTime(key.expiresAt)}`)}</div></td>
       <td>Registrierung</td>
       <td class="mono">${escapeHtml(key.keyCode)}</td>
-      <td class="adm-sub adm-sub-compact">${escapeHtml(used ? formatDateTime(key.usedAt) : `gültig bis ${formatDateTime(key.expiresAt)}`)}</td>
       <td><span class="pill ${used ? "warn" : "ok"}">${used ? "Verwendet" : "Offen"}</span></td>
       <td class="cell-actions"><span class="row-actions">${used ? "" : `<button class="icon-btn danger" title="Löschen" aria-label="Schlüssel löschen" data-key-delete="${escapeHtml(key.id)}">${iconSvg("close")}</button>`}</span></td>
     </tr>`;
   });
-  el.keysBody.innerHTML = [...userRows, ...keyRows].join("") || `<tr><td colspan="6"><div class="empty-state"><h4>Keine Zugänge gefunden</h4></div></td></tr>`;
+  el.keysBody.innerHTML = [...userRows, ...keyRows].join("") || `<tr><td colspan="5"><div class="empty-state"><h4>Keine Zugänge gefunden</h4></div></td></tr>`;
   const railCount = $('[data-pane="keys"] .rc');
   if (railCount) railCount.textContent = String(state.adminUsers.length + state.registrationKeys.filter((key) => !key.usedAt).length);
 }
