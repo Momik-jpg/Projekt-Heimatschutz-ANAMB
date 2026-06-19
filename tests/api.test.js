@@ -12,13 +12,14 @@ import {
 } from "../server/app.js";
 import { createDatabase } from "../server/db.js";
 import { createApplicationsRepository } from "../server/repository/applicationsRepository.js";
+import { createAgisAssessmentService } from "../server/services/agisAssessmentService.js";
 import { generateTotp } from "../server/services/totp.js";
 
 // Test-Zugangsdaten für die ephemere In-Memory-Testdatenbank. Das sind KEINE
 // echten Secrets und tauchen nirgends produktiv auf. Per Umgebungsvariable
 // überschreibbar, sonst neutrale Platzhalter.
 const TEST_MASTER_PASSWORD = process.env.TEST_MASTER_PASSWORD ?? "Test-Master-Pw-1!";
-const TEST_TEAM_PASSWORD = process.env.TEST_TEAM_PASSWORD ?? "Test-Team-Pw-1!";
+const TEST_TEAM_PASSWORD = process.env.TEST_TEAM_PASSWORD ?? "Heimat2026!";
 
 function createTestServer(options = {}) {
   const directory = options.directory ?? mkdtempSync(join(tmpdir(), "heimatschutz-aargau-"));
@@ -57,7 +58,7 @@ function createTestServer(options = {}) {
     defaultLoginPassword:
       "defaultLoginPassword" in options
         ? options.defaultLoginPassword
-        : process.env.DEFAULT_LOGIN_PASSWORD ?? "Heimat2026!",
+        : process.env.DEFAULT_LOGIN_PASSWORD ?? TEST_TEAM_PASSWORD,
     masterSetupEmail: options.masterSetupEmail,
     mailService: options.mailService,
     onMasterSetupKey: options.onMasterSetupKey,
@@ -207,7 +208,7 @@ async function login(baseUrl, credentials = {}) {
     method: "POST",
     body: JSON.stringify({
       username: credentials.username ?? "lucia.vettori",
-      password: credentials.password ?? "Heimat2026!"
+      password: credentials.password ?? TEST_TEAM_PASSWORD
     })
   });
 
@@ -476,6 +477,229 @@ test("master can reset a forgotten password for a team member", async (context) 
   assert.equal(newLoginResponse.status, 200);
 });
 
+test("master can lock and unlock a team member", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  const lucia = usersResponse.payload.items.find((user) => user.username === "lucia.vettori");
+  assert.ok(lucia);
+  assert.equal(lucia.active, true);
+
+  const lockResponse = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}/active`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({ active: false })
+  });
+  assert.equal(lockResponse.status, 200);
+
+  // Gesperrtes Konto kann sich nicht mehr anmelden.
+  const lockedLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
+  });
+  assert.equal(lockedLogin.status, 401);
+
+  const afterLock = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(afterLock.payload.items.find((user) => user.id === lucia.id).active, false);
+
+  const unlockResponse = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}/active`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({ active: true })
+  });
+  assert.equal(unlockResponse.status, 200);
+
+  const unlockedLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
+  });
+  assert.equal(unlockedLogin.status, 200);
+});
+
+test("account activation rejects missing and non-boolean values", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  const lucia = usersResponse.payload.items.find((user) => user.username === "lucia.vettori");
+  assert.ok(lucia);
+
+  for (const body of [{}, { active: "false" }]) {
+    const response = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}/active`, {
+      method: "PATCH",
+      headers: { Cookie: masterCookie },
+      body: JSON.stringify(body)
+    });
+    assert.equal(response.status, 400);
+  }
+
+  const afterRequests = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(afterRequests.payload.items.find((user) => user.id === lucia.id).active, true);
+});
+
+test("master can delete a team member", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  const lucia = usersResponse.payload.items.find((user) => user.username === "lucia.vettori");
+  assert.ok(lucia);
+
+  const deleteResponse = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}`, {
+    method: "DELETE",
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(deleteResponse.status, 200);
+
+  const afterDelete = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(afterDelete.payload.items.find((user) => user.id === lucia.id), undefined);
+
+  const deletedLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
+  });
+  assert.equal(deletedLogin.status, 401);
+});
+
+test("account deletion preserves user comments by blocking destructive deletion", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const teamCookie = await login(testServer.baseUrl);
+  const commentResponse = await requestJson(testServer.baseUrl, "/api/applications/BG-2026-002/comments", {
+    method: "POST",
+    headers: { Cookie: teamCookie },
+    body: JSON.stringify({ message: "Dieser Kommentar muss erhalten bleiben." })
+  });
+  assert.equal(commentResponse.status, 201);
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  const lucia = usersResponse.payload.items.find((user) => user.username === "lucia.vettori");
+  assert.ok(lucia);
+
+  const deleteResponse = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}`, {
+    method: "DELETE",
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(deleteResponse.status, 409);
+
+  const commentsResponse = await requestJson(testServer.baseUrl, "/api/applications/BG-2026-002/comments", {
+    headers: { Cookie: teamCookie }
+  });
+  assert.equal(commentsResponse.status, 200);
+  assert.equal(commentsResponse.payload.items.some((comment) => comment.message === "Dieser Kommentar muss erhalten bleiben."), true);
+
+  const loginResponse = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: TEST_TEAM_PASSWORD })
+  });
+  assert.equal(loginResponse.status, 200);
+});
+
+test("locking and deleting accounts is guarded (own account, master, non-master)", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  const masterUser = usersResponse.payload.items.find((user) => user.role === "Master");
+  const lucia = usersResponse.payload.items.find((user) => user.username === "lucia.vettori");
+  assert.ok(masterUser);
+  assert.ok(lucia);
+
+  // Eigenes (Master-)Konto kann nicht gesperrt oder gelöscht werden.
+  const selfLock = await requestJson(testServer.baseUrl, `/api/admin/users/${masterUser.id}/active`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({ active: false })
+  });
+  assert.equal(selfLock.status, 400);
+
+  const selfDelete = await requestJson(testServer.baseUrl, `/api/admin/users/${masterUser.id}`, {
+    method: "DELETE",
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(selfDelete.status, 400);
+
+  // Ein Team-Konto darf weder sperren noch löschen.
+  const luciaCookie = await login(testServer.baseUrl, {
+    username: "lucia.vettori",
+    password: "Heimat2026!"
+  });
+
+  const teamLock = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}/active`, {
+    method: "PATCH",
+    headers: { Cookie: luciaCookie },
+    body: JSON.stringify({ active: false })
+  });
+  assert.equal(teamLock.status, 403);
+
+  const teamDelete = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}`, {
+    method: "DELETE",
+    headers: { Cookie: luciaCookie }
+  });
+  assert.equal(teamDelete.status, 403);
+});
+
 test("master can import an AGIS export JSON as a practical fallback", async (context) => {
   const testServer = createTestServer();
 
@@ -556,6 +780,60 @@ test("master can import an AGIS export JSON as a practical fallback", async (con
         notification.protectionStatus === "protected-zone"
     )
   );
+});
+
+test("manual JSON import sends impossible deadline dates to manual review", async (context) => {
+  const testServer = createTestServer({
+    seedDemoApplications: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const importResponse = await requestJson(testServer.baseUrl, "/api/admin/import-json", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    },
+    body: JSON.stringify({
+      jsonText: JSON.stringify({
+        items: [
+          {
+            id: "BG-INVALID-DATE-001",
+            source: "Test",
+            sourceReference: "INVALID-DATE-001",
+            sourceUrl: "https://example.org/invalid-date",
+            municipality: "Aarau",
+            address: "Bahnhofstrasse 2",
+            coordinates: "2650000,1250000",
+            publicationDate: "2026-05-05",
+            deadlineDate: "2026-05-04",
+            projectType: "Umbau",
+            description: "Frist liegt vor Publikation",
+            protectionStatus: "no-hit",
+            agisMatch: "Kein Schutz gefunden",
+            agisLayers: []
+          }
+        ]
+      })
+    })
+  });
+
+  assert.equal(importResponse.status, 200);
+  assert.equal(importResponse.payload.importedCount, 1);
+  assert.equal(importResponse.payload.items[0].deadlineDate, "");
+  // Ein ungültiges Fristdatum ist ein Datenqualitätsproblem und darf den
+  // Schutzstatus nicht überschreiben: der ursprüngliche Status bleibt erhalten,
+  // damit ein möglicher Schutztreffer nicht verdeckt wird.
+  assert.equal(importResponse.payload.items[0].protectionStatus, "no-hit");
+  assert.match(importResponse.payload.items[0].automatedAssessment, /Fristdatum liegt vor Publikationsdatum/i);
 });
 
 test("master can store an automatic JSON source url and trigger the first sync", async (context) => {
@@ -861,7 +1139,11 @@ test("municipality source catalog exposes coverage report, ratings and shared so
       response.payload.report.ratings.D,
     196
   );
-  assert.ok(response.payload.report.totalUniqueSources >= 196);
+  assert.ok(response.payload.report.municipalitiesWithSharedPrimary > 0);
+  assert.ok(
+    response.payload.report.totalUniqueSources >=
+      response.payload.report.totalMunicipalities - response.payload.report.municipalitiesWithSharedPrimary + 1
+  );
   assert.ok(response.payload.sharedSources.length >= 1);
   assert.ok(
     response.payload.sharedSources.some(
@@ -882,12 +1164,14 @@ test("municipality source catalog exposes coverage report, ratings and shared so
   const arniCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Arni (AG)");
   const auensteinCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Auenstein");
   const auwCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Auw");
+  const boniswilCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Boniswil");
   const bremgartenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Bremgarten");
   const dintikonCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Dintikon");
   const fislisbachCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Fislisbach");
   const herznachUekenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Herznach-Ueken");
   const niederlenzCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Niederlenz");
   const oberentfeldenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Oberentfelden");
+  const rottenschwilCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Rottenschwil");
   const unterkulmCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Unterkulm");
   const wohlenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Wohlen");
   const zufikonCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Zufikon");
@@ -918,7 +1202,13 @@ test("municipality source catalog exposes coverage report, ratings and shared so
     assert.equal(item.rating, "A");
   }
   assert.ok(ammerswilCatalogItem);
-  assert.equal(ammerswilCatalogItem.rating, "C");
+  assert.equal(ammerswilCatalogItem.rating, "A");
+  for (const item of [ammerswilCatalogItem, boniswilCatalogItem, rottenschwilCatalogItem]) {
+    assert.ok(item);
+    assert.equal(item.primarySourceName, "Amtsblatt Aargau");
+    assert.equal(item.primaryDirectUrl, "https://amtsblatt.ag.ch/publikationen/");
+    assert.equal(item.primaryShared, true);
+  }
   assert.ok(moerikenCatalogItem);
   assert.equal(moerikenCatalogItem.rating, "A");
   assert.equal(moerikenCatalogItem.primarySourceName, "Möriken-Wildegg: direkte Baugesuchseite");
@@ -993,6 +1283,19 @@ test("auto-managed municipality sources are refreshed to safer official defaults
     WHERE municipality = 'Baden'
   `).run();
 
+  initialDb.prepare(`
+    UPDATE municipality_sources
+    SET source_type = 'html',
+        source_url = 'https://www.full-reuenthal.ch/_rte/information/2660222',
+        source_token = '',
+        include_pattern = 'baugesuch',
+        exclude_pattern = 'einbürger',
+        enabled = 0,
+        digital_status = 'partial',
+        notes = 'Automatisch wurde nur eine einzelne Publikation erkannt. Diese Quelle wird nicht blind als Dauer-Sync aktiviert. (Baubewilligungen)'
+    WHERE municipality = 'Full-Reuenthal'
+  `).run();
+
   initialDb.close();
 
   const migratedDb = createDatabase(dbPath);
@@ -1016,6 +1319,13 @@ test("auto-managed municipality sources are refreshed to safer official defaults
       WHERE municipality = 'Baden'
     `)
     .get();
+  const fullReuenthalSource = migratedDb
+    .prepare(`
+      SELECT municipality, source_url, enabled, digital_status, notes
+      FROM municipality_sources
+      WHERE municipality = 'Full-Reuenthal'
+    `)
+    .get();
 
   assert.equal(auwSource.source_url, "https://www.auw.ch/gemeinde/aktuelles.html/402");
   assert.equal(auwSource.enabled, 1);
@@ -1027,6 +1337,201 @@ test("auto-managed municipality sources are refreshed to safer official defaults
   assert.equal(badenSource.exclude_pattern, "menu");
   assert.equal(badenSource.enabled, 1);
   assert.equal(badenSource.notes, "Eigene Team-Konfiguration");
+
+  assert.equal(fullReuenthalSource.source_url, "https://www.full-reuenthal.ch/aktuellesinformationen");
+  assert.equal(fullReuenthalSource.enabled, 1);
+  assert.equal(fullReuenthalSource.digital_status, "digital");
+  assert.match(fullReuenthalSource.notes, /Baugesuchseite/i);
+});
+
+test("database startup normalizes legacy swapped LV95 application coordinates", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-aargau-db-"));
+  const dbPath = join(directory, "test.sqlite");
+  const initialDb = createDatabase(dbPath);
+  const repository = createApplicationsRepository(initialDb);
+
+  repository.importItems(
+    [
+      {
+        source: "Test",
+        sourceReference: "LEGACY-COORDS-001",
+        sourceUrl: "https://example.org/legacy",
+        municipality: "Aarau",
+        address: "Bahnhofstrasse 1",
+        parcel: "",
+        coordinates: "1250000,2650000",
+        publicationDate: "2026-03-01",
+        deadlineDate: "2026-03-30",
+        projectType: "Umbau",
+        description: "Legacy-Koordinaten in alter Reihenfolge",
+        protectionStatus: "no-hit",
+        agisMatch: "Kein Schutztreffer",
+        agisLayers: [],
+        automatedAssessment: "Test"
+      }
+    ],
+    "2026-03-01T00:00:00.000Z"
+  );
+  // Migration als noch nicht angewendet markieren, damit der naechste Start die
+  // Legacy-Daten wie bei einer echten Bestands-DB normalisiert.
+  initialDb.prepare("DELETE FROM schema_migrations WHERE id = 'normalize-legacy-coordinates'").run();
+  initialDb.close();
+
+  const migratedDb = createDatabase(dbPath);
+
+  context.after(() => {
+    migratedDb.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  const row = migratedDb
+    .prepare("SELECT coordinates FROM applications WHERE source_reference = 'LEGACY-COORDS-001'")
+    .get();
+
+  assert.equal(row.coordinates, "2650000,1250000");
+});
+
+test("database startup clears deadlines before publication dates", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-aargau-db-"));
+  const dbPath = join(directory, "test.sqlite");
+  const initialDb = createDatabase(dbPath);
+  const repository = createApplicationsRepository(initialDb);
+
+  repository.importItems(
+    [
+      {
+        source: "Test",
+        sourceReference: "LEGACY-DATE-001",
+        sourceUrl: "https://example.org/legacy-date",
+        municipality: "Aarau",
+        address: "Bahnhofstrasse 2",
+        parcel: "",
+        coordinates: "2650000,1250000",
+        publicationDate: "2026-05-05",
+        deadlineDate: "2026-05-04",
+        projectType: "Umbau",
+        description: "Legacy-Frist liegt vor Publikation",
+        protectionStatus: "no-hit",
+        agisMatch: "Kein Schutztreffer",
+        agisLayers: [],
+        automatedAssessment: "Test"
+      }
+    ],
+    "2026-05-05T00:00:00.000Z"
+  );
+  // Migration als noch nicht angewendet markieren, damit der naechste Start die
+  // ungueltige Frist wie bei einer echten Bestands-DB bereinigt.
+  initialDb.prepare("DELETE FROM schema_migrations WHERE id = 'clear-invalid-deadlines'").run();
+  initialDb.close();
+
+  const migratedDb = createDatabase(dbPath);
+
+  context.after(() => {
+    migratedDb.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  const row = migratedDb
+    .prepare(
+      "SELECT deadline_date, protection_status, automated_assessment FROM applications WHERE source_reference = 'LEGACY-DATE-001'"
+    )
+    .get();
+
+  assert.equal(row.deadline_date, "");
+  // Die Migration bereinigt nur das ungültige Fristdatum und vermerkt es; der
+  // Schutzstatus bleibt erhalten, damit AGIS den Fall weiterhin prüfen kann.
+  assert.equal(row.protection_status, "no-hit");
+  assert.match(row.automated_assessment, /Fristdatum liegt vor Publikationsdatum/i);
+});
+
+test("destructive startup migrations are recorded and do not re-run on restart", () => {
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-migrate-"));
+  const dbPath = join(directory, "migrate.sqlite");
+  const db = createDatabase(dbPath, { seedDemoApplications: false });
+
+  const recorded = db
+    .prepare("SELECT id FROM schema_migrations")
+    .all()
+    .map((entry) => entry.id);
+  assert.ok(recorded.includes("cleanup-seed-artifacts-and-junk"));
+  assert.ok(recorded.includes("clear-invalid-deadlines"));
+
+  // Eine Junk-Zeile, die die Bereinigung normalerweise entfernen wuerde.
+  const repository = createApplicationsRepository(db);
+  repository.importItems(
+    [
+      {
+        id: "BG-MIGRATE-JUNK",
+        source: "Gemeinde-Webseite",
+        sourceReference: "MIGRATE-JUNK",
+        sourceUrl: "https://aarau.example.org/baugesuche",
+        municipality: "Aarau",
+        address: "Adresse von Webseite prüfen",
+        coordinates: "",
+        publicationDate: "2026-03-01",
+        deadlineDate: "",
+        projectType: "Baugesuch",
+        description: "Junk",
+        protectionStatus: "manual-review",
+        agisMatch: "Noch nicht eindeutig zugeordnet",
+        agisLayers: [],
+        ambiguousAddress: 1
+      }
+    ],
+    "2026-03-01T00:00:00.000Z"
+  );
+  db.close();
+
+  // Marker bleibt bestehen -> Bereinigung laeuft beim Neustart nicht erneut.
+  const reopened = createDatabase(dbPath, { seedDemoApplications: false });
+  const remaining = reopened
+    .prepare("SELECT COUNT(*) AS n FROM applications WHERE id = 'BG-MIGRATE-JUNK'")
+    .get().n;
+  reopened.close();
+  rmSync(directory, { recursive: true, force: true });
+
+  assert.equal(remaining, 1, "Einmalige Migration darf beim Neustart nicht erneut loeschen");
+});
+
+test("destructive startup migration writes a pre-migration backup when data exists", () => {
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-migrate-bak-"));
+  const dbPath = join(directory, "migrate.sqlite");
+  const seedDb = createDatabase(dbPath, { seedDemoApplications: false });
+
+  const repository = createApplicationsRepository(seedDb);
+  repository.importItems(
+    [
+      {
+        id: "BG-BACKUP-001",
+        source: "Gemeinde-Webseite",
+        sourceReference: "BACKUP-001",
+        sourceUrl: "https://aarau.example.org/baugesuche",
+        municipality: "Aarau",
+        address: "Teststrasse 9",
+        coordinates: "2650000,1250000",
+        publicationDate: "2026-03-01",
+        deadlineDate: "2026-03-30",
+        projectType: "Baugesuch",
+        description: "Bestehender Fall",
+        protectionStatus: "no-hit",
+        agisMatch: "Kein Schutztreffer",
+        agisLayers: []
+      }
+    ],
+    "2026-03-01T00:00:00.000Z"
+  );
+  // Marker entfernen, damit die destruktive Migration beim Neustart laeuft.
+  seedDb.prepare("DELETE FROM schema_migrations WHERE id = 'cleanup-seed-artifacts-and-junk'").run();
+  seedDb.close();
+
+  const reopened = createDatabase(dbPath, { seedDemoApplications: false });
+  reopened.close();
+
+  const backupDir = join(directory, "backups");
+  const backups = existsSync(backupDir) ? readdirSync(backupDir).filter((name) => name.endsWith(".bak")) : [];
+  rmSync(directory, { recursive: true, force: true });
+
+  assert.ok(backups.length >= 1, "Vor der destruktiven Migration wird ein Backup angelegt");
 });
 
 test("municipality website sources can be configured and imported automatically", async (context) => {
@@ -1288,6 +1793,116 @@ test("municipality website sources can be configured and imported automatically"
   assert.equal(detailResponse.payload.protectionStatus, "manual-review");
   assert.equal(detailResponse.payload.deadlineDate, "2026-04-20");
   assert.equal(detailResponse.payload.publicationDate, "2026-03-21");
+});
+
+test("municipality import collapses repeated leading path segments in detail links", async (context) => {
+  const sourceUrl = "http://www.doettingen.ch/gemeinde/mitteilungen/baugesuche/";
+  const detailUrl =
+    "http://www.doettingen.ch/gemeinde/mitteilungen/baugesuche/baugesuche-liste/latest/detailansicht/?tx_ttnews%5Btt_news%5D=5636";
+  const duplicateUrl =
+    "http://www.doettingen.ch/gemeinde/mitteilungen/baugesuche/gemeinde/mitteilungen/baugesuche/baugesuche-liste/latest/detailansicht/?tx_ttnews%5Btt_news%5D=5636";
+  const requestedUrls = [];
+  const syncFetchImpl = async (url) => {
+    requestedUrls.push(String(url));
+
+    if (String(url) === sourceUrl) {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Baugesuche</h1>
+                <a href="gemeinde/mitteilungen/baugesuche/baugesuche-liste/latest/detailansicht/?tx_ttnews%5Btt_news%5D=5636">
+                  Baugesuch Neubau EFH
+                </a>
+              </main>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html"
+          }
+        }
+      );
+    }
+
+    assert.equal(String(url), detailUrl);
+    return new Response(
+      `
+        <html>
+          <body>
+            <main>
+              <h1>Baugesuch</h1>
+              <p>Bauherr: Test Bauherrschaft, Döttingen</p>
+              <p>Bauprojekt: Neubau EFH mit Doppelgarage</p>
+              <p>Lage: Parz. Nr. 1615, Erlenweg 9, 5312 Döttingen</p>
+              <p>Publikation: 16.05.2026, Auflage bis 15.06.2026</p>
+            </main>
+          </body>
+        </html>
+      `,
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html"
+        }
+      }
+    );
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    autoSyncEnabled: true,
+    autoSyncRunOnStart: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Döttingen");
+  assert.ok(source);
+
+  await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: {
+      Cookie: masterCookie
+    },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl,
+      includePattern: "",
+      excludePattern: "",
+      notes: "Digitale Publikationsseite"
+    })
+  });
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(syncResponse.payload.items[0].sourceUrl, detailUrl);
+  assert.ok(requestedUrls.includes(detailUrl));
+  assert.equal(requestedUrls.includes(duplicateUrl), false);
 });
 
 test("municipality import hydrates official detail pages and ignores generic archive titles", async (context) => {
@@ -2655,6 +3270,133 @@ test("municipality import geocodes valid addresses through the official swiss se
   assert.equal(syncResponse.payload.items[0].coordinates, "2648701,1249642");
   assert.equal(syncResponse.payload.items[0].protectionStatus, "no-hit");
   assert.match(syncResponse.payload.items[0].automatedAssessment, /Adresssuchdienst/i);
+});
+
+test("municipality import refines split house-number locations before manual review", async (context) => {
+  const syncFetchImpl = async (url) => {
+    if (
+      String(url) !== "https://wettingen.example.org/baugesuche" &&
+      String(url) !== "https://wettingen.example.org/bg-2026-120"
+    ) {
+      throw new Error(`Unexpected Wettingen sync URL: ${url}`);
+    }
+
+    return new Response(
+      `
+        <html>
+          <body>
+            <main>
+              <article>
+                <a href="/bg-2026-120">Baugesuch BG-2026-120</a>
+                <p>Bauvorhaben: Umnutzung eines Erdgeschosses ohne sichtbare Aussenveränderung.</p>
+                <p>Standort: 120</p>
+                <p>Strasse: Landstrasse</p>
+                <p>Parzelle Nr. 5220</p>
+                <p>Publiziert: 15. März 2026</p>
+              </article>
+            </main>
+          </body>
+        </html>
+      `,
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html"
+        }
+      }
+    );
+  };
+  const geocodeFetchImpl = async (url) => {
+    const requestUrl = new URL(String(url));
+    assert.match(requestUrl.searchParams.get("searchText") ?? "", /Landstrasse 120, Wettingen/i);
+
+    return createJsonResponse({
+      results: [
+        {
+          attrs: {
+            origin: "address",
+            label: "Landstrasse 120, 5430 Wettingen",
+            municipality: "Wettingen",
+            x: 2660160,
+            y: 1258505
+          }
+        }
+      ]
+    });
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl,
+    geocodeEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Wettingen");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: {
+      Cookie: masterCookie
+    },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://wettingen.example.org/baugesuche",
+      includePattern: "baugesuch|landstrasse|standort|parzelle",
+      excludePattern: "newsletter|facebook|archiv",
+      notes: "Offizielle Baugesuchseite"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(syncResponse.payload.items[0].address, "Landstrasse 120");
+  assert.equal(syncResponse.payload.items[0].parcel, "5220");
+  assert.equal(syncResponse.payload.items[0].coordinates, "2660160,1258505");
+  assert.equal(syncResponse.payload.items[0].protectionStatus, "no-hit");
+  assert.equal(syncResponse.payload.items[0].ambiguousAddress, false);
+  assert.match(syncResponse.payload.items[0].automatedAssessment, /KI-Datenprüfung/i);
+
+  const detailResponse = await requestJson(
+    testServer.baseUrl,
+    `/api/applications/${encodeURIComponent(syncResponse.payload.items[0].id)}`,
+    {
+      headers: {
+        Cookie: masterCookie
+      }
+    }
+  );
+
+  assert.equal(detailResponse.status, 200);
+  assert.equal(detailResponse.payload.address, "Landstrasse 120");
+  assert.equal(detailResponse.payload.parcel, "5220");
 });
 
 test("municipality import geocodes addresses without a street suffix and skips coarse municipality hits", async (context) => {
@@ -5183,6 +5925,288 @@ test("Amtsblatt uses the build-site address, not the applicant's residence", asy
   assert.notEqual(item.municipality, "Lugano");
 });
 
+test("Amtsblatt reads Parzelle / Strasse as the build-site address", async (context) => {
+  const listingPage = `
+    <div class="publication-list__item publication-list__item--publication" data-index="0"
+      data-detailurl="/ekab/00.095.219/publikation/">
+      <article class="publication-summary">
+        <h2 class="box-publication-title"><a class="publication-summary__title" href="/ekab/00.095.219/publikation/">Baugesuchspublikation</a></h2>
+        <div class="box-publication-date">08.05.2026</div>
+        <ul class="box-defenition-list">
+          <li><div class="row"><div class="col-sm-4"><b>Stelle:</b></div><div class="col-sm-8">Gemeinde Moosleerau</div></div></li>
+          <li><div class="row"><div class="col-sm-4"><b>Rubrik:</b></div><div class="col-sm-8">Gemeinden / Bau- und Rodungsgesuche</div></div></li>
+        </ul>
+        <p class="mb-3">
+          Bauherrschaft: Test Bauherr, Seckistrasse 15, 6318 Walchwil |
+          Parzelle / Strasse: 397, Ausserdorfstrasse 90, 5054 Moosleerau |
+          Bauobjekt: Umbau Bauernhaus
+        </p>
+      </article>
+    </div>
+  `;
+
+  const syncFetchImpl = async (url) => {
+    if (String(url).includes("amtsblatt.ag.ch") && String(url).includes("page=1")) {
+      return new Response(listingPage, { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (String(url).includes("amtsblatt.ag.ch")) {
+      return new Response("<html><body>keine</body></html>", { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (String(url).includes("api3.geo.admin.ch")) {
+      const requestUrl = new URL(String(url));
+      assert.match(requestUrl.searchParams.get("searchText") ?? "", /Ausserdorfstrasse 90, Moosleerau/i);
+      assert.ok(!String(url).toLowerCase().includes("seckistrasse"), "geocoder must not use the applicant address");
+      assert.ok(!String(url).toLowerCase().includes("walchwil"), "geocoder must not use the applicant municipality");
+
+      return createJsonResponse({
+        results: [
+          {
+            attrs: {
+              origin: "address",
+              label: "Ausserdorfstrasse 90 5054 Moosleerau",
+              detail: "ausserdorfstrasse 90 5054 moosleerau 4277 moosleerau ch ag",
+              x: 1235208.375,
+              y: 2647695.25
+            }
+          }
+        ]
+      });
+    }
+
+    throw new Error(`Unexpected sync URL: ${url}`);
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl: syncFetchImpl,
+    geocodeEnabled: true,
+    syncSourceUrl: "https://amtsblatt.ag.ch/publikationen/",
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const item = syncResponse.payload.items[0];
+  assert.equal(item.municipality, "Moosleerau");
+  assert.equal(item.address, "Ausserdorfstrasse 90");
+  assert.equal(item.coordinates, "2647695.25,1235208.375");
+  assert.equal(item.protectionStatus, "no-hit");
+  assert.ok(!item.address.toLowerCase().includes("seckistrasse"));
+});
+
+test("Amtsblatt detail enrichment reads locality-prefixed parcel numbers", async (context) => {
+  const listingPage = `
+    <div class="publication-list__item publication-list__item--publication" data-index="0"
+      data-detailurl="/ekab/00.096.159/publikation/">
+      <article class="publication-summary">
+        <h2 class="box-publication-title"><a class="publication-summary__title" href="/ekab/00.096.159/publikation/">Baugesuch</a></h2>
+        <div class="box-publication-date">31.05.2026</div>
+        <ul class="box-defenition-list">
+          <li><div class="row"><div class="col-sm-4"><b>Stelle:</b></div><div class="col-sm-8">Gemeinde Böztal</div></div></li>
+          <li><div class="row"><div class="col-sm-4"><b>Rubrik:</b></div><div class="col-sm-8">Gemeinden / Bau- und Rodungsgesuche</div></div></li>
+        </ul>
+        <p class="mb-3">Bauvorhaben: Anbau Remise, Neubau Silo</p>
+      </article>
+    </div>
+  `;
+  const detailPage = `
+    <article class="publication-detail">
+      <h1>Baugesuch</h1>
+      <p>Bauherrschaft: Amsler Jolanda, Summelegg 221, 5075 Hornussen</p>
+      <p>Bauobjekt: Anbau Remise, Neubau Silo, Sanierung Fassade Wohnhaus</p>
+      <p>Ortslage: Parzelle Hornussen Nr. 689 und 690, Summelegg</p>
+    </article>
+  `;
+
+  const syncFetchImpl = async (url) => {
+    const value = String(url);
+
+    if (value.includes("amtsblatt.ag.ch") && value.includes("page=1")) {
+      return new Response(listingPage, { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value === "https://amtsblatt.ag.ch/ekab/00.096.159/publikation/") {
+      return new Response(detailPage, { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value.includes("amtsblatt.ag.ch")) {
+      return new Response("<html><body>keine</body></html>", { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value.includes("api3.geo.admin.ch")) {
+      const requestUrl = new URL(value);
+
+      if (requestUrl.searchParams.get("origins") === "parcel") {
+        assert.match(requestUrl.searchParams.get("searchText") ?? "", /Böztal 689/i);
+        return createJsonResponse({
+          results: [
+            {
+              attrs: {
+                detail: "689 boeztal ch ag",
+                x: 2646131,
+                y: 1260895.125
+              }
+            }
+          ]
+        });
+      }
+
+      return createJsonResponse({ results: [] });
+    }
+
+    throw new Error(`Unexpected sync URL: ${url}`);
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl: syncFetchImpl,
+    geocodeEnabled: true,
+    syncSourceUrl: "https://amtsblatt.ag.ch/publikationen/",
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const item = syncResponse.payload.items[0];
+  assert.equal(item.municipality, "Böztal");
+  assert.equal(item.address, "Parzelle 689");
+  assert.equal(item.parcel, "689");
+  assert.equal(item.coordinates, "2646131,1260895.125");
+  assert.equal(item.protectionStatus, "no-hit");
+});
+
+test("Amtsblatt detail enrichment ignores unrelated digits when deciding whether to fetch detail pages", async (context) => {
+  const requestedUrls = [];
+  const listingPage = `
+    <div class="publication-list__item publication-list__item--publication" data-index="0"
+      data-detailurl="/ekab/00.093.416/publikation/">
+      <article class="publication-summary">
+        <h2 class="box-publication-title"><a class="publication-summary__title" href="/ekab/00.093.416/publikation/">Baugesuch</a></h2>
+        <div class="box-publication-date">09.04.2026</div>
+        <ul class="box-defenition-list">
+          <li><div class="row"><div class="col-sm-4"><b>Stelle:</b></div><div class="col-sm-8">Gemeinde Lupfig</div></div></li>
+          <li><div class="row"><div class="col-sm-4"><b>Rubrik:</b></div><div class="col-sm-8">Gemeinden / Bau- und Rodungsgesuche</div></div></li>
+        </ul>
+        <p class="mb-3">
+          Bauherr: IBB Energie AG, Gaswerkstrasse 5, 5200 Brugg |
+          Bauobjekt: Trasseeneubau ab Unterwerk Lupfig für Erschliessung mit Mittelspannung Green Lupin 4
+        </p>
+      </article>
+    </div>
+  `;
+  const detailPage = `
+    <article class="publication-detail">
+      <h1>Baugesuch</h1>
+      <p>Bauherr: IBB Energie AG, Gaswerkstrasse 5, 5200 Brugg</p>
+      <p>Bauobjekt: Trasseeneubau ab Unterwerk Lupfig für Erschliessung mit Mittelspannung Green Lupin 4</p>
+      <p>Parzellen: 903, 358, 352, 706, 362, 356, 919</p>
+      <p>Öffentliche Auflage vom 11. April 2026 bis 11. Mai 2026 bei der Bauverwaltung Eigenamt.</p>
+    </article>
+  `;
+
+  const syncFetchImpl = async (url) => {
+    const value = String(url);
+    requestedUrls.push(value);
+
+    if (value.includes("amtsblatt.ag.ch") && value.includes("page=1")) {
+      return new Response(listingPage, { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value === "https://amtsblatt.ag.ch/ekab/00.093.416/publikation/") {
+      return new Response(detailPage, { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value.includes("amtsblatt.ag.ch")) {
+      return new Response("<html><body>keine</body></html>", { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value.includes("api3.geo.admin.ch")) {
+      const requestUrl = new URL(value);
+      assert.equal(requestUrl.searchParams.get("origins"), "parcel");
+      assert.match(requestUrl.searchParams.get("searchText") ?? "", /Lupfig 903/i);
+
+      return createJsonResponse({
+        results: [
+          {
+            attrs: {
+              detail: "903 lupfig ch ag",
+              x: 2658069.5,
+              y: 1255958.875
+            }
+          }
+        ]
+      });
+    }
+
+    throw new Error(`Unexpected sync URL: ${url}`);
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl: syncFetchImpl,
+    geocodeEnabled: true,
+    syncSourceUrl: "https://amtsblatt.ag.ch/publikationen/",
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.ok(requestedUrls.includes("https://amtsblatt.ag.ch/ekab/00.093.416/publikation/"));
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const item = syncResponse.payload.items[0];
+  assert.equal(item.municipality, "Lupfig");
+  assert.equal(item.address, "Parzelle 903");
+  assert.equal(item.parcel, "903");
+  assert.equal(item.coordinates, "2658069.5,1255958.875");
+  assert.equal(item.protectionStatus, "no-hit");
+});
+
 test("municipality import deduplicates repeated official detail links and uses metadata from municipality detail pages", async (context) => {
   const syncFetchImpl = async (url) => {
     if (String(url) === "https://fischbach.example.org/baugesuche") {
@@ -5710,6 +6734,21 @@ test("dashboard calculates due-soon cases from the current date", async (context
       agisMatch: "Kein Schutz gefunden",
       agisLayers: [],
       workflowStatus: "cleared"
+    },
+    {
+      source: "Test",
+      sourceReference: "DUE-SOON-CURRENT-04",
+      sourceUrl: "https://example.org/overdue",
+      municipality: "Aarau",
+      address: "Teststrasse 4",
+      publicationDate: dateOnlyDaysFromNow(-10),
+      deadlineDate: dateOnlyDaysFromNow(-2),
+      projectType: "Testfall",
+      description: "Überfälliger Testfall",
+      protectionStatus: "no-hit",
+      agisMatch: "Kein Schutz gefunden",
+      agisLayers: [],
+      workflowStatus: "new"
     }
   ]);
 
@@ -5817,6 +6856,54 @@ test("startup AGIS refresh replaces stale seed hits with official hits", async (
   assert.equal(bruggResponse.status, 200);
   assert.equal(bruggResponse.payload.protectionStatus, "combined-hit");
   assert.equal(bruggResponse.payload.agisMatch, "ISOS-Fläche und Gebäude im Inventar");
+});
+
+test("AGIS re-assesses manual-review items that still have valid coordinates", async () => {
+  // Regression für den kritischen Datenintegritäts-Befund: ein Fall, der nur
+  // wegen eines Datenqualitätsproblems (z. B. ungültiges Fristdatum) auf
+  // "manual-review" stand, aber gültige Koordinaten besitzt, muss bei der
+  // AGIS-Neubewertung wieder geprüft werden - sonst bleibt ein echter
+  // Schutztreffer dauerhaft verdeckt.
+  const service = createAgisAssessmentService({
+    repository: { getById: () => null, list: () => [], updateAssessment: () => null },
+    agisGeometryService: {
+      getOfficialFeatures: async () => ({ matched: { points: true } })
+    }
+  });
+
+  const assessment = await service.assessItem({
+    id: "BG-STICKY-001",
+    coordinates: "2651766,1250865",
+    protectionStatus: "manual-review",
+    ambiguousAddress: 0
+  });
+
+  assert.equal(assessment.protectionStatus, "protected-point");
+  assert.equal(assessment.agisMatch, "Treffer im Gebäudeinventar");
+});
+
+test("AGIS leaves genuinely ambiguous addresses in manual review without querying", async () => {
+  // Die legitime Hand-Prüfung (kein verwertbarer Standort) bleibt erhalten und
+  // ruft AGIS gar nicht erst auf.
+  let geometryCalled = false;
+  const service = createAgisAssessmentService({
+    repository: { getById: () => null, list: () => [], updateAssessment: () => null },
+    agisGeometryService: {
+      getOfficialFeatures: async () => {
+        geometryCalled = true;
+        return { matched: { points: true } };
+      }
+    }
+  });
+
+  const assessment = await service.assessItem({
+    id: "BG-AMBIG-001",
+    coordinates: "2651766,1250865",
+    ambiguousAddress: 1
+  });
+
+  assert.equal(assessment.protectionStatus, "manual-review");
+  assert.equal(geometryCalled, false);
 });
 
 test("application updates persist workflow and note", async (context) => {
@@ -5936,6 +7023,289 @@ test("confirmed decisions train future Baugesuch recognition", async (context) =
   assert.equal(detailResponse.payload.ambiguousAddress, false);
 });
 
+test("configured API sync auto-clears coarse geocoder locations far from AGIS protection context", async (context) => {
+  const syncFetchImpl = async () =>
+    createJsonResponse({
+      items: [
+        {
+          id: "BG-COARSE-FAR-001",
+          source: "API",
+          sourceReference: "COARSE-FAR-001",
+          sourceUrl: "https://api.example.org/coarse/far",
+          municipality: "Aarau",
+          address: "Burghaldenstrasse",
+          publicationDate: "2026-03-20",
+          deadlineDate: "2026-04-19",
+          projectType: "Umbau Wohnhaus",
+          description: "Baugesuch mit Strassenangabe ohne Hausnummer.",
+          protectionStatus: "manual-review",
+          agisMatch: "Noch nicht eindeutig zugeordnet",
+          agisLayers: [],
+          ambiguousAddress: true
+        }
+      ]
+    });
+  const geocodeFetchImpl = async (url) => {
+    const requestUrl = new URL(String(url));
+    assert.match(requestUrl.searchParams.get("searchText") ?? "", /Burghaldenstrasse, Aarau/i);
+
+    return createJsonResponse({
+      results: [
+        {
+          attrs: {
+            origin: "gg25",
+            label: "Burghaldenstrasse, 5000 Aarau",
+            municipality: "Aarau",
+            x: 2645000,
+            y: 1248000
+          }
+        }
+      ]
+    });
+  };
+  const agisFetchImpl = async () => createJsonResponse({ features: [] });
+
+  const testServer = createTestServer({
+    syncSourceUrl: "https://api.example.org/coarse/far.json",
+    syncFetchImpl,
+    geocodeFetchImpl,
+    geocodeEnabled: true,
+    agisFetchImpl,
+    agisAssessmentEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const cookie = await login(testServer.baseUrl);
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: cookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const importedItem = syncResponse.payload.items.find((item) => item.id === "BG-COARSE-FAR-001");
+  assert.ok(importedItem);
+  assert.equal(importedItem.coordinates, "2645000,1248000");
+  assert.equal(importedItem.locationPrecision, "approximate");
+  assert.equal(importedItem.protectionStatus, "no-hit");
+  assert.equal(importedItem.agisMatch, "Kein Schutztreffer");
+  assert.equal(importedItem.ambiguousAddress, false);
+  assert.match(importedItem.automatedAssessment, /Sicherheitsradius/i);
+});
+
+test("configured API sync keeps coarse geocoder locations near AGIS protection context in manual review", async (context) => {
+  const syncFetchImpl = async () =>
+    createJsonResponse({
+      items: [
+        {
+          id: "BG-COARSE-NEAR-001",
+          source: "API",
+          sourceReference: "COARSE-NEAR-001",
+          sourceUrl: "https://api.example.org/coarse/near",
+          municipality: "Aarau",
+          address: "Burghaldenstrasse",
+          publicationDate: "2026-03-20",
+          deadlineDate: "2026-04-19",
+          projectType: "Umbau Wohnhaus",
+          description: "Baugesuch mit Strassenangabe ohne Hausnummer.",
+          protectionStatus: "manual-review",
+          agisMatch: "Noch nicht eindeutig zugeordnet",
+          agisLayers: [],
+          ambiguousAddress: true
+        }
+      ]
+    });
+  const geocodeFetchImpl = async () =>
+    createJsonResponse({
+      results: [
+        {
+          attrs: {
+            origin: "gg25",
+            label: "Burghaldenstrasse, 5000 Aarau",
+            municipality: "Aarau",
+            x: 2645000,
+            y: 1248000
+          }
+        }
+      ]
+    });
+  const agisFetchImpl = async (url) => {
+    const requestUrl = new URL(String(url));
+
+    if (requestUrl.pathname.endsWith("/dp_denkmalpflege/MapServer/8/query")) {
+      const geometry = JSON.parse(requestUrl.searchParams.get("geometry"));
+      const isContextQuery = geometry.xmax - geometry.xmin > 1000;
+
+      if (isContextQuery) {
+        return createJsonResponse({
+          features: [
+            {
+              attributes: {
+                Titel: "Inventarobjekt in der Nähe",
+                Gemeinde: "Aarau",
+                Adresse: "Burghaldenstrasse 9",
+                Signatur: "INV-AARAU-COARSE"
+              },
+              geometry: {
+                x: 2645180,
+                y: 1248000
+              }
+            }
+          ]
+        });
+      }
+    }
+
+    return createJsonResponse({ features: [] });
+  };
+
+  const testServer = createTestServer({
+    syncSourceUrl: "https://api.example.org/coarse/near.json",
+    syncFetchImpl,
+    geocodeFetchImpl,
+    geocodeEnabled: true,
+    agisFetchImpl,
+    agisAssessmentEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const cookie = await login(testServer.baseUrl);
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: cookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const importedItem = syncResponse.payload.items.find((item) => item.id === "BG-COARSE-NEAR-001");
+  assert.ok(importedItem);
+  assert.equal(importedItem.coordinates, "2645000,1248000");
+  assert.equal(importedItem.locationPrecision, "approximate");
+  assert.equal(importedItem.protectionStatus, "manual-review");
+  assert.equal(importedItem.agisMatch, "Nahe Schutzobjekte bei unscharfer Lage");
+  assert.equal(importedItem.ambiguousAddress, false);
+  assert.match(importedItem.automatedAssessment, /von Hand prüfen/i);
+});
+
+test("municipality sync reuses coarse geocoder matches during refinement", async (context) => {
+  const syncFetchImpl = async () =>
+    new Response(
+      `
+        <html>
+          <body>
+            <main>
+              <article>
+                <a href="/bg-2026-088">Baugesuch Vorstadt 7</a>
+                <p>Bauobjekt: Umbau Wohnhaus</p>
+                <p>Bauplatz: Vorstadt 7</p>
+                <p>Publiziert: 21. März 2026</p>
+              </article>
+            </main>
+          </body>
+        </html>
+      `,
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html"
+        }
+      }
+    );
+  let geocodeRequestCount = 0;
+  const geocodeFetchImpl = async (url) => {
+    geocodeRequestCount += 1;
+    const requestUrl = new URL(String(url));
+    assert.match(requestUrl.searchParams.get("searchText") ?? "", /Vorstadt 7, Aarau/i);
+
+    return createJsonResponse({
+      results: [
+        {
+          attrs: {
+            origin: "gg25",
+            label: "Vorstadt 7, 5000 Aarau",
+            municipality: "Aarau",
+            x: 2645000,
+            y: 1248000
+          }
+        }
+      ]
+    });
+  };
+  const agisFetchImpl = async () => createJsonResponse({ features: [] });
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl,
+    geocodeEnabled: true,
+    agisFetchImpl,
+    agisAssessmentEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Aarau");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: {
+      Cookie: masterCookie
+    },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://aarau.example.org/baugesuche",
+      includePattern: "baugesuch|bauobjekt|bauplatz",
+      excludePattern: "newsletter|facebook|archiv",
+      notes: "Offizielle Baugesuchseite"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(geocodeRequestCount, 1);
+  assert.equal(syncResponse.payload.items[0].coordinates, "2645000,1248000");
+  assert.equal(syncResponse.payload.items[0].locationPrecision, "approximate");
+  assert.equal(syncResponse.payload.items[0].protectionStatus, "no-hit");
+});
+
 test("team comments can be stored and read for an application", async (context) => {
   const testServer = createTestServer();
 
@@ -5967,6 +7337,113 @@ test("team comments can be stored and read for an application", async (context) 
   assert.equal(listResponse.status, 200);
   assert.equal(listResponse.payload.items.length, 1);
   assert.equal(listResponse.payload.items[0].message, "Ich habe die Unterlagen geprüft und bitte um Zweitmeinung.");
+});
+
+test("sync prune keeps untouched municipality imports that carry team comments", () => {
+  // Regression für den Datenverlust-Befund: der Sync-Prune darf einen Fall, zu
+  // dem das Team bereits einen Kommentar erfasst hat, nicht entfernen - sonst
+  // wuerde der Kommentar via ON DELETE CASCADE ebenfalls verschwinden.
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-prune-"));
+  const dbPath = join(directory, "prune.sqlite");
+  const db = createDatabase(dbPath, { seedDemoApplications: false });
+  const repository = createApplicationsRepository(db);
+
+  const baseItem = (id, reference, address) => ({
+    id,
+    source: "Gemeinde-Webseite",
+    sourceReference: reference,
+    sourceUrl: `https://aarau.example.org/baugesuche/${reference}`,
+    municipality: "Aarau",
+    address,
+    coordinates: "",
+    publicationDate: "2026-03-01",
+    deadlineDate: "",
+    projectType: "Baugesuch",
+    description: "Importierter Fall",
+    protectionStatus: "manual-review",
+    agisMatch: "Noch nicht eindeutig zugeordnet",
+    agisLayers: [],
+    ambiguousAddress: 1
+  });
+
+  repository.importItems(
+    [
+      baseItem("BG-PRUNE-COMMENTED", "PRUNE-COMMENTED", "Teststrasse 1"),
+      baseItem("BG-PRUNE-PLAIN", "PRUNE-PLAIN", "Teststrasse 2")
+    ],
+    "2026-03-01T00:00:00.000Z"
+  );
+
+  const userId = db.prepare("SELECT id FROM users LIMIT 1").get().id;
+  db.prepare(
+    `INSERT INTO application_comments (id, application_id, user_id, message, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run("C-PRUNE-1", "BG-PRUNE-COMMENTED", userId, "Bereits besprochen, bitte aufbewahren.", "2026-03-02T08:00:00.000Z", "2026-03-02T08:00:00.000Z");
+
+  repository.pruneUntouchedMunicipalityImports({ source: "Gemeinde-Webseite", municipality: "Aarau" });
+
+  const commented = db.prepare("SELECT COUNT(*) AS n FROM applications WHERE id = 'BG-PRUNE-COMMENTED'").get().n;
+  const plain = db.prepare("SELECT COUNT(*) AS n FROM applications WHERE id = 'BG-PRUNE-PLAIN'").get().n;
+  const comment = db.prepare("SELECT COUNT(*) AS n FROM application_comments WHERE application_id = 'BG-PRUNE-COMMENTED'").get().n;
+
+  db.close();
+  rmSync(directory, { recursive: true, force: true });
+
+  assert.equal(commented, 1, "Fall mit Team-Kommentar darf vom Sync nicht entfernt werden");
+  assert.equal(plain, 0, "Unberührter Fall ohne Kommentar wird wie bisher entfernt");
+  assert.equal(comment, 1, "Der Kommentar bleibt erhalten");
+});
+
+test("startup cleanup keeps junk-pattern rows that carry team comments", () => {
+  // Regression: die Startup-Bereinigung loescht HTML-/URL-Muell, darf dabei aber
+  // keine Zeile entfernen, an der das Team schon gearbeitet hat (Kommentar).
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-cleanup-"));
+  const dbPath = join(directory, "cleanup.sqlite");
+  const seedDb = createDatabase(dbPath, { seedDemoApplications: false });
+  const repository = createApplicationsRepository(seedDb);
+
+  const junkItem = (id, reference) => ({
+    id,
+    source: "Gemeinde-Webseite",
+    sourceReference: reference,
+    sourceUrl: "https://aarau.example.org/baugesuche",
+    municipality: "Aarau",
+    address: "Adresse von Webseite prüfen",
+    coordinates: "",
+    publicationDate: "2026-03-01",
+    deadlineDate: "",
+    projectType: "Baugesuch",
+    description: "HTML-Müll ohne verwertbaren Standort",
+    protectionStatus: "manual-review",
+    agisMatch: "Noch nicht eindeutig zugeordnet",
+    agisLayers: [],
+    ambiguousAddress: 1
+  });
+
+  repository.importItems(
+    [junkItem("BG-JUNK-COMMENTED", "JUNK-COMMENTED"), junkItem("BG-JUNK-PLAIN", "JUNK-PLAIN")],
+    "2026-03-01T00:00:00.000Z"
+  );
+
+  const userId = seedDb.prepare("SELECT id FROM users LIMIT 1").get().id;
+  seedDb.prepare(
+    `INSERT INTO application_comments (id, application_id, user_id, message, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run("C-JUNK-1", "BG-JUNK-COMMENTED", userId, "Trotz Mülladresse hier bereits geprüft.", "2026-03-02T08:00:00.000Z", "2026-03-02T08:00:00.000Z");
+  // Die Bereinigung ist eine einmalige Migration; Marker entfernen, damit sie
+  // beim erneuten Öffnen (wie bei einer Bestands-DB) noch einmal läuft.
+  seedDb.prepare("DELETE FROM schema_migrations WHERE id = 'cleanup-seed-artifacts-and-junk'").run();
+  seedDb.close();
+
+  // Erneutes Öffnen führt die Startup-Bereinigung aus.
+  const reopened = createDatabase(dbPath, { seedDemoApplications: false });
+  const commented = reopened.prepare("SELECT COUNT(*) AS n FROM applications WHERE id = 'BG-JUNK-COMMENTED'").get().n;
+  const plain = reopened.prepare("SELECT COUNT(*) AS n FROM applications WHERE id = 'BG-JUNK-PLAIN'").get().n;
+  reopened.close();
+  rmSync(directory, { recursive: true, force: true });
+
+  assert.equal(commented, 1, "Junk-Zeile mit Team-Kommentar bleibt beim Startup-Cleanup erhalten");
+  assert.equal(plain, 0, "Junk-Zeile ohne Team-Arbeit wird wie bisher bereinigt");
 });
 
 test("sync imports the next queued Amtsblatt record", async (context) => {

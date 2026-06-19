@@ -11,6 +11,22 @@ Rules:
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 
+## tool-aware-workflow
+
+This project includes a meta skill at `.agents/skills/tool-aware-workflow/SKILL.md` and `.claude/skills/tool-aware-workflow/SKILL.md`.
+
+Use it at the start of a new chat, and whenever the user asks about the project, tools, code, setup, debugging, UI/UX, browser testing, docs, security, scans, cleanup, or how Codex/Claude should work.
+
+Core rule: inform yourself with the smallest useful local/free tool before answering. Prefer Graphify, Serena, Context7, Playwright MCP, Chrome DevTools MCP, installed design skills, and local scanners. Do not use paid/API-key tools unless Andrin explicitly asks.
+
+Use the global `tool-router` skill for non-trivial work to choose the right local/free tools. Minimum rule: use at least one relevant local tool before answering or editing, and use a separate verification tool after risky, user-facing, or code-changing work.
+
+No API-key mode: `agent-browser` is local-only. Do not use `agent-browser chat`, Dashboard AI, Vercel Sandbox, AWS AgentCore, Browserbase, Browser Use, Browserless, Kernel, or other cloud/API-key provider features unless Andrin explicitly asks and provides credentials.
+
+## german-umlauts
+
+Use `.agents/skills/german-umlauts/SKILL.md` and `.claude/skills/german-umlauts/SKILL.md` whenever writing or polishing German text for Andrin. Write Swiss-style German: use ä/ö/ü directly when ae/oe/ue clearly means an umlaut, and always use `ss` instead of the German sharp-s character. Do not rewrite code identifiers, commands, URLs, paths, package names, env vars, exact quotes, or literal data unless explicitly asked.
+
 <!-- context7 -->
 Use Context7 MCP to fetch current documentation whenever the user asks about a library, framework, SDK, API, CLI tool, or cloud service -- even well-known ones like React, Next.js, Prisma, Express, Tailwind, Django, or Spring Boot. This includes API syntax, configuration, version migration, library-specific debugging, setup instructions, and CLI tool usage. Use even when you think you know the answer -- your training data may not reflect recent changes. Prefer this over web search for library docs.
 

@@ -30,6 +30,7 @@ function mapRow(row) {
     address: row.address,
     parcel: row.parcel,
     coordinates: row.coordinates,
+    locationPrecision: row.location_precision ?? "",
     publicationDate: row.publication_date,
     deadlineDate: row.deadline_date,
     projectType: row.project_type,
@@ -90,6 +91,7 @@ function buildListQuery(filters) {
       address,
       parcel,
       coordinates,
+      location_precision,
       publication_date,
       deadline_date,
       project_type,
@@ -137,6 +139,7 @@ function buildImportedRecord(item, syncedAt) {
     address: item.address,
     parcel: item.parcel ?? "",
     coordinates: item.coordinates ?? "",
+    locationPrecision: item.locationPrecision ?? "",
     publicationDate: item.publicationDate,
     deadlineDate: item.deadlineDate,
     projectType: item.projectType,
@@ -177,6 +180,7 @@ export function createApplicationsRepository(db) {
       address,
       parcel,
       coordinates,
+      location_precision,
       publication_date,
       deadline_date,
       project_type,
@@ -192,7 +196,7 @@ export function createApplicationsRepository(db) {
       last_sync_at,
       created_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const updateImportedStatement = db.prepare(`
     UPDATE applications
@@ -202,6 +206,7 @@ export function createApplicationsRepository(db) {
         address = ?,
         parcel = ?,
         coordinates = ?,
+        location_precision = ?,
         publication_date = ?,
         deadline_date = ?,
         project_type = ?,
@@ -222,6 +227,7 @@ export function createApplicationsRepository(db) {
       AND workflow_status = 'new'
       AND IFNULL(assignee, '') = ''
       AND IFNULL(note, '') = ''
+      AND id NOT IN (SELECT application_id FROM application_comments)
   `);
 
   return {
@@ -242,6 +248,7 @@ export function createApplicationsRepository(db) {
             address,
             parcel,
             coordinates,
+            location_precision,
             publication_date,
             deadline_date,
             project_type,
@@ -342,6 +349,7 @@ export function createApplicationsRepository(db) {
               next.address,
               next.parcel,
               next.coordinates,
+              next.locationPrecision,
               next.publicationDate,
               next.deadlineDate,
               next.projectType,
@@ -374,6 +382,7 @@ export function createApplicationsRepository(db) {
             next.address,
             next.parcel,
             next.coordinates,
+            next.locationPrecision,
             next.publicationDate,
             next.deadlineDate,
             next.projectType,
@@ -440,6 +449,7 @@ export function createApplicationsRepository(db) {
                 AND workflow_status = 'new'
                 AND IFNULL(assignee, '') = ''
                 AND IFNULL(note, '') = ''
+                AND id NOT IN (SELECT application_id FROM application_comments)
                 AND source_reference NOT IN (${placeholders})
             `)
             .run(normalizedSource, normalizedMunicipality, ...keptReferences);
@@ -503,9 +513,10 @@ export function createApplicationsRepository(db) {
           FROM applications
           WHERE workflow_status NOT IN ('cleared', 'archived')
             AND IFNULL(deadline_date, '') <> ''
+            AND julianday(deadline_date) >= julianday(?)
             AND julianday(deadline_date) - julianday(?) <= 7
         `)
-        .get(referenceDateText).count;
+        .get(referenceDateText, referenceDateText).count;
       const municipalities = db
         .prepare("SELECT name FROM municipalities ORDER BY name ASC")
         .all()
