@@ -8,7 +8,10 @@
     "start": "node server/app.js",
     "test": "node --test",
     "pretest:e2e": "node tests/e2e/clean-db.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "diagnose:manual-review": "node scripts/diagnose-manual-review.js",
+    "repair:manual-review": "node scripts/repair-manual-review.js",
+    "audit:municipality-sources": "node scripts/audit-municipality-sources.js"
   },
   "engines": {
     "node": ">=24"

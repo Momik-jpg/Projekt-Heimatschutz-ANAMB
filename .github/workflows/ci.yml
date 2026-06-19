@@ -31,6 +31,12 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run end-to-end tests
+        run: npm run test:e2e
+
       # Sicherheitsprüfung der Abhängigkeiten. Bricht den Build nur bei
       # hohen/kritischen Schwachstellen ab; reine Audit-Infos blockieren nicht.
       - name: Security audit

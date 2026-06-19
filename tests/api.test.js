@@ -529,6 +529,39 @@ test("master can lock and unlock a team member", async (context) => {
   assert.equal(unlockedLogin.status, 200);
 });
 
+test("account activation rejects missing and non-boolean values", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  const lucia = usersResponse.payload.items.find((user) => user.username === "lucia.vettori");
+  assert.ok(lucia);
+
+  for (const body of [{}, { active: "false" }]) {
+    const response = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}/active`, {
+      method: "PATCH",
+      headers: { Cookie: masterCookie },
+      body: JSON.stringify(body)
+    });
+    assert.equal(response.status, 400);
+  }
+
+  const afterRequests = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(afterRequests.payload.items.find((user) => user.id === lucia.id).active, true);
+});
+
 test("master can delete a team member", async (context) => {
   const testServer = createTestServer();
 
@@ -564,6 +597,51 @@ test("master can delete a team member", async (context) => {
     body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
   });
   assert.equal(deletedLogin.status, 401);
+});
+
+test("account deletion preserves user comments by blocking destructive deletion", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const teamCookie = await login(testServer.baseUrl);
+  const commentResponse = await requestJson(testServer.baseUrl, "/api/applications/BG-2026-002/comments", {
+    method: "POST",
+    headers: { Cookie: teamCookie },
+    body: JSON.stringify({ message: "Dieser Kommentar muss erhalten bleiben." })
+  });
+  assert.equal(commentResponse.status, 201);
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
+    headers: { Cookie: masterCookie }
+  });
+  const lucia = usersResponse.payload.items.find((user) => user.username === "lucia.vettori");
+  assert.ok(lucia);
+
+  const deleteResponse = await requestJson(testServer.baseUrl, `/api/admin/users/${lucia.id}`, {
+    method: "DELETE",
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(deleteResponse.status, 409);
+
+  const commentsResponse = await requestJson(testServer.baseUrl, "/api/applications/BG-2026-002/comments", {
+    headers: { Cookie: teamCookie }
+  });
+  assert.equal(commentsResponse.status, 200);
+  assert.equal(commentsResponse.payload.items.some((comment) => comment.message === "Dieser Kommentar muss erhalten bleiben."), true);
+
+  const loginResponse = await requestJson(testServer.baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "lucia.vettori", password: TEST_TEAM_PASSWORD })
+  });
+  assert.equal(loginResponse.status, 200);
 });
 
 test("locking and deleting accounts is guarded (own account, master, non-master)", async (context) => {
@@ -701,6 +779,57 @@ test("master can import an AGIS export JSON as a practical fallback", async (con
         notification.protectionStatus === "protected-zone"
     )
   );
+});
+
+test("manual JSON import sends impossible deadline dates to manual review", async (context) => {
+  const testServer = createTestServer({
+    seedDemoApplications: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const importResponse = await requestJson(testServer.baseUrl, "/api/admin/import-json", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    },
+    body: JSON.stringify({
+      jsonText: JSON.stringify({
+        items: [
+          {
+            id: "BG-INVALID-DATE-001",
+            source: "Test",
+            sourceReference: "INVALID-DATE-001",
+            sourceUrl: "https://example.org/invalid-date",
+            municipality: "Aarau",
+            address: "Bahnhofstrasse 2",
+            coordinates: "2650000,1250000",
+            publicationDate: "2026-05-05",
+            deadlineDate: "2026-05-04",
+            projectType: "Umbau",
+            description: "Frist liegt vor Publikation",
+            protectionStatus: "no-hit",
+            agisMatch: "Kein Schutz gefunden",
+            agisLayers: []
+          }
+        ]
+      })
+    })
+  });
+
+  assert.equal(importResponse.status, 200);
+  assert.equal(importResponse.payload.importedCount, 1);
+  assert.equal(importResponse.payload.items[0].deadlineDate, "");
+  assert.equal(importResponse.payload.items[0].protectionStatus, "manual-review");
+  assert.match(importResponse.payload.items[0].automatedAssessment, /Fristdatum liegt vor Publikationsdatum/i);
 });
 
 test("master can store an automatic JSON source url and trigger the first sync", async (context) => {
@@ -1006,7 +1135,11 @@ test("municipality source catalog exposes coverage report, ratings and shared so
       response.payload.report.ratings.D,
     196
   );
-  assert.ok(response.payload.report.totalUniqueSources >= 196);
+  assert.ok(response.payload.report.municipalitiesWithSharedPrimary > 0);
+  assert.ok(
+    response.payload.report.totalUniqueSources >=
+      response.payload.report.totalMunicipalities - response.payload.report.municipalitiesWithSharedPrimary + 1
+  );
   assert.ok(response.payload.sharedSources.length >= 1);
   assert.ok(
     response.payload.sharedSources.some(
@@ -1027,12 +1160,14 @@ test("municipality source catalog exposes coverage report, ratings and shared so
   const arniCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Arni (AG)");
   const auensteinCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Auenstein");
   const auwCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Auw");
+  const boniswilCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Boniswil");
   const bremgartenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Bremgarten");
   const dintikonCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Dintikon");
   const fislisbachCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Fislisbach");
   const herznachUekenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Herznach-Ueken");
   const niederlenzCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Niederlenz");
   const oberentfeldenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Oberentfelden");
+  const rottenschwilCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Rottenschwil");
   const unterkulmCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Unterkulm");
   const wohlenCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Wohlen");
   const zufikonCatalogItem = response.payload.catalogItems.find((item) => item.municipality === "Zufikon");
@@ -1063,7 +1198,13 @@ test("municipality source catalog exposes coverage report, ratings and shared so
     assert.equal(item.rating, "A");
   }
   assert.ok(ammerswilCatalogItem);
-  assert.equal(ammerswilCatalogItem.rating, "C");
+  assert.equal(ammerswilCatalogItem.rating, "A");
+  for (const item of [ammerswilCatalogItem, boniswilCatalogItem, rottenschwilCatalogItem]) {
+    assert.ok(item);
+    assert.equal(item.primarySourceName, "Amtsblatt Aargau");
+    assert.equal(item.primaryDirectUrl, "https://amtsblatt.ag.ch/publikationen/");
+    assert.equal(item.primaryShared, true);
+  }
   assert.ok(moerikenCatalogItem);
   assert.equal(moerikenCatalogItem.rating, "A");
   assert.equal(moerikenCatalogItem.primarySourceName, "Möriken-Wildegg: direkte Baugesuchseite");
@@ -1138,6 +1279,19 @@ test("auto-managed municipality sources are refreshed to safer official defaults
     WHERE municipality = 'Baden'
   `).run();
 
+  initialDb.prepare(`
+    UPDATE municipality_sources
+    SET source_type = 'html',
+        source_url = 'https://www.full-reuenthal.ch/_rte/information/2660222',
+        source_token = '',
+        include_pattern = 'baugesuch',
+        exclude_pattern = 'einbürger',
+        enabled = 0,
+        digital_status = 'partial',
+        notes = 'Automatisch wurde nur eine einzelne Publikation erkannt. Diese Quelle wird nicht blind als Dauer-Sync aktiviert. (Baubewilligungen)'
+    WHERE municipality = 'Full-Reuenthal'
+  `).run();
+
   initialDb.close();
 
   const migratedDb = createDatabase(dbPath);
@@ -1161,6 +1315,13 @@ test("auto-managed municipality sources are refreshed to safer official defaults
       WHERE municipality = 'Baden'
     `)
     .get();
+  const fullReuenthalSource = migratedDb
+    .prepare(`
+      SELECT municipality, source_url, enabled, digital_status, notes
+      FROM municipality_sources
+      WHERE municipality = 'Full-Reuenthal'
+    `)
+    .get();
 
   assert.equal(auwSource.source_url, "https://www.auw.ch/gemeinde/aktuelles.html/402");
   assert.equal(auwSource.enabled, 1);
@@ -1172,6 +1333,103 @@ test("auto-managed municipality sources are refreshed to safer official defaults
   assert.equal(badenSource.exclude_pattern, "menu");
   assert.equal(badenSource.enabled, 1);
   assert.equal(badenSource.notes, "Eigene Team-Konfiguration");
+
+  assert.equal(fullReuenthalSource.source_url, "https://www.full-reuenthal.ch/aktuellesinformationen");
+  assert.equal(fullReuenthalSource.enabled, 1);
+  assert.equal(fullReuenthalSource.digital_status, "digital");
+  assert.match(fullReuenthalSource.notes, /Baugesuchseite/i);
+});
+
+test("database startup normalizes legacy swapped LV95 application coordinates", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-aargau-db-"));
+  const dbPath = join(directory, "test.sqlite");
+  const initialDb = createDatabase(dbPath);
+  const repository = createApplicationsRepository(initialDb);
+
+  repository.importItems(
+    [
+      {
+        source: "Test",
+        sourceReference: "LEGACY-COORDS-001",
+        sourceUrl: "https://example.org/legacy",
+        municipality: "Aarau",
+        address: "Bahnhofstrasse 1",
+        parcel: "",
+        coordinates: "1250000,2650000",
+        publicationDate: "2026-03-01",
+        deadlineDate: "2026-03-30",
+        projectType: "Umbau",
+        description: "Legacy-Koordinaten in alter Reihenfolge",
+        protectionStatus: "no-hit",
+        agisMatch: "Kein Schutztreffer",
+        agisLayers: [],
+        automatedAssessment: "Test"
+      }
+    ],
+    "2026-03-01T00:00:00.000Z"
+  );
+  initialDb.close();
+
+  const migratedDb = createDatabase(dbPath);
+
+  context.after(() => {
+    migratedDb.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  const row = migratedDb
+    .prepare("SELECT coordinates FROM applications WHERE source_reference = 'LEGACY-COORDS-001'")
+    .get();
+
+  assert.equal(row.coordinates, "2650000,1250000");
+});
+
+test("database startup clears deadlines before publication dates", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "heimatschutz-aargau-db-"));
+  const dbPath = join(directory, "test.sqlite");
+  const initialDb = createDatabase(dbPath);
+  const repository = createApplicationsRepository(initialDb);
+
+  repository.importItems(
+    [
+      {
+        source: "Test",
+        sourceReference: "LEGACY-DATE-001",
+        sourceUrl: "https://example.org/legacy-date",
+        municipality: "Aarau",
+        address: "Bahnhofstrasse 2",
+        parcel: "",
+        coordinates: "2650000,1250000",
+        publicationDate: "2026-05-05",
+        deadlineDate: "2026-05-04",
+        projectType: "Umbau",
+        description: "Legacy-Frist liegt vor Publikation",
+        protectionStatus: "no-hit",
+        agisMatch: "Kein Schutztreffer",
+        agisLayers: [],
+        automatedAssessment: "Test"
+      }
+    ],
+    "2026-05-05T00:00:00.000Z"
+  );
+  initialDb.close();
+
+  const migratedDb = createDatabase(dbPath);
+
+  context.after(() => {
+    migratedDb.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  const row = migratedDb
+    .prepare(
+      "SELECT deadline_date, protection_status, automated_assessment FROM applications WHERE source_reference = 'LEGACY-DATE-001'"
+    )
+    .get();
+
+  assert.equal(row.deadline_date, "");
+  assert.equal(row.protection_status, "manual-review");
+  assert.match(row.automated_assessment, /Fristdatum liegt vor Publikationsdatum/i);
 });
 
 test("municipality website sources can be configured and imported automatically", async (context) => {
@@ -1433,6 +1691,116 @@ test("municipality website sources can be configured and imported automatically"
   assert.equal(detailResponse.payload.protectionStatus, "manual-review");
   assert.equal(detailResponse.payload.deadlineDate, "2026-04-20");
   assert.equal(detailResponse.payload.publicationDate, "2026-03-21");
+});
+
+test("municipality import collapses repeated leading path segments in detail links", async (context) => {
+  const sourceUrl = "http://www.doettingen.ch/gemeinde/mitteilungen/baugesuche/";
+  const detailUrl =
+    "http://www.doettingen.ch/gemeinde/mitteilungen/baugesuche/baugesuche-liste/latest/detailansicht/?tx_ttnews%5Btt_news%5D=5636";
+  const duplicateUrl =
+    "http://www.doettingen.ch/gemeinde/mitteilungen/baugesuche/gemeinde/mitteilungen/baugesuche/baugesuche-liste/latest/detailansicht/?tx_ttnews%5Btt_news%5D=5636";
+  const requestedUrls = [];
+  const syncFetchImpl = async (url) => {
+    requestedUrls.push(String(url));
+
+    if (String(url) === sourceUrl) {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Baugesuche</h1>
+                <a href="gemeinde/mitteilungen/baugesuche/baugesuche-liste/latest/detailansicht/?tx_ttnews%5Btt_news%5D=5636">
+                  Baugesuch Neubau EFH
+                </a>
+              </main>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html"
+          }
+        }
+      );
+    }
+
+    assert.equal(String(url), detailUrl);
+    return new Response(
+      `
+        <html>
+          <body>
+            <main>
+              <h1>Baugesuch</h1>
+              <p>Bauherr: Test Bauherrschaft, Döttingen</p>
+              <p>Bauprojekt: Neubau EFH mit Doppelgarage</p>
+              <p>Lage: Parz. Nr. 1615, Erlenweg 9, 5312 Döttingen</p>
+              <p>Publikation: 16.05.2026, Auflage bis 15.06.2026</p>
+            </main>
+          </body>
+        </html>
+      `,
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html"
+        }
+      }
+    );
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    autoSyncEnabled: true,
+    autoSyncRunOnStart: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Döttingen");
+  assert.ok(source);
+
+  await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: {
+      Cookie: masterCookie
+    },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl,
+      includePattern: "",
+      excludePattern: "",
+      notes: "Digitale Publikationsseite"
+    })
+  });
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(syncResponse.payload.items[0].sourceUrl, detailUrl);
+  assert.ok(requestedUrls.includes(detailUrl));
+  assert.equal(requestedUrls.includes(duplicateUrl), false);
 });
 
 test("municipality import hydrates official detail pages and ignores generic archive titles", async (context) => {
@@ -5455,6 +5823,288 @@ test("Amtsblatt uses the build-site address, not the applicant's residence", asy
   assert.notEqual(item.municipality, "Lugano");
 });
 
+test("Amtsblatt reads Parzelle / Strasse as the build-site address", async (context) => {
+  const listingPage = `
+    <div class="publication-list__item publication-list__item--publication" data-index="0"
+      data-detailurl="/ekab/00.095.219/publikation/">
+      <article class="publication-summary">
+        <h2 class="box-publication-title"><a class="publication-summary__title" href="/ekab/00.095.219/publikation/">Baugesuchspublikation</a></h2>
+        <div class="box-publication-date">08.05.2026</div>
+        <ul class="box-defenition-list">
+          <li><div class="row"><div class="col-sm-4"><b>Stelle:</b></div><div class="col-sm-8">Gemeinde Moosleerau</div></div></li>
+          <li><div class="row"><div class="col-sm-4"><b>Rubrik:</b></div><div class="col-sm-8">Gemeinden / Bau- und Rodungsgesuche</div></div></li>
+        </ul>
+        <p class="mb-3">
+          Bauherrschaft: Test Bauherr, Seckistrasse 15, 6318 Walchwil |
+          Parzelle / Strasse: 397, Ausserdorfstrasse 90, 5054 Moosleerau |
+          Bauobjekt: Umbau Bauernhaus
+        </p>
+      </article>
+    </div>
+  `;
+
+  const syncFetchImpl = async (url) => {
+    if (String(url).includes("amtsblatt.ag.ch") && String(url).includes("page=1")) {
+      return new Response(listingPage, { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (String(url).includes("amtsblatt.ag.ch")) {
+      return new Response("<html><body>keine</body></html>", { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (String(url).includes("api3.geo.admin.ch")) {
+      const requestUrl = new URL(String(url));
+      assert.match(requestUrl.searchParams.get("searchText") ?? "", /Ausserdorfstrasse 90, Moosleerau/i);
+      assert.ok(!String(url).toLowerCase().includes("seckistrasse"), "geocoder must not use the applicant address");
+      assert.ok(!String(url).toLowerCase().includes("walchwil"), "geocoder must not use the applicant municipality");
+
+      return createJsonResponse({
+        results: [
+          {
+            attrs: {
+              origin: "address",
+              label: "Ausserdorfstrasse 90 5054 Moosleerau",
+              detail: "ausserdorfstrasse 90 5054 moosleerau 4277 moosleerau ch ag",
+              x: 1235208.375,
+              y: 2647695.25
+            }
+          }
+        ]
+      });
+    }
+
+    throw new Error(`Unexpected sync URL: ${url}`);
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl: syncFetchImpl,
+    geocodeEnabled: true,
+    syncSourceUrl: "https://amtsblatt.ag.ch/publikationen/",
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const item = syncResponse.payload.items[0];
+  assert.equal(item.municipality, "Moosleerau");
+  assert.equal(item.address, "Ausserdorfstrasse 90");
+  assert.equal(item.coordinates, "2647695.25,1235208.375");
+  assert.equal(item.protectionStatus, "no-hit");
+  assert.ok(!item.address.toLowerCase().includes("seckistrasse"));
+});
+
+test("Amtsblatt detail enrichment reads locality-prefixed parcel numbers", async (context) => {
+  const listingPage = `
+    <div class="publication-list__item publication-list__item--publication" data-index="0"
+      data-detailurl="/ekab/00.096.159/publikation/">
+      <article class="publication-summary">
+        <h2 class="box-publication-title"><a class="publication-summary__title" href="/ekab/00.096.159/publikation/">Baugesuch</a></h2>
+        <div class="box-publication-date">31.05.2026</div>
+        <ul class="box-defenition-list">
+          <li><div class="row"><div class="col-sm-4"><b>Stelle:</b></div><div class="col-sm-8">Gemeinde Böztal</div></div></li>
+          <li><div class="row"><div class="col-sm-4"><b>Rubrik:</b></div><div class="col-sm-8">Gemeinden / Bau- und Rodungsgesuche</div></div></li>
+        </ul>
+        <p class="mb-3">Bauvorhaben: Anbau Remise, Neubau Silo</p>
+      </article>
+    </div>
+  `;
+  const detailPage = `
+    <article class="publication-detail">
+      <h1>Baugesuch</h1>
+      <p>Bauherrschaft: Amsler Jolanda, Summelegg 221, 5075 Hornussen</p>
+      <p>Bauobjekt: Anbau Remise, Neubau Silo, Sanierung Fassade Wohnhaus</p>
+      <p>Ortslage: Parzelle Hornussen Nr. 689 und 690, Summelegg</p>
+    </article>
+  `;
+
+  const syncFetchImpl = async (url) => {
+    const value = String(url);
+
+    if (value.includes("amtsblatt.ag.ch") && value.includes("page=1")) {
+      return new Response(listingPage, { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value === "https://amtsblatt.ag.ch/ekab/00.096.159/publikation/") {
+      return new Response(detailPage, { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value.includes("amtsblatt.ag.ch")) {
+      return new Response("<html><body>keine</body></html>", { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value.includes("api3.geo.admin.ch")) {
+      const requestUrl = new URL(value);
+
+      if (requestUrl.searchParams.get("origins") === "parcel") {
+        assert.match(requestUrl.searchParams.get("searchText") ?? "", /Böztal 689/i);
+        return createJsonResponse({
+          results: [
+            {
+              attrs: {
+                detail: "689 boeztal ch ag",
+                x: 2646131,
+                y: 1260895.125
+              }
+            }
+          ]
+        });
+      }
+
+      return createJsonResponse({ results: [] });
+    }
+
+    throw new Error(`Unexpected sync URL: ${url}`);
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl: syncFetchImpl,
+    geocodeEnabled: true,
+    syncSourceUrl: "https://amtsblatt.ag.ch/publikationen/",
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const item = syncResponse.payload.items[0];
+  assert.equal(item.municipality, "Böztal");
+  assert.equal(item.address, "Parzelle 689");
+  assert.equal(item.parcel, "689");
+  assert.equal(item.coordinates, "2646131,1260895.125");
+  assert.equal(item.protectionStatus, "no-hit");
+});
+
+test("Amtsblatt detail enrichment ignores unrelated digits when deciding whether to fetch detail pages", async (context) => {
+  const requestedUrls = [];
+  const listingPage = `
+    <div class="publication-list__item publication-list__item--publication" data-index="0"
+      data-detailurl="/ekab/00.093.416/publikation/">
+      <article class="publication-summary">
+        <h2 class="box-publication-title"><a class="publication-summary__title" href="/ekab/00.093.416/publikation/">Baugesuch</a></h2>
+        <div class="box-publication-date">09.04.2026</div>
+        <ul class="box-defenition-list">
+          <li><div class="row"><div class="col-sm-4"><b>Stelle:</b></div><div class="col-sm-8">Gemeinde Lupfig</div></div></li>
+          <li><div class="row"><div class="col-sm-4"><b>Rubrik:</b></div><div class="col-sm-8">Gemeinden / Bau- und Rodungsgesuche</div></div></li>
+        </ul>
+        <p class="mb-3">
+          Bauherr: IBB Energie AG, Gaswerkstrasse 5, 5200 Brugg |
+          Bauobjekt: Trasseeneubau ab Unterwerk Lupfig für Erschliessung mit Mittelspannung Green Lupin 4
+        </p>
+      </article>
+    </div>
+  `;
+  const detailPage = `
+    <article class="publication-detail">
+      <h1>Baugesuch</h1>
+      <p>Bauherr: IBB Energie AG, Gaswerkstrasse 5, 5200 Brugg</p>
+      <p>Bauobjekt: Trasseeneubau ab Unterwerk Lupfig für Erschliessung mit Mittelspannung Green Lupin 4</p>
+      <p>Parzellen: 903, 358, 352, 706, 362, 356, 919</p>
+      <p>Öffentliche Auflage vom 11. April 2026 bis 11. Mai 2026 bei der Bauverwaltung Eigenamt.</p>
+    </article>
+  `;
+
+  const syncFetchImpl = async (url) => {
+    const value = String(url);
+    requestedUrls.push(value);
+
+    if (value.includes("amtsblatt.ag.ch") && value.includes("page=1")) {
+      return new Response(listingPage, { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value === "https://amtsblatt.ag.ch/ekab/00.093.416/publikation/") {
+      return new Response(detailPage, { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value.includes("amtsblatt.ag.ch")) {
+      return new Response("<html><body>keine</body></html>", { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+
+    if (value.includes("api3.geo.admin.ch")) {
+      const requestUrl = new URL(value);
+      assert.equal(requestUrl.searchParams.get("origins"), "parcel");
+      assert.match(requestUrl.searchParams.get("searchText") ?? "", /Lupfig 903/i);
+
+      return createJsonResponse({
+        results: [
+          {
+            attrs: {
+              detail: "903 lupfig ch ag",
+              x: 2658069.5,
+              y: 1255958.875
+            }
+          }
+        ]
+      });
+    }
+
+    throw new Error(`Unexpected sync URL: ${url}`);
+  };
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl: syncFetchImpl,
+    geocodeEnabled: true,
+    syncSourceUrl: "https://amtsblatt.ag.ch/publikationen/",
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.ok(requestedUrls.includes("https://amtsblatt.ag.ch/ekab/00.093.416/publikation/"));
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const item = syncResponse.payload.items[0];
+  assert.equal(item.municipality, "Lupfig");
+  assert.equal(item.address, "Parzelle 903");
+  assert.equal(item.parcel, "903");
+  assert.equal(item.coordinates, "2658069.5,1255958.875");
+  assert.equal(item.protectionStatus, "no-hit");
+});
+
 test("municipality import deduplicates repeated official detail links and uses metadata from municipality detail pages", async (context) => {
   const syncFetchImpl = async (url) => {
     if (String(url) === "https://fischbach.example.org/baugesuche") {
@@ -5982,6 +6632,21 @@ test("dashboard calculates due-soon cases from the current date", async (context
       agisMatch: "Kein Schutz gefunden",
       agisLayers: [],
       workflowStatus: "cleared"
+    },
+    {
+      source: "Test",
+      sourceReference: "DUE-SOON-CURRENT-04",
+      sourceUrl: "https://example.org/overdue",
+      municipality: "Aarau",
+      address: "Teststrasse 4",
+      publicationDate: dateOnlyDaysFromNow(-10),
+      deadlineDate: dateOnlyDaysFromNow(-2),
+      projectType: "Testfall",
+      description: "Überfälliger Testfall",
+      protectionStatus: "no-hit",
+      agisMatch: "Kein Schutz gefunden",
+      agisLayers: [],
+      workflowStatus: "new"
     }
   ]);
 
@@ -6206,6 +6871,289 @@ test("confirmed decisions train future Baugesuch recognition", async (context) =
   assert.equal(detailResponse.status, 200);
   assert.equal(detailResponse.payload.protectionStatus, "no-hit");
   assert.equal(detailResponse.payload.ambiguousAddress, false);
+});
+
+test("configured API sync auto-clears coarse geocoder locations far from AGIS protection context", async (context) => {
+  const syncFetchImpl = async () =>
+    createJsonResponse({
+      items: [
+        {
+          id: "BG-COARSE-FAR-001",
+          source: "API",
+          sourceReference: "COARSE-FAR-001",
+          sourceUrl: "https://api.example.org/coarse/far",
+          municipality: "Aarau",
+          address: "Burghaldenstrasse",
+          publicationDate: "2026-03-20",
+          deadlineDate: "2026-04-19",
+          projectType: "Umbau Wohnhaus",
+          description: "Baugesuch mit Strassenangabe ohne Hausnummer.",
+          protectionStatus: "manual-review",
+          agisMatch: "Noch nicht eindeutig zugeordnet",
+          agisLayers: [],
+          ambiguousAddress: true
+        }
+      ]
+    });
+  const geocodeFetchImpl = async (url) => {
+    const requestUrl = new URL(String(url));
+    assert.match(requestUrl.searchParams.get("searchText") ?? "", /Burghaldenstrasse, Aarau/i);
+
+    return createJsonResponse({
+      results: [
+        {
+          attrs: {
+            origin: "gg25",
+            label: "Burghaldenstrasse, 5000 Aarau",
+            municipality: "Aarau",
+            x: 2645000,
+            y: 1248000
+          }
+        }
+      ]
+    });
+  };
+  const agisFetchImpl = async () => createJsonResponse({ features: [] });
+
+  const testServer = createTestServer({
+    syncSourceUrl: "https://api.example.org/coarse/far.json",
+    syncFetchImpl,
+    geocodeFetchImpl,
+    geocodeEnabled: true,
+    agisFetchImpl,
+    agisAssessmentEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const cookie = await login(testServer.baseUrl);
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: cookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const importedItem = syncResponse.payload.items.find((item) => item.id === "BG-COARSE-FAR-001");
+  assert.ok(importedItem);
+  assert.equal(importedItem.coordinates, "2645000,1248000");
+  assert.equal(importedItem.locationPrecision, "approximate");
+  assert.equal(importedItem.protectionStatus, "no-hit");
+  assert.equal(importedItem.agisMatch, "Kein Schutztreffer");
+  assert.equal(importedItem.ambiguousAddress, false);
+  assert.match(importedItem.automatedAssessment, /Sicherheitsradius/i);
+});
+
+test("configured API sync keeps coarse geocoder locations near AGIS protection context in manual review", async (context) => {
+  const syncFetchImpl = async () =>
+    createJsonResponse({
+      items: [
+        {
+          id: "BG-COARSE-NEAR-001",
+          source: "API",
+          sourceReference: "COARSE-NEAR-001",
+          sourceUrl: "https://api.example.org/coarse/near",
+          municipality: "Aarau",
+          address: "Burghaldenstrasse",
+          publicationDate: "2026-03-20",
+          deadlineDate: "2026-04-19",
+          projectType: "Umbau Wohnhaus",
+          description: "Baugesuch mit Strassenangabe ohne Hausnummer.",
+          protectionStatus: "manual-review",
+          agisMatch: "Noch nicht eindeutig zugeordnet",
+          agisLayers: [],
+          ambiguousAddress: true
+        }
+      ]
+    });
+  const geocodeFetchImpl = async () =>
+    createJsonResponse({
+      results: [
+        {
+          attrs: {
+            origin: "gg25",
+            label: "Burghaldenstrasse, 5000 Aarau",
+            municipality: "Aarau",
+            x: 2645000,
+            y: 1248000
+          }
+        }
+      ]
+    });
+  const agisFetchImpl = async (url) => {
+    const requestUrl = new URL(String(url));
+
+    if (requestUrl.pathname.endsWith("/dp_denkmalpflege/MapServer/8/query")) {
+      const geometry = JSON.parse(requestUrl.searchParams.get("geometry"));
+      const isContextQuery = geometry.xmax - geometry.xmin > 1000;
+
+      if (isContextQuery) {
+        return createJsonResponse({
+          features: [
+            {
+              attributes: {
+                Titel: "Inventarobjekt in der Nähe",
+                Gemeinde: "Aarau",
+                Adresse: "Burghaldenstrasse 9",
+                Signatur: "INV-AARAU-COARSE"
+              },
+              geometry: {
+                x: 2645180,
+                y: 1248000
+              }
+            }
+          ]
+        });
+      }
+    }
+
+    return createJsonResponse({ features: [] });
+  };
+
+  const testServer = createTestServer({
+    syncSourceUrl: "https://api.example.org/coarse/near.json",
+    syncFetchImpl,
+    geocodeFetchImpl,
+    geocodeEnabled: true,
+    agisFetchImpl,
+    agisAssessmentEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const cookie = await login(testServer.baseUrl);
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: cookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  const importedItem = syncResponse.payload.items.find((item) => item.id === "BG-COARSE-NEAR-001");
+  assert.ok(importedItem);
+  assert.equal(importedItem.coordinates, "2645000,1248000");
+  assert.equal(importedItem.locationPrecision, "approximate");
+  assert.equal(importedItem.protectionStatus, "manual-review");
+  assert.equal(importedItem.agisMatch, "Nahe Schutzobjekte bei unscharfer Lage");
+  assert.equal(importedItem.ambiguousAddress, false);
+  assert.match(importedItem.automatedAssessment, /von Hand prüfen/i);
+});
+
+test("municipality sync reuses coarse geocoder matches during refinement", async (context) => {
+  const syncFetchImpl = async () =>
+    new Response(
+      `
+        <html>
+          <body>
+            <main>
+              <article>
+                <a href="/bg-2026-088">Baugesuch Vorstadt 7</a>
+                <p>Bauobjekt: Umbau Wohnhaus</p>
+                <p>Bauplatz: Vorstadt 7</p>
+                <p>Publiziert: 21. März 2026</p>
+              </article>
+            </main>
+          </body>
+        </html>
+      `,
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html"
+        }
+      }
+    );
+  let geocodeRequestCount = 0;
+  const geocodeFetchImpl = async (url) => {
+    geocodeRequestCount += 1;
+    const requestUrl = new URL(String(url));
+    assert.match(requestUrl.searchParams.get("searchText") ?? "", /Vorstadt 7, Aarau/i);
+
+    return createJsonResponse({
+      results: [
+        {
+          attrs: {
+            origin: "gg25",
+            label: "Vorstadt 7, 5000 Aarau",
+            municipality: "Aarau",
+            x: 2645000,
+            y: 1248000
+          }
+        }
+      ]
+    });
+  };
+  const agisFetchImpl = async () => createJsonResponse({ features: [] });
+
+  const testServer = createTestServer({
+    syncFetchImpl,
+    geocodeFetchImpl,
+    geocodeEnabled: true,
+    agisFetchImpl,
+    agisAssessmentEnabled: true,
+    autoSyncEnabled: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+  const source = sourcesResponse.payload.items.find((item) => item.municipality === "Aarau");
+  assert.ok(source);
+
+  const saveResponse = await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${source.id}`, {
+    method: "PATCH",
+    headers: {
+      Cookie: masterCookie
+    },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "digital",
+      enabled: true,
+      sourceUrl: "https://aarau.example.org/baugesuche",
+      includePattern: "baugesuch|bauobjekt|bauplatz",
+      excludePattern: "newsletter|facebook|archiv",
+      notes: "Offizielle Baugesuchseite"
+    })
+  });
+
+  assert.equal(saveResponse.status, 200);
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: {
+      Cookie: masterCookie
+    }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(geocodeRequestCount, 1);
+  assert.equal(syncResponse.payload.items[0].coordinates, "2645000,1248000");
+  assert.equal(syncResponse.payload.items[0].locationPrecision, "approximate");
+  assert.equal(syncResponse.payload.items[0].protectionStatus, "no-hit");
 });
 
 test("team comments can be stored and read for an application", async (context) => {

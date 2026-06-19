@@ -34,6 +34,26 @@ const seededPasswordMap = (() => {
   }
 })();
 
+/**
+ * @typedef {object} MunicipalitySourceRow
+ * @property {string} id
+ * @property {string} source_type
+ * @property {string} source_url
+ * @property {string} source_token
+ * @property {string} include_pattern
+ * @property {string} exclude_pattern
+ * @property {number} enabled
+ * @property {string} digital_status
+ * @property {string} notes
+ */
+
+/**
+ * @typedef {object} CreateDatabaseOptions
+ * @property {boolean} [seedDemoApplications]
+ * @property {string} [masterAccountPassword]
+ * @property {string} [defaultLoginPassword]
+ */
+
 const schema = `
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
@@ -47,6 +67,7 @@ const schema = `
     address TEXT NOT NULL,
     parcel TEXT NOT NULL DEFAULT '',
     coordinates TEXT NOT NULL DEFAULT '',
+    location_precision TEXT NOT NULL DEFAULT '',
     publication_date TEXT NOT NULL,
     deadline_date TEXT NOT NULL,
     project_type TEXT NOT NULL,
@@ -295,6 +316,7 @@ function insertSeedRecords(db, items, syncedAt) {
       address,
       parcel,
       coordinates,
+      location_precision,
       publication_date,
       deadline_date,
       project_type,
@@ -310,7 +332,7 @@ function insertSeedRecords(db, items, syncedAt) {
       last_sync_at,
       created_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const item of items) {
@@ -323,6 +345,7 @@ function insertSeedRecords(db, items, syncedAt) {
       item.address,
       item.parcel ?? "",
       item.coordinates ?? "",
+      item.locationPrecision ?? "",
       item.publicationDate,
       item.deadlineDate,
       item.projectType,
@@ -357,6 +380,57 @@ function ensureColumn(db, table, column, definition) {
   if (!columns.some((entry) => entry.name === column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
   }
+}
+
+function normalizeLegacyApplicationCoordinates(db) {
+  const rows = db
+    .prepare(
+      `
+        SELECT id, coordinates
+        FROM applications
+        WHERE IFNULL(coordinates, '') <> ''
+      `
+    )
+    .all();
+  const update = db.prepare("UPDATE applications SET coordinates = ? WHERE id = ?");
+  const looksLikeLv95East = (value) => value >= 2400000 && value <= 2900000;
+  const looksLikeLv95North = (value) => value >= 1000000 && value <= 1400000;
+
+  for (const row of rows) {
+    const [firstValue, secondValue] =
+      String(row.coordinates)
+        .match(/\d{6,7}(?:\.\d+)?/g)
+        ?.map((value) => Number(value)) ?? [];
+
+    if (
+      Number.isFinite(firstValue) &&
+      Number.isFinite(secondValue) &&
+      looksLikeLv95North(firstValue) &&
+      looksLikeLv95East(secondValue)
+    ) {
+      update.run(`${secondValue},${firstValue}`, row.id);
+    }
+  }
+}
+
+function normalizeInvalidApplicationDeadlines(db) {
+  const assessmentNote = "Fristdatum liegt vor Publikationsdatum und muss von Hand geprüft werden.";
+
+  db.prepare(
+    `
+      UPDATE applications
+      SET deadline_date = '',
+          protection_status = 'manual-review',
+          automated_assessment = CASE
+            WHEN IFNULL(automated_assessment, '') = '' THEN ?
+            WHEN automated_assessment LIKE '%' || ? || '%' THEN automated_assessment
+            ELSE automated_assessment || ' ' || ?
+          END
+      WHERE IFNULL(publication_date, '') <> ''
+        AND IFNULL(deadline_date, '') <> ''
+        AND date(deadline_date) < date(publication_date)
+    `
+  ).run(assessmentNote, assessmentNote, assessmentNote);
 }
 
 function insertSeedUsers(db, items, createdAt, { masterAccountPassword = "", defaultLoginPassword = "" } = {}) {
@@ -584,7 +658,7 @@ function upsertSeedMunicipalityQualityAssessments(db, items) {
 }
 
 function backfillSeedMunicipalitySources(db, items, updatedAt) {
-  const rows = db
+  const rows = /** @type {MunicipalitySourceRow[]} */ (db
     .prepare(`
       SELECT
         id,
@@ -598,7 +672,7 @@ function backfillSeedMunicipalitySources(db, items, updatedAt) {
         notes
       FROM municipality_sources
     `)
-    .all();
+    .all());
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   const updateStatement = db.prepare(`
     UPDATE municipality_sources
@@ -615,39 +689,47 @@ function backfillSeedMunicipalitySources(db, items, updatedAt) {
   `);
 
   for (const item of items) {
-    const current = rowsById.get(item.id);
+    const current = /** @type {Record<string, unknown> | undefined} */ (rowsById.get(item.id));
 
     if (!current) {
       continue;
     }
 
+    const currentSourceType = String(current["source_type"] ?? "manual");
+    const currentSourceUrl = String(current["source_url"] ?? "");
+    const currentSourceToken = String(current["source_token"] ?? "");
+    const currentIncludePattern = String(current["include_pattern"] ?? "");
+    const currentExcludePattern = String(current["exclude_pattern"] ?? "");
+    const currentEnabled = Number(current["enabled"] ?? 0);
+    const currentDigitalStatus = String(current["digital_status"] ?? "unknown");
+    const currentNotes = String(current["notes"] ?? "");
     const isLegacyBlankSeed =
-      String(current.source_type ?? "manual") === "manual" &&
-      String(current.source_url ?? "").trim() === "" &&
-      String(current.source_token ?? "").trim() === "" &&
-      String(current.include_pattern ?? "").trim() === "" &&
-      String(current.exclude_pattern ?? "").trim() === "" &&
-      Number(current.enabled ?? 0) === 0 &&
-      ["", "unknown"].includes(String(current.digital_status ?? "").trim()) &&
-      ["", "Noch keine Gemeindequelle hinterlegt."].includes(String(current.notes ?? "").trim());
+      currentSourceType === "manual" &&
+      currentSourceUrl.trim() === "" &&
+      currentSourceToken.trim() === "" &&
+      currentIncludePattern.trim() === "" &&
+      currentExcludePattern.trim() === "" &&
+      currentEnabled === 0 &&
+      ["", "unknown"].includes(currentDigitalStatus.trim()) &&
+      ["", "Noch keine Gemeindequelle hinterlegt."].includes(currentNotes.trim());
 
     const isAutoManagedSeed =
-      String(current.source_token ?? "").trim() === "" &&
-      isAutoManagedMunicipalitySourceNote(current.notes);
+      currentSourceToken.trim() === "" &&
+      isAutoManagedMunicipalitySourceNote(currentNotes);
 
     if (!isLegacyBlankSeed && !isAutoManagedSeed) {
       continue;
     }
 
     const hasChanged =
-      String(current.source_type ?? "manual") !== String(item.sourceType ?? "manual") ||
-      String(current.source_url ?? "") !== String(item.sourceUrl ?? "") ||
-      String(current.source_token ?? "") !== String(item.sourceToken ?? "") ||
-      String(current.include_pattern ?? "") !== String(item.includePattern ?? "") ||
-      String(current.exclude_pattern ?? "") !== String(item.excludePattern ?? "") ||
-      Number(current.enabled ?? 0) !== Number(item.enabled ?? 0) ||
-      String(current.digital_status ?? "unknown") !== String(item.digitalStatus ?? "unknown") ||
-      String(current.notes ?? "") !== String(item.notes ?? "");
+      currentSourceType !== String(item.sourceType ?? "manual") ||
+      currentSourceUrl !== String(item.sourceUrl ?? "") ||
+      currentSourceToken !== String(item.sourceToken ?? "") ||
+      currentIncludePattern !== String(item.includePattern ?? "") ||
+      currentExcludePattern !== String(item.excludePattern ?? "") ||
+      currentEnabled !== Number(item.enabled ?? 0) ||
+      currentDigitalStatus !== String(item.digitalStatus ?? "unknown") ||
+      currentNotes !== String(item.notes ?? "");
 
     if (!hasChanged) {
       continue;
@@ -700,15 +782,32 @@ function syncConfiguredMasterPassword(db, masterAccountPassword) {
   `).run(passwordRecord.salt, passwordRecord.hash, updatedAt, masterUser.id);
 }
 
+/**
+ * @param {string} [dbPath]
+ * @param {CreateDatabaseOptions} [options]
+ */
 export function createDatabase(dbPath = defaultDbPath, options = {}) {
-  const seedDemoApplications = options.seedDemoApplications ?? defaultSeedDemoApplications;
-  const masterAccountPassword = String(options.masterAccountPassword ?? process.env.MASTER_ACCOUNT_PASSWORD ?? "").trim();
-  const defaultLoginPassword = String(options.defaultLoginPassword ?? process.env.DEFAULT_LOGIN_PASSWORD ?? "").trim();
+  const databaseOptions = /** @type {Record<string, unknown>} */ (options);
+  const seedDemoApplications = databaseOptions["seedDemoApplications"] ?? defaultSeedDemoApplications;
+  const masterAccountPassword = String(databaseOptions["masterAccountPassword"] ?? process.env.MASTER_ACCOUNT_PASSWORD ?? "").trim();
+  const defaultLoginPassword = String(databaseOptions["defaultLoginPassword"] ?? process.env.DEFAULT_LOGIN_PASSWORD ?? "").trim();
   mkdirSync(dirname(dbPath), { recursive: true });
 
   const db = new DatabaseSync(dbPath);
   db.exec(schema);
   ensureColumn(db, "users", "email", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "applications", "location_precision", "TEXT NOT NULL DEFAULT ''");
+  db.exec("BEGIN");
+
+  try {
+    normalizeLegacyApplicationCoordinates(db);
+    normalizeInvalidApplicationDeadlines(db);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
   db.exec(`
     UPDATE applications
     SET workflow_status = 'new'
@@ -817,6 +916,10 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
         OR source_url LIKE '%Formular_Baugesuch%'
         OR source_url LIKE '%formular%baugesuch%'
         OR source_url LIKE '%OnlineSchalter%Bauverwaltung%'
+        OR source_url LIKE '%regionalebauverwaltung.ch%'
+        OR source_url LIKE '%/bauen/baubewilligungen/ebau-aargau%'
+        OR source_url LIKE '%bno_%'
+        OR source_url LIKE '%bno-%'
         OR source_url LIKE '%Mitteilungsblatt%'
         OR source_url LIKE '%mitteilungsblatt%'
         OR source_url LIKE '%Infoblatt%'
@@ -898,6 +1001,8 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
         OR project_type LIKE '%Familiengartenzone%'
         OR project_type LIKE '%Vorprüfungsbericht%'
         OR project_type LIKE '%Nutzungsplanung%'
+        OR project_type LIKE '%Bau- und Nutzungsordnung%'
+        OR project_type LIKE '%BNO%'
         OR project_type LIKE '%Mitwirkung%'
         OR project_type LIKE '%Genehmigung%'
         OR project_type LIKE '%Gemeinde Oberentfelden%'
@@ -920,7 +1025,9 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
       AND IFNULL(source_url, '') = '';
   `);
 
-  const count = db.prepare("SELECT COUNT(*) AS count FROM applications").get().count;
+  /** @type {{ count?: number } | undefined} */
+  const countRow = db.prepare("SELECT COUNT(*) AS count FROM applications").get();
+  const count = Number(countRow?.count ?? 0);
 
   if (count === 0 && seedDemoApplications) {
     db.exec("BEGIN");

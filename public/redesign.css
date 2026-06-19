@@ -1111,6 +1111,8 @@ body.dark .timeline-card { background: var(--panel-muted); }
 }
 .icon-btn svg { width: 15px; height: 15px; }
 .icon-btn:hover { border-color: var(--brand-700); color: var(--brand-700); background: var(--brand-50); }
+.icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+.icon-btn:disabled:hover { border-color: var(--stone-300); color: var(--ink-600); background: #fff; }
 .row-actions { display: inline-flex; gap: 6px; }
 
 /* Import-Lauf */

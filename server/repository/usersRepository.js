@@ -325,8 +325,20 @@ export function createUsersRepository(db) {
     },
 
     deleteById(id) {
+      const comments = Number(
+        db.prepare("SELECT COUNT(*) AS count FROM application_comments WHERE user_id = ?").get(id)?.count ?? 0
+      );
+      const registrationKeys = Number(
+        db.prepare("SELECT COUNT(*) AS count FROM registration_keys WHERE created_by_user_id = ?").get(id)?.count ?? 0
+      );
+      const blockers = { comments, registrationKeys };
+
+      if (comments > 0 || registrationKeys > 0) {
+        return { deleted: false, blockers };
+      }
+
       const result = db.prepare("DELETE FROM users WHERE id = ?").run(id);
-      return result.changes > 0;
+      return { deleted: result.changes > 0, blockers };
     }
   };
 }
