@@ -212,7 +212,7 @@ const regionByMunicipality = new Map(
 );
 
 const largeProjectPattern =
-  /mehrfamilienh(?:aus|äuser)|wohnüberbauung|arealüberbauung|überbauung|industrie(?:halle|bau)|gewerbebau|geschäftshaus|schul(?:haus|anlage)|mehrzweckhalle|spital|pflegeheim|hotel|wohn- und geschäftshaus/iu;
+  /mehrfamilienh(?:aus|äuser)|\bmfh\b|wohnüberbauung|arealüberbauung|überbauung|industrie(?:halle|bau)|gewerbebau|geschäftshaus|schul(?:haus|anlage)|mehrzweckhalle|spital|pflegeheim|hotel|wohn- und geschäftshaus/iu;
 const smallProjectPattern =
   /wärmepumpe|photovoltaik|pv-anlage|solaranlage|dachfenster|fensterersatz|reklame|werbeanlage|klimaanlage|ladestation|e-ladestation|sichtschutz|pergola|gartenhaus|geräteschuppen|velounterstand|carport|schwimmbecken|pool|fassaden(?:änderung|anstrich)|dachsanierung/iu;
 
@@ -230,4 +230,3 @@ export function classifyProjectScale(application = {}) {
   if (smallProjectPattern.test(description)) return "klein";
   return "mittel";
 }
-
