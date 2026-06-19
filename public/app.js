@@ -258,6 +258,17 @@ function daysUntil(value) {
   return Math.ceil((target.getTime() - today.getTime()) / 86400000);
 }
 
+function formatDueRelative(days) {
+  if (days < 0) {
+    const overdueDays = Math.abs(days);
+    return overdueDays === 1 ? "1 Tag überfällig" : `${overdueDays} Tage überfällig`;
+  }
+
+  if (days === 0) return "heute fällig";
+  if (days === 1) return "in 1 Tag";
+  return `in ${days} Tagen`;
+}
+
 function busy(button, on, label) {
   if (!button) return;
   if (on) {
@@ -666,10 +677,9 @@ function dueMeta(item) {
   const days = daysUntil(item.deadlineDate);
   if (workflow === "cleared" || workflow === "archived") return { cls: "due-ok", txt: "abgeschlossen", days };
   if (!Number.isFinite(days)) return { cls: "due-soon", txt: "Frist prüfen", days };
-  if (days < 0) return { cls: "due-over", txt: `${Math.abs(days)} T. überfällig`, days };
-  if (days === 0) return { cls: "due-over", txt: "heute fällig", days };
-  if (days <= 5) return { cls: "due-soon", txt: `in ${days} Tagen`, days };
-  return { cls: "due-ok", txt: `in ${days} Tagen`, days };
+  if (days <= 0) return { cls: "due-over", txt: formatDueRelative(days), days };
+  if (days <= 5) return { cls: "due-soon", txt: formatDueRelative(days), days };
+  return { cls: "due-ok", txt: formatDueRelative(days), days };
 }
 
 function isOverdue(item) {
@@ -827,7 +837,8 @@ function recommendationTitle(item) {
 }
 
 function recommendationText(item) {
-  if (item.automatedAssessment) return item.automatedAssessment;
+  const assessment = currentAssessmentText(item);
+  if (assessment) return assessment;
   if (item.protectionStatus === "no-hit") {
     return "Die automatische Prüfung hat keinen Schutztreffer gefunden. Bei unvollständigen Adressdaten kurz plausibilisieren.";
   }
@@ -851,15 +862,20 @@ function isWeakDisplayAddress(value) {
 function dataQualityChecks(item) {
   const address = readableAddress(item);
   const hasCoordinates = Boolean(parseSwissCoordinates(item.coordinates));
+  const hasParcel = Boolean(normalizeText(item.parcel));
+  const addressIsWeak = isWeakDisplayAddress(address);
+  const addressIsCoveredByParcel = addressIsWeak && hasParcel && hasCoordinates;
+  const addressOk = !addressIsWeak || addressIsCoveredByParcel;
+
   return [
     {
       label: "Adresse",
-      ok: !isWeakDisplayAddress(address),
-      detail: isWeakDisplayAddress(address) ? "prüfen" : "ok"
+      ok: addressOk,
+      detail: addressOk ? (addressIsCoveredByParcel ? "über Parzelle" : "ok") : "prüfen"
     },
     {
       label: "Parzelle",
-      ok: Boolean(item.parcel),
+      ok: hasParcel,
       detail: item.parcel || "fehlt"
     },
     {
@@ -875,13 +891,32 @@ function dataQualityChecks(item) {
   ];
 }
 
+function currentAssessmentText(item, checks = dataQualityChecks(item)) {
+  let text = normalizeText(item.automatedAssessment);
+
+  if (!text) return "";
+
+  const hasLocation = checks.find((check) => check.label === "Standort")?.ok;
+  const hasDeadline = checks.find((check) => check.label === "Frist")?.ok;
+
+  if (hasLocation) {
+    text = text.replaceAll("KI-Datenprüfung: Standortangaben bleiben unvollständig - bitte von Hand prüfen.", "");
+  }
+
+  if (hasDeadline) {
+    text = text.replaceAll("KI-Datenprüfung: Frist fehlt weiterhin - bitte von Hand prüfen.", "");
+  }
+
+  return normalizeText(text);
+}
+
 function renderAiMeta(item) {
   if (!el.aiMeta) return;
 
   const checks = dataQualityChecks(item);
   const needsReview = checks.some((check) => !check.ok) || item.protectionStatus === "manual-review";
   const summary =
-    normalizeText(item.automatedAssessment) ||
+    currentAssessmentText(item, checks) ||
     (needsReview
       ? "KI-Datenprüfung: Einzelne Angaben brauchen noch eine kurze manuelle Prüfung."
       : "KI-Datenprüfung: Die wichtigsten Importdaten sind vollständig.");
@@ -1400,6 +1435,11 @@ function renderComments() {
 
 function renderDetail() {
   const item = state.items.find((entry) => entry.id === state.selectedId) ?? null;
+  // Druck-Button nur aktiv, wenn ein Fall geöffnet ist - sonst täte er stumm nichts.
+  if (el.printBtn) {
+    el.printBtn.disabled = !item;
+    el.printBtn.title = item ? "Fall drucken / als PDF" : "Zum Drucken zuerst einen Fall öffnen";
+  }
   if (!item) {
     el.detailEmpty.classList.remove("hidden");
     el.detailBody.classList.add("hidden");
@@ -1481,7 +1521,7 @@ function renderSourceStats() {
   const total = report.totalMunicipalities ?? summary.totalCount ?? 0;
   const enabled = summary.enabledCount ?? 0;
   const high = report.ratings?.A ?? summary.digitalCount ?? 0;
-  const warn = report.uncertainMunicipalities ?? 0;
+  const maintenance = Math.max(0, total - enabled);
   const missing = Math.max(0, total - (summary.configuredCount ?? 0));
   const statRow = $("#pane-sources .stat-row");
   if (!statRow) return;
@@ -1490,7 +1530,7 @@ function renderSourceStats() {
     <div class="stat"><p class="k">Gemeinden total</p><p class="v">${escapeHtml(total)}</p><p class="d mut">Kanton Aargau</p></div>
     <div class="stat"><p class="k">Quelle aktiv</p><p class="v">${escapeHtml(enabled)}<small> /${escapeHtml(total)}</small></p><div class="progress" role="progressbar" aria-label="Aktive Quellen" aria-valuemin="0" aria-valuemax="100" data-progress="${escapeHtml(pct)}"><span></span></div></div>
     <div class="stat"><p class="k">Datenqualität Ø</p><p class="v">${high ? "Hoch" : "Offen"}</p><p class="d up">${escapeHtml(high)} strukturiert</p></div>
-    <div class="stat"><p class="k">Wartung nötig</p><p class="v">${escapeHtml(warn)}</p><p class="d warn">Quelle prüfen</p></div>
+    <div class="stat"><p class="k">Wartung nötig</p><p class="v">${escapeHtml(maintenance)}</p><p class="d warn">nicht aktiv</p></div>
     <div class="stat"><p class="k">Ohne Quelle</p><p class="v">${escapeHtml(missing)}</p><p class="d mut">manuell erfassen</p></div>`;
   applyProgressBars(statRow);
   const railCount = $('[data-pane="sources"] .rc');
@@ -1570,7 +1610,7 @@ function renderSources() {
       const quality = qualityMeta(source);
       const operational = source.operational ?? {};
       const hits = hitsByMunicipality.get(source.municipality) ?? 0;
-      const status = source.enabled ? (source.uncertain ? ["warn", "Verzögert"] : ["ok", "Aktiv"]) : ["off", "Keine Quelle"];
+      const status = source.enabled ? (source.uncertain ? ["warn", "Indirekt"] : ["ok", "Aktiv"]) : ["off", "Keine Quelle"];
       const bars = [1, 2, 3].map((index) => `<span class="qbar ${index <= quality.level ? "on" : ""}"></span>`).join("");
       return `<tr>
         <td><div class="adm-name">${escapeHtml(source.municipality)}</div><div class="adm-sub">${escapeHtml(source.primarySourceOperator || "Region Aargau")}</div></td>
@@ -1595,7 +1635,10 @@ function renderImportPane() {
   const statRow = $("#pane-import .stat-row");
   const protectionHits = state.items.filter((item) => item.protectionStatus && item.protectionStatus !== "no-hit").length;
   const statusLabel = job.status === "error" ? "Fehler" : job.status === "success" ? "Erfolgreich" : job.status ? job.status : "Bereit";
-  const nextRunLabel = job.nextRunAt ? formatDateTime(job.nextRunAt) : "Noch nicht geplant";
+  const syncPaused = sync.enabled === false;
+  const nextRunLabel = job.nextRunAt ? formatDateTime(job.nextRunAt) : syncPaused ? "Automatik pausiert" : "Noch nicht geplant";
+  const intervalValue = job.nextRunAt ? (sync.intervalHours ?? 168) : "-";
+  const intervalUnit = job.nextRunAt ? "Std." : syncPaused ? "pausiert" : "offen";
   if (statRow) {
     statRow.innerHTML = `
       <div class="stat"><p class="k">Letzter Lauf</p><p class="v stat-time">${escapeHtml(formatDateTime(job.lastSuccessAt || job.lastRunAt))}</p><p class="d ${job.status === "error" ? "warn" : "up"}">${escapeHtml(statusLabel)}</p></div>
@@ -1605,7 +1648,7 @@ function renderImportPane() {
   }
   el.runList.innerHTML = `
     <div class="run-item"><span class="run-dot ${job.status === "error" ? "err" : "ok"}"></span><div class="run-main"><div class="t">${escapeHtml(sync.sourceLabel || "Gemeindequellen")}</div><div class="m">Letzter Lauf: ${escapeHtml(formatDateTime(job.lastRunAt))}</div></div><div class="run-num"><div class="n">${escapeHtml(job.lastImportedCount ?? 0)}</div><div class="u">Importe</div></div></div>
-    <div class="run-item"><span class="run-dot run-now"></span><div class="run-main"><div class="t">Nächster geplanter Lauf</div><div class="m">${escapeHtml(nextRunLabel)}</div></div><div class="run-num"><div class="n">${escapeHtml(sync.intervalHours ?? 168)}</div><div class="u">Std.</div></div></div>`;
+    <div class="run-item"><span class="run-dot run-now"></span><div class="run-main"><div class="t">Nächster geplanter Lauf</div><div class="m">${escapeHtml(nextRunLabel)}</div></div><div class="run-num"><div class="n">${escapeHtml(intervalValue)}</div><div class="u">${escapeHtml(intervalUnit)}</div></div></div>`;
 }
 
 function renderKeys() {
@@ -2190,7 +2233,7 @@ function wireEvents() {
       const id = userDeleteButton.dataset.userDelete;
       const entry = state.adminUsers.find((user) => user.id === id);
       if (
-        !(await uiConfirm("Das Konto wird endgültig gelöscht. Das kann nicht rückgängig gemacht werden.", {
+        !(await uiConfirm("Das Konto wird endgültig gelöscht. Konten mit Kommentaren oder erstellten Registrierungsschlüsseln können nicht gelöscht werden; sperren Sie solche Konten stattdessen.", {
           title: "Konto löschen?",
           eyebrow: "Zugangsverwaltung",
           facts: [

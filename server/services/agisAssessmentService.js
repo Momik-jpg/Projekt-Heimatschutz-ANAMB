@@ -34,7 +34,140 @@ function parseSwissCoordinates(coordinates) {
   };
 }
 
-function buildAssessmentFromOfficialFeatures(features) {
+const APPROXIMATE_LOCATION_REVIEW_BUFFER_METERS = 250;
+
+function isApproximateLocationPrecision(value) {
+  return ["approximate", "coarse", "rough", "unscharf", "ungenau"].includes(
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+  );
+}
+
+function pointInRing(point, ring) {
+  const [pointX, pointY] = point;
+  let inside = false;
+
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
+    const [x1, y1] = ring[index];
+    const [x2, y2] = ring[previous];
+    const intersects =
+      y1 > pointY !== y2 > pointY &&
+      pointX < ((x2 - x1) * (pointY - y1)) / ((y2 - y1) || Number.EPSILON) + x1;
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function pointInPolygonPart(point, part) {
+  const [shell, ...holes] = part ?? [];
+
+  if (!shell?.length || !pointInRing(point, shell)) {
+    return false;
+  }
+
+  return !holes.some((hole) => pointInRing(point, hole));
+}
+
+function distanceToSegment(point, start, end) {
+  const [pointX, pointY] = point;
+  const [startX, startY] = start;
+  const [endX, endY] = end;
+  const deltaX = endX - startX;
+  const deltaY = endY - startY;
+  const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+
+  if (lengthSquared === 0) {
+    return Math.hypot(pointX - startX, pointY - startY);
+  }
+
+  const ratio = Math.max(
+    0,
+    Math.min(1, ((pointX - startX) * deltaX + (pointY - startY) * deltaY) / lengthSquared)
+  );
+  const closestX = startX + ratio * deltaX;
+  const closestY = startY + ratio * deltaY;
+  return Math.hypot(pointX - closestX, pointY - closestY);
+}
+
+function distanceToRing(point, ring) {
+  if (!Array.isArray(ring) || ring.length < 2) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  let nearest = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < ring.length; index += 1) {
+    nearest = Math.min(nearest, distanceToSegment(point, ring[index], ring[(index + 1) % ring.length]));
+  }
+
+  return nearest;
+}
+
+function distanceToAreaFeature(point, feature) {
+  let nearest = Number.POSITIVE_INFINITY;
+
+  for (const part of feature?.parts ?? []) {
+    if (pointInPolygonPart(point, part)) {
+      return 0;
+    }
+
+    for (const ring of part ?? []) {
+      nearest = Math.min(nearest, distanceToRing(point, ring));
+    }
+  }
+
+  return nearest;
+}
+
+function distanceToPointFeature(point, feature) {
+  const [east, north] = feature?.coordinates ?? [];
+
+  if (!Number.isFinite(east) || !Number.isFinite(north)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.hypot(point[0] - east, point[1] - north);
+}
+
+function rememberNearestProtectionContext(current, candidate) {
+  if (!Number.isFinite(candidate.distanceMeters)) {
+    return current;
+  }
+
+  if (!current || candidate.distanceMeters < current.distanceMeters) {
+    return candidate;
+  }
+
+  return current;
+}
+
+function findNearestProtectionContext(features, coordinates) {
+  const point = [coordinates.east, coordinates.north];
+  let nearest = null;
+
+  for (const feature of features?.displayAreaFeatures ?? []) {
+    nearest = rememberNearestProtectionContext(nearest, {
+      distanceMeters: distanceToAreaFeature(point, feature),
+      agisLayers: ["ISOS-Fläche"]
+    });
+  }
+
+  for (const feature of features?.displayPointFeatures ?? []) {
+    nearest = rememberNearestProtectionContext(nearest, {
+      distanceMeters: distanceToPointFeature(point, feature),
+      agisLayers: ["Gebäude im Inventar"]
+    });
+  }
+
+  return nearest;
+}
+
+function buildAssessmentFromOfficialFeatures(features, options = {}) {
   const hasArea = Boolean(features?.matched?.area) || (features?.areaFeatures?.length ?? 0) > 0;
   const hasPoints = Boolean(features?.matched?.points) || (features?.pointFeatures?.length ?? 0) > 0;
 
@@ -62,6 +195,33 @@ function buildAssessmentFromOfficialFeatures(features) {
       agisMatch: "Treffer in ISOS-Fläche",
       agisLayers: ["ISOS-Fläche"],
       automatedAssessment: "Der Standort liegt in einer geschützten Fläche."
+    };
+  }
+
+  if (isApproximateLocationPrecision(options.locationPrecision) && options.coordinates) {
+    const nearestContext = findNearestProtectionContext(features, options.coordinates);
+
+    if (
+      nearestContext &&
+      nearestContext.distanceMeters <= APPROXIMATE_LOCATION_REVIEW_BUFFER_METERS
+    ) {
+      const roundedDistance = Math.round(nearestContext.distanceMeters);
+
+      return {
+        protectionStatus: "manual-review",
+        agisMatch: "Nahe Schutzobjekte bei unscharfer Lage",
+        agisLayers: nearestContext.agisLayers,
+        automatedAssessment:
+          `Die Koordinate stammt aus einer ungenauen amtlichen Suche. Im Sicherheitsradius von ${APPROXIMATE_LOCATION_REVIEW_BUFFER_METERS} m liegt ein Schutzobjekt (${roundedDistance} m entfernt). Bitte Standort von Hand prüfen.`
+      };
+    }
+
+    return {
+      protectionStatus: "no-hit",
+      agisMatch: "Kein Schutztreffer",
+      agisLayers: [],
+      automatedAssessment:
+        `Die Koordinate stammt aus einer ungenauen amtlichen Suche. Im Sicherheitsradius von ${APPROXIMATE_LOCATION_REVIEW_BUFFER_METERS} m wurde kein geschützter Punkt und keine geschützte Fläche gefunden.`
     };
   }
 
@@ -114,7 +274,10 @@ export function createAgisAssessmentService({ repository, agisGeometryService, l
 
       try {
         const officialFeatures = await agisGeometryService.getOfficialFeatures(coordinates);
-        return buildAssessmentFromOfficialFeatures(officialFeatures);
+        return buildAssessmentFromOfficialFeatures(officialFeatures, {
+          coordinates,
+          locationPrecision: item.locationPrecision
+        });
       } catch (error) {
         logger.warn?.(`AGIS-Neubewertung fehlgeschlagen für ${item.id}: ${error.message}`);
         return null;

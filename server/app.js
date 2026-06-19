@@ -73,7 +73,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: https:",
-  "connect-src 'self' https://www.ag.ch https://challenges.cloudflare.com",
+  "connect-src 'self' https://www.ag.ch https://unpkg.com https://challenges.cloudflare.com",
   "frame-src https://challenges.cloudflare.com"
 ].join("; ");
 const municipalitySourcePatternMaxLength = 160;
@@ -1923,7 +1923,12 @@ export function createApp(options = {}) {
       return;
     }
 
-    const active = Boolean(request.body?.active);
+    if (typeof request.body?.active !== "boolean") {
+      response.status(400).json({ error: "active muss ein boolescher Wert sein." });
+      return;
+    }
+
+    const active = request.body.active;
     usersRepository.setActive(targetId, active);
 
     if (!active) {
@@ -1965,8 +1970,22 @@ export function createApp(options = {}) {
       return;
     }
 
-    sessionsRepository.deleteByUserId(targetId);
-    usersRepository.deleteById(targetId);
+    const deletion = usersRepository.deleteById(targetId);
+
+    if (!deletion.deleted) {
+      const hasProtectedContent = deletion.blockers.comments > 0 || deletion.blockers.registrationKeys > 0;
+
+      if (hasProtectedContent) {
+        response.status(409).json({
+          error: "Dieses Konto enthält Kommentare oder erstellte Registrierungsschlüssel. Sperren Sie es stattdessen.",
+          blockers: deletion.blockers
+        });
+        return;
+      }
+
+      response.status(404).json({ error: "Benutzer nicht gefunden." });
+      return;
+    }
 
     recordAudit("admin.user.delete", request, { target: target.username ?? target.displayName });
     response.json({ deleted: true, message: `${target.displayName} wurde gelöscht.` });

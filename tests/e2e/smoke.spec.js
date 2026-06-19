@@ -70,5 +70,10 @@ test("Verwaltung: Konten-Liste bietet Sperren und Löschen", async ({ page }) =>
 
   // Team-Konten zeigen Sperr- und Lösch-Aktionen (Master-/eigenes Konto nicht).
   await expect(page.locator("#keysBody [data-user-lock]").first()).toBeVisible();
-  await expect(page.locator("#keysBody [data-user-delete]").first()).toBeVisible();
+  const deleteButton = page.locator("#keysBody [data-user-delete]").first();
+  await expect(deleteButton).toBeVisible();
+  await deleteButton.click();
+  await expect(page.locator(".modal-msg")).toContainText("Kommentare");
+  await expect(page.locator(".modal-msg")).toContainText("sperren");
+  await page.locator('[data-modal="cancel"]').click();
 });
