@@ -39,6 +39,7 @@ import {
   workflowStatuses
 } from "./repository/applicationsRepository.js";
 import { createApplicationLearningRepository } from "./repository/applicationLearningRepository.js";
+import { createApplicationReadsRepository } from "./repository/applicationReadsRepository.js";
 import { createMailService } from "./services/mailService.js";
 import { createMaintenanceService } from "./services/maintenanceService.js";
 import { buildOtpauthUri, generateTotpSecret, verifyTotp } from "./services/totp.js";
@@ -1011,6 +1012,7 @@ export function createApp(options = {}) {
   });
   const repository = createApplicationsRepository(db);
   const applicationLearningRepository = createApplicationLearningRepository(db);
+  const applicationReadsRepository = createApplicationReadsRepository(db);
   const commentsRepository = createCommentsRepository(db);
   const importNotificationsRepository = createImportNotificationsRepository(db);
   const municipalitySourcesRepository = createMunicipalitySourcesRepository(db);
@@ -2336,7 +2338,11 @@ export function createApp(options = {}) {
       source: request.query.source ?? ""
     };
 
-    const items = repository.list(filters);
+    const readApplicationIds = applicationReadsRepository.listApplicationIds(request.currentUser.id);
+    const items = repository.list(filters).map((item) => ({
+      ...item,
+      isRead: readApplicationIds.has(item.id)
+    }));
     response.json({
       items,
       total: items.length
@@ -2351,7 +2357,23 @@ export function createApp(options = {}) {
       return;
     }
 
-    response.json(item);
+    response.json({
+      ...item,
+      ...applicationReadsRepository.get(item.id, request.currentUser.id)
+    });
+  });
+
+  app.post("/api/applications/:id/read", (request, response) => {
+    const item = repository.getById(request.params.id);
+
+    if (!item) {
+      response.status(404).json({ error: "Application not found" });
+      return;
+    }
+
+    response.json(
+      applicationReadsRepository.markRead(item.id, request.currentUser.id, nowIso())
+    );
   });
 
   app.get("/api/applications/:id/comments", (request, response) => {

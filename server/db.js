@@ -123,6 +123,15 @@ const schema = `
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS application_reads (
+    application_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    read_at TEXT NOT NULL,
+    PRIMARY KEY (application_id, user_id),
+    FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS registration_keys (
     id TEXT PRIMARY KEY,
     key_code TEXT NOT NULL UNIQUE,
@@ -291,6 +300,7 @@ const schema = `
   CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
   CREATE INDEX IF NOT EXISTS idx_application_comments_application_id ON application_comments(application_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_application_reads_user_id ON application_reads(user_id, read_at);
   CREATE INDEX IF NOT EXISTS idx_applications_municipality ON applications(municipality);
   CREATE INDEX IF NOT EXISTS idx_applications_protection_status ON applications(protection_status);
   CREATE INDEX IF NOT EXISTS idx_applications_workflow_deadline ON applications(workflow_status, deadline_date);
