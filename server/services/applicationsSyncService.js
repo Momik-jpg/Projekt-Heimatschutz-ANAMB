@@ -549,9 +549,14 @@ function createNormalizedApplication(rawItem, sourceUrl, fallbacks = {}) {
     return null;
   }
 
-  const protectionStatus = invalidDeadlineDate
-    ? "manual-review"
-    : normalizeProtectionStatus(item.protectionStatus ?? item.protection_status ?? item.agisMatch ?? item.agis_match, ambiguousAddress);
+  // Ein ungültiges Fristdatum ist ein reines Datenqualitätsproblem und darf den
+  // Schutzstatus NICHT überschreiben (sonst verschwindet ein möglicher
+  // Schutztreffer aus der Bewertung). Es wird nur das Fristdatum geleert (oben)
+  // und unten als Hinweis vermerkt; AGIS bleibt für den Fall zuständig.
+  const protectionStatus = normalizeProtectionStatus(
+    item.protectionStatus ?? item.protection_status ?? item.agisMatch ?? item.agis_match,
+    ambiguousAddress
+  );
   const automatedAssessment = appendAutomatedAssessmentNote(
     item.automatedAssessment ?? item.automated_assessment ?? "",
     invalidDeadlineDate ? "Fristdatum liegt vor Publikationsdatum und muss von Hand geprüft werden." : ""
@@ -3120,7 +3125,11 @@ async function refineImportedItemData(item, options = {}) {
   const locationStillWeak =
     !refined.coordinates || (isWeakImportedAddress(refined.address) && !locationIsApproximate && !locationIsPreciseParcel);
   const missingDeadline = !refined.deadlineDate;
-  const needsManualReview = locationStillWeak || missingDeadline;
+  // Nur eine unklare Lage (kein verwertbarer Standort) macht eine Hand-Prüfung
+  // des Schutzstatus nötig - AGIS kann ohne Standort nicht bewerten. Eine
+  // fehlende Frist ist hingegen ein reines Datenqualitätsproblem und wird nur
+  // als Hinweis vermerkt, damit ein möglicher Schutztreffer nicht verdeckt wird.
+  const needsManualReview = locationStillWeak;
 
   if (locationStillWeak) {
     notes.push("KI-Datenprüfung: Standortangaben bleiben unvollständig - bitte von Hand prüfen.");

@@ -782,11 +782,12 @@ function applyRepair(db, result) {
 function normalizeInvalidDeadlines(db) {
   const assessmentNote = "Fristdatum liegt vor Publikationsdatum und muss von Hand geprüft werden.";
 
+  // Nur das ungültige Fristdatum bereinigen und vermerken. Der Schutzstatus
+  // bleibt unangetastet, damit ein möglicher Schutztreffer nicht verdeckt wird.
   return db
     .prepare(
       `UPDATE applications
        SET deadline_date = '',
-           protection_status = 'manual-review',
            automated_assessment = CASE
              WHEN IFNULL(automated_assessment, '') = '' THEN ?
              WHEN automated_assessment LIKE '%' || ? || '%' THEN automated_assessment
