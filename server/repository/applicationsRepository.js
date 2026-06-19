@@ -1,4 +1,8 @@
 import { randomBytes } from "node:crypto";
+import {
+  classifyProjectScale,
+  getApplicationRegion
+} from "../domain/applicationPresentation.js";
 import { importQueue } from "../seed/applications.js";
 
 export const protectionStatuses = [
@@ -27,6 +31,7 @@ function mapRow(row) {
     sourceReference: row.source_reference,
     sourceUrl: row.source_url,
     municipality: row.municipality,
+    region: getApplicationRegion(row.municipality),
     address: row.address,
     parcel: row.parcel,
     coordinates: row.coordinates,
@@ -35,6 +40,10 @@ function mapRow(row) {
     deadlineDate: row.deadline_date,
     projectType: row.project_type,
     description: row.description,
+    projectScale: classifyProjectScale({
+      projectType: row.project_type,
+      description: row.description
+    }),
     protectionStatus: row.protection_status,
     agisMatch: row.agis_match,
     agisLayers: JSON.parse(row.agis_layers || "[]"),
