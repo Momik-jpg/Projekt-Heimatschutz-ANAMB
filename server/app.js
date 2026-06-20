@@ -1,6 +1,7 @@
 import express from "express";
 import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createDatabase, getDefaultDbPath } from "./db.js";
 import { createAgisAssessmentService } from "./services/agisAssessmentService.js";
 import { createAgisGeometryService } from "./services/agisGeometryService.js";
@@ -43,7 +44,6 @@ import { buildOtpauthUri, generateTotpSecret, verifyTotp } from "./services/totp
 
 import {
   gzipAsync,
-  currentFile,
   currentDir,
   rootDir,
   publicDir,
@@ -1644,7 +1644,7 @@ export function createApp(options = {}) {
   };
 }
 
-const isDirectRun = process.argv[1] && resolve(process.argv[1]) === currentFile;
+const isDirectRun = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 // Kantonsweite Standardquelle: Das offizielle Amtsblatt (amtsblatt.ag.ch) listet
 // alle "Bau- und Rodungsgesuche" des ganzen Kantons zentral. Es wird beim
