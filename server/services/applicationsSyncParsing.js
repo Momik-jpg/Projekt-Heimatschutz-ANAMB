@@ -1,15 +1,32 @@
-// Barrel: bündelt die Parser-/Import-Module des Baugesuch-Imports.
-// Aufgeteilt aus dem früheren 6127-Zeilen-Monolithen; Re-Export hält den
-// Service-Import (applicationsSyncService.js) unverändert.
-export * from "./applicationsSyncAddress.js";
-export * from "./applicationsSyncAmtsblatt.js";
-export * from "./applicationsSyncCommon.js";
-export * from "./applicationsSyncDiscovery.js";
-export * from "./applicationsSyncGeocode.js";
-export * from "./applicationsSyncHtml.js";
-export * from "./applicationsSyncMunicipality.js";
-export * from "./applicationsSyncPdf.js";
-export * from "./applicationsSyncPublication.js";
-export * from "./applicationsSyncRefinement.js";
-export * from "./applicationsSyncSource.js";
-export * from "./applicationsSyncXml.js";
+// Barrel: oeffentliche API des Baugesuch-Imports. Bewusst nur die vom Service
+// tatsaechlich genutzten Symbole – kein `export *` aller Internals, damit die
+// API-Grenze klar ist und interne Helfer gekapselt bleiben.
+export {
+  defaultSyncRequestTimeoutMs,
+  defaultMunicipalitySourceConcurrency,
+  normalizeImportedPayload,
+  mapWithConcurrency,
+  looksLikeJsonSourceUrl,
+  extractPdfTextFromBuffer
+} from "./applicationsSyncCommon.js";
+
+export {
+  geocodeMunicipalityAddressWithPrecision,
+  geocodeMunicipalityParcel
+} from "./applicationsSyncGeocode.js";
+
+export { refineImportedItems } from "./applicationsSyncRefinement.js";
+
+export {
+  buildSourceLabel,
+  normalizeSourceType,
+  fetchNormalizedItemsFromSource,
+  assessImportedItems,
+  mergeSyncResults
+} from "./applicationsSyncSource.js";
+
+export {
+  buildAmtsblattResultUrl,
+  parseAmtsblattEntries,
+  buildAmtsblattItemFromEntry
+} from "./applicationsSyncAmtsblatt.js";
