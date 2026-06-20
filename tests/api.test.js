@@ -7306,6 +7306,42 @@ test("municipality sync reuses coarse geocoder matches during refinement", async
   assert.equal(syncResponse.payload.items[0].protectionStatus, "no-hit");
 });
 
+test("application read state is stored per user", async (context) => {
+  const testServer = createTestServer();
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const luciaCookie = await login(testServer.baseUrl);
+  const beforeRead = await requestJson(testServer.baseUrl, "/api/applications", {
+    headers: { Cookie: luciaCookie }
+  });
+  assert.equal(beforeRead.status, 200);
+  assert.equal(beforeRead.payload.items.find((item) => item.id === "BG-2026-002").isRead, false);
+
+  const markRead = await requestJson(testServer.baseUrl, "/api/applications/BG-2026-002/read", {
+    method: "POST",
+    headers: { Cookie: luciaCookie }
+  });
+  assert.equal(markRead.status, 200);
+  assert.equal(markRead.payload.isRead, true);
+
+  const afterRead = await requestJson(testServer.baseUrl, "/api/applications", {
+    headers: { Cookie: luciaCookie }
+  });
+  assert.equal(afterRead.payload.items.find((item) => item.id === "BG-2026-002").isRead, true);
+
+  const aleksandarCookie = await login(testServer.baseUrl, {
+    username: "aleksandar.nikolic"
+  });
+  const otherUserList = await requestJson(testServer.baseUrl, "/api/applications", {
+    headers: { Cookie: aleksandarCookie }
+  });
+  assert.equal(otherUserList.payload.items.find((item) => item.id === "BG-2026-002").isRead, false);
+});
+
 test("team comments can be stored and read for an application", async (context) => {
   const testServer = createTestServer();
 

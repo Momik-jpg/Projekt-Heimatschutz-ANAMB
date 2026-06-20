@@ -1,6 +1,11 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+// ACHTUNG: node:sqlite (DatabaseSync) ist in Node noch als *experimental* markiert
+// ("might change at any time") und erfordert Node >= 24 (siehe package.json engines).
+// Folgen: (1) Die API kann sich zwischen Node-Versionen ändern – Node-Version pinnen.
+// (2) DatabaseSync ist synchron und blockiert die Event-Loop bei jedem Query; für den
+// internen Low-Traffic-Betrieb akzeptabel, bei steigender Last auf better-sqlite3 wechseln.
 import { DatabaseSync } from "node:sqlite";
 import {
   aargauMunicipalities,
@@ -14,6 +19,10 @@ import { randomBytes } from "node:crypto";
 import { seedApplications } from "./seed/applications.js";
 import { seedUsers } from "./seed/users.js";
 import { createUserPasswordRecord } from "./repository/usersRepository.js";
+import {
+  cleanImportedAddress,
+  normalizeImportedDates
+} from "./domain/applicationImportNormalization.js";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const defaultDbPath = process.env.DATABASE_PATH || join(rootDir, "data", "heimatschutz.sqlite");
@@ -57,6 +66,7 @@ const seededPasswordMap = (() => {
 const schema = `
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
+  PRAGMA secure_delete = ON;
 
   CREATE TABLE IF NOT EXISTS applications (
     id TEXT PRIMARY KEY,
@@ -119,6 +129,15 @@ const schema = `
     message TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS application_reads (
+    application_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    read_at TEXT NOT NULL,
+    PRIMARY KEY (application_id, user_id),
     FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -291,6 +310,7 @@ const schema = `
   CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
   CREATE INDEX IF NOT EXISTS idx_application_comments_application_id ON application_comments(application_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_application_reads_user_id ON application_reads(user_id, read_at);
   CREATE INDEX IF NOT EXISTS idx_applications_municipality ON applications(municipality);
   CREATE INDEX IF NOT EXISTS idx_applications_protection_status ON applications(protection_status);
   CREATE INDEX IF NOT EXISTS idx_applications_workflow_deadline ON applications(workflow_status, deadline_date);
@@ -806,6 +826,37 @@ function applicationsCount(db) {
   return Number(db.prepare("SELECT COUNT(*) AS count FROM applications").get()?.count ?? 0);
 }
 
+function repairImportedApplicationFields(db) {
+  const rows = db.prepare(`
+    SELECT id, address, publication_date, deadline_date, project_type,
+           description, created_at
+    FROM applications
+  `).all();
+  const update = db.prepare(`
+    UPDATE applications
+    SET address = ?, publication_date = ?, deadline_date = ?, updated_at = ?
+    WHERE id = ?
+  `);
+  const repairedAt = new Date().toISOString();
+
+  for (const row of rows) {
+    const address = cleanImportedAddress(row.address) || row.address;
+    const dates = normalizeImportedDates({
+      publicationDate: row.publication_date,
+      deadlineDate: row.deadline_date,
+      text: [row.description, row.project_type, row.address].filter(Boolean).join(" "),
+      referenceDate: new Date()
+    });
+    if (
+      address !== row.address
+      || dates.publicationDate !== row.publication_date
+      || dates.deadlineDate !== row.deadline_date
+    ) {
+      update.run(address, dates.publicationDate, dates.deadlineDate, repairedAt, row.id);
+    }
+  }
+}
+
 /**
  * Legt vor einer destruktiven Migration eine Sicherungskopie der SQLite-Datei
  * an (best effort). Per MIGRATION_BACKUP=false abschaltbar; bei In-Memory-DB,
@@ -890,6 +941,11 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
     db,
     { id: "clear-invalid-deadlines", dbPath, destructive: true },
     normalizeInvalidApplicationDeadlines
+  );
+  applyMigrationOnce(
+    db,
+    { id: "repair-imported-application-fields-v1", dbPath, destructive: true },
+    repairImportedApplicationFields
   );
   applyMigrationOnce(db, { id: "cleanup-seed-artifacts-and-junk", dbPath, destructive: true }, (database) => {
     database.exec(`
