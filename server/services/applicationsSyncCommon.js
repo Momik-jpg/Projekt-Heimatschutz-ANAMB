@@ -3,6 +3,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { PDFParse } from "pdf-parse";
 import { aargauMunicipalityNames } from "../seed/municipalitySources.js";
+import { assertPublicHost } from "./safeFetch.js";
 
 // Normalisierter Suchschlüssel für Gemeindenamen: ohne Diakritika, ohne
 // Kantonszusatz "AG"/"(AG)", damit "Hausen AG" -> "Hausen" und "Arni" -> "Arni (AG)".
@@ -176,6 +177,9 @@ export const swissTextualDatePatternSource = `(?:${weekdayPatternSource},?\\s*)?
 export const swissDateLikePatternSource = `(?:${swissNumericDatePatternSource}|${swissTextualDatePatternSource})`;
 
 export const defaultSyncRequestTimeoutMs = Number(process.env.SYNC_REQUEST_TIMEOUT_MS ?? 12000);
+
+// Hartes Antwort-Grössenlimit gegen Speichererschöpfung durch boesartige Quellen.
+export const defaultMaxResponseBytes = Number(process.env.SYNC_MAX_RESPONSE_BYTES ?? 10 * 1024 * 1024);
 
 export const defaultMunicipalitySourceConcurrency = Number(process.env.MUNICIPALITY_SYNC_CONCURRENCY ?? 8);
 
@@ -655,20 +659,113 @@ export function normalizeImportedPayload(payload, sourceUrl = "", fallbacks = {}
     .filter(Boolean);
 }
 
+// Liest den Body innerhalb der laufenden Deadline und bricht bei Ueberschreitung
+// des Grössenlimits ab (S2: verhindert unbegrenzte/langsame Bodies).
+async function readBoundedBody(response, maxBytes) {
+  if (response.body && typeof response.body.getReader === "function") {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength ?? value.length ?? 0;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error(`Antwort überschreitet das Grössenlimit von ${maxBytes} Bytes.`);
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks);
+  }
+
+  if (typeof response.arrayBuffer === "function") {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > maxBytes) {
+      throw new Error(`Antwort überschreitet das Grössenlimit von ${maxBytes} Bytes.`);
+    }
+    return buffer;
+  }
+
+  if (typeof response.text === "function") {
+    const buffer = Buffer.from(await response.text(), "utf8");
+    if (buffer.length > maxBytes) {
+      throw new Error(`Antwort überschreitet das Grössenlimit von ${maxBytes} Bytes.`);
+    }
+    return buffer;
+  }
+
+  return Buffer.alloc(0);
+}
+
+// Huellt eine bereits vollstaendig (und begrenzt) gelesene Antwort, damit
+// Aufrufer weiterhin text()/json()/arrayBuffer() nutzen koennen.
+function makeBoundedResponse(response, bodyBuffer, finalUrl) {
+  return {
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+    url: finalUrl ?? response.url,
+    redirected: Boolean(response.redirected),
+    async text() {
+      return bodyBuffer.toString("utf8");
+    },
+    async json() {
+      return JSON.parse(bodyBuffer.toString("utf8"));
+    },
+    async arrayBuffer() {
+      return bodyBuffer.buffer.slice(bodyBuffer.byteOffset, bodyBuffer.byteOffset + bodyBuffer.byteLength);
+    }
+  };
+}
+
 export async function fetchWithTimeout(fetchImpl, resource, options = {}, timeoutMs = defaultSyncRequestTimeoutMs) {
   const normalizedTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : defaultSyncRequestTimeoutMs;
+  const maxBytes =
+    Number.isFinite(options.maxResponseBytes) && options.maxResponseBytes > 0
+      ? options.maxResponseBytes
+      : defaultMaxResponseBytes;
+  // SSRF nur fuer echte Netzwerk-Requests erzwingen; injizierte Mock-Fetches
+  // (Tests) verwenden fiktive Hosts und werden nicht per DNS geprueft.
+  const enforceSsrf = fetchImpl === globalThis.fetch;
+  const { maxResponseBytes: _ignored, signal: _ignoredSignal, headers: optionHeaders, ...restOptions } = options;
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), normalizedTimeout);
 
   try {
-    return await fetchImpl(resource, {
-      ...options,
+    const baseOptions = {
+      ...restOptions,
       headers: {
         ...defaultRemoteRequestHeaders,
-        ...options.headers
+        ...optionHeaders
       },
-      signal: options.signal ?? controller.signal
-    });
+      signal: controller.signal
+    };
+
+    let response;
+
+    if (enforceSsrf) {
+      const maxRedirects = 5;
+      let currentUrl = String(resource);
+      for (let hop = 0; ; hop += 1) {
+        await assertPublicHost(new URL(currentUrl).hostname);
+        response = await fetchImpl(currentUrl, { ...baseOptions, redirect: "manual" });
+
+        const location = response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
+        if (location && hop < maxRedirects) {
+          currentUrl = new URL(location, currentUrl).toString();
+          continue;
+        }
+
+        const body = await readBoundedBody(response, maxBytes);
+        return makeBoundedResponse(response, body, currentUrl);
+      }
+    }
+
+    response = await fetchImpl(resource, baseOptions);
+    const body = await readBoundedBody(response, maxBytes);
+    return makeBoundedResponse(response, body, String(resource));
   } finally {
     clearTimeout(timeoutHandle);
   }
