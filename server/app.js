@@ -41,6 +41,7 @@ import { createApplicationReadsRepository } from "./repository/applicationReadsR
 import { createMailService } from "./services/mailService.js";
 import { createMaintenanceService } from "./services/maintenanceService.js";
 import { buildOtpauthUri, generateTotpSecret, verifyTotp } from "./services/totp.js";
+import { encryptToken, decryptToken, isTokenSet } from "./services/tokenCrypto.js";
 
 import {
   gzipAsync,
@@ -372,7 +373,7 @@ export function createApp(options = {}) {
     sourceUrl: normalizedSyncSourceUrl,
     getSourceUrl: () => settingsRepository.getValue("sync_source_url", normalizedSyncSourceUrl),
     sourceToken: normalizedSyncSourceToken,
-    getSourceToken: () => settingsRepository.getValue("sync_source_token", normalizedSyncSourceToken),
+    getSourceToken: () => decryptToken(settingsRepository.getValue("sync_source_token", normalizedSyncSourceToken)),
     sourceType: normalizeEnvString(options.syncSourceType ?? process.env.SYNC_SOURCE_TYPE ?? ""),
     getSourceType: () => settingsRepository.getValue("sync_source_type", normalizeEnvString(options.syncSourceType ?? process.env.SYNC_SOURCE_TYPE ?? "")),
     sourceMunicipality: normalizeEnvString(options.syncSourceMunicipality ?? process.env.SYNC_SOURCE_MUNICIPALITY ?? ""),
@@ -1240,7 +1241,8 @@ export function createApp(options = {}) {
 
     response.json({
       sourceUrl: settingsRepository.getValue("sync_source_url", normalizedSyncSourceUrl),
-      sourceToken: settingsRepository.getValue("sync_source_token", normalizedSyncSourceToken),
+      // Token wird nie an den Client zurueckgegeben (S5), nur ob einer gesetzt ist.
+      sourceTokenSet: isTokenSet(settingsRepository.getValue("sync_source_token", normalizedSyncSourceToken)),
       sourceType: settingsRepository.getValue("sync_source_type", normalizeEnvString(options.syncSourceType ?? process.env.SYNC_SOURCE_TYPE ?? "")),
       sourceMunicipality: settingsRepository.getValue(
         "sync_source_municipality",
@@ -1273,7 +1275,7 @@ export function createApp(options = {}) {
       weeklySyncService.refreshSchedule();
       response.json({
         sourceUrl: "",
-        sourceToken: "",
+        sourceTokenSet: false,
         sourceType: "",
         sourceMunicipality: "",
         municipalitySourcesSummary: municipalitySourcesRepository.getSummary(),
@@ -1298,7 +1300,7 @@ export function createApp(options = {}) {
       currentTimestamp
     );
     const storedToken = validation.value.sourceToken
-      ? settingsRepository.setValue("sync_source_token", validation.value.sourceToken, currentTimestamp)
+      ? settingsRepository.setValue("sync_source_token", encryptToken(validation.value.sourceToken), currentTimestamp)
       : (settingsRepository.deleteByKey("sync_source_token"), null);
     const storedType = validation.value.sourceType
       ? settingsRepository.setValue("sync_source_type", validation.value.sourceType, currentTimestamp)
@@ -1310,7 +1312,7 @@ export function createApp(options = {}) {
 
     response.json({
       sourceUrl: storedSetting.value,
-      sourceToken: storedToken?.value ?? "",
+      sourceTokenSet: Boolean(storedToken),
       sourceType: storedType?.value ?? "",
       sourceMunicipality: storedMunicipality?.value ?? "",
       municipalitySourcesSummary: municipalitySourcesRepository.getSummary(),
