@@ -863,12 +863,15 @@ function repairImportedApplicationFields(db) {
  * fehlendem Pfad oder Fehlern wird kein Backup erstellt.
  */
 function backupDatabaseBeforeMigration(db, dbPath, migrationId) {
+  // status: "skipped" (bewusst kein Backup noetig), "ok" (Backup erstellt) oder
+  // "failed" (Backup wollte erstellt werden, schlug aber fehl). Nur "failed"
+  // darf eine destruktive Migration verhindern.
   if (!dbPath || dbPath === ":memory:") {
-    return null;
+    return { status: "skipped" };
   }
 
   if (String(process.env.MIGRATION_BACKUP ?? "").trim().toLowerCase() === "false") {
-    return null;
+    return { status: "skipped" };
   }
 
   try {
@@ -883,9 +886,9 @@ function backupDatabaseBeforeMigration(db, dbPath, migrationId) {
     const stamp = new Date().toISOString().replaceAll(/[:.]/g, "-");
     const target = join(directory, `${basename(dbPath)}.pre-${migrationId}.${stamp}.bak`);
     copyFileSync(dbPath, target);
-    return target;
-  } catch {
-    return null;
+    return { status: "ok", path: target };
+  } catch (error) {
+    return { status: "failed", error };
   }
 }
 
@@ -895,13 +898,23 @@ function backupDatabaseBeforeMigration(db, dbPath, migrationId) {
  * gelöscht. Vor destruktiven Migrationen wird – sofern bereits Daten vorhanden
  * sind – ein Backup angelegt. Der Lauf selbst ist in eine Transaktion gekapselt.
  */
-function applyMigrationOnce(db, { id, dbPath = "", destructive = false } = {}, run) {
+export function applyMigrationOnce(
+  db,
+  { id, dbPath = "", destructive = false, backupFn = backupDatabaseBeforeMigration } = {},
+  run
+) {
   if (!id || typeof run !== "function" || hasAppliedMigration(db, id)) {
     return false;
   }
 
   if (destructive && applicationsCount(db) > 0) {
-    backupDatabaseBeforeMigration(db, dbPath, id);
+    const backup = backupFn(db, dbPath, id);
+    if (backup && backup.status === "failed") {
+      throw new Error(
+        `Migration "${id}" abgebrochen: Backup fehlgeschlagen (${backup.error?.message ?? "unbekannt"}). ` +
+          "Keine destruktive Aenderung ausgefuehrt. Backup bewusst ueberspringbar mit MIGRATION_BACKUP=false."
+      );
+    }
   }
 
   db.exec("BEGIN");
