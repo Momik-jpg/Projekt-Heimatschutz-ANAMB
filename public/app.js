@@ -302,6 +302,8 @@ function applyThemePreference(on, persist = true) {
   const enabled = Boolean(on);
   document.body.classList.toggle("dark", enabled);
   el.themeToggle?.setAttribute("aria-pressed", String(enabled));
+  const themeLabel = el.themeToggle?.querySelector("span");
+  if (themeLabel) themeLabel.textContent = enabled ? "Hellmodus" : "Dunkelmodus";
   if (persist) localStorage.setItem("hsa-dark", enabled ? "1" : "0");
 }
 

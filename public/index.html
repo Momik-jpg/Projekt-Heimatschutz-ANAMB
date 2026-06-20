@@ -3,17 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <title>Heimatschutz Aargau - Arbeitsplatz</title>
   <link rel="icon" href="wappen.svg" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="fonts.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="redesign.css">
 </head>
 <body>
+  <a class="skip-link" href="#mainContent">Zum Inhalt springen</a>
+  <noscript>
+    <div class="noscript-banner" role="alert">
+      Diese Anwendung benötigt JavaScript. Bitte aktivieren Sie JavaScript im Browser, um den Arbeitsplatz zu nutzen.
+    </div>
+  </noscript>
   <section id="authShell" class="auth-shell hidden" aria-labelledby="loginTitle">
     <div class="auth-card">
       <div class="auth-copy">
@@ -166,7 +169,7 @@
     </header>
 
     <!-- ============ Arbeitsliste ============ -->
-    <main class="view active" id="view-work">
+    <main class="view active" id="view-work" tabindex="-1"><span id="mainContent" tabindex="-1" class="sr-only">Hauptinhalt</span>
     <div class="titleband">
       <div class="titleband-copy">
         <p class="bread">Startseite › Baugesuche › <span>Arbeitsliste</span></p>

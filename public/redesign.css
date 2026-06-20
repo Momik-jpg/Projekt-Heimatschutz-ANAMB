@@ -4,6 +4,7 @@
    ===================================================================== */
 
 :root {
+  color-scheme: light;
   --brand-50:  #e9f4fb;
   --brand-100: #cfe9f8;
   --brand-200: #a3d4ef;
@@ -315,7 +316,9 @@ tbody tr:hover td { background: var(--row-hover); }
 tbody tr.selected td { background: var(--brand-50); }
 tbody tr.selected td:first-child { box-shadow: inset 4px 0 0 var(--brand-700); }
 tbody tr:focus-visible { outline: none; }
-tbody tr:focus-visible td { background: var(--brand-50); }
+tbody tr:focus-visible td { background: var(--brand-50); box-shadow: inset 0 2px 0 var(--brand-700), inset 0 -2px 0 var(--brand-700); }
+tbody tr:focus-visible td:first-child { box-shadow: inset 3px 0 0 var(--brand-700), inset 0 2px 0 var(--brand-700), inset 0 -2px 0 var(--brand-700); }
+tbody tr:focus-visible td:last-child { box-shadow: inset -2px 0 0 var(--brand-700), inset 0 2px 0 var(--brand-700), inset 0 -2px 0 var(--brand-700); }
 
 .cell-strong { color: var(--ink-900); font-weight: 700; }
 .cell-mun { display: block; color: var(--ink-900); font-weight: 700; }
@@ -641,6 +644,7 @@ tbody tr:focus-visible td { background: var(--brand-50); }
    Dark mode
    ===================================================================== */
 body.dark {
+  color-scheme: dark;
   --brand-50: rgba(26,120,194,.16); --brand-100: rgba(26,120,194,.30);
   --brand-200: #8fc1e8; --brand-300: #74aedd; --brand-500: #3f9bda;
   --brand-600: #2e84c6; --brand-700: #56a8e6; --brand-800: #bfe0f6; --brand-900: #dbe8f4;
@@ -1884,6 +1888,36 @@ tbody tr.unread .cell-app-title {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -64px;
+  z-index: 1000;
+  padding: 10px 16px;
+  border-radius: var(--r-md);
+  background: var(--brand-700);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  transition: top .15s ease;
+}
+.skip-link:focus-visible {
+  top: 12px;
+  outline: 3px solid var(--brand-200);
+  outline-offset: 2px;
+}
+
+.noscript-banner {
+  margin: 0;
+  padding: 14px 20px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-bottom: 1px solid var(--danger-line);
+  font-weight: 600;
+  text-align: center;
 }
 
 tr.unread .unread-dot {
