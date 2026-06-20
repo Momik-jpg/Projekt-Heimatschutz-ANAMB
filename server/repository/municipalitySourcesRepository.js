@@ -1,3 +1,5 @@
+import { encryptToken, decryptToken } from "../services/tokenCrypto.js";
+
 export const municipalitySourceTypes = ["manual", "html", "xml", "json", "arcgis", "pdf"];
 export const municipalityDigitalStatuses = ["unknown", "digital", "partial", "manual"];
 
@@ -11,7 +13,9 @@ function mapOperationalRow(row) {
     municipality: row.municipality,
     sourceType: row.source_type,
     sourceUrl: row.source_url,
-    sourceToken: row.source_token,
+    // Token wird at-rest verschluesselt abgelegt; hier fuer den internen
+    // Sync-Gebrauch entschluesselt. Die API schwaerzt ihn separat.
+    sourceToken: decryptToken(row.source_token),
     includePattern: row.include_pattern,
     excludePattern: row.exclude_pattern,
     enabled: Boolean(row.enabled),
@@ -345,7 +349,11 @@ export function createMunicipalitySourcesRepository(db) {
       `).run(
         changes.sourceType ?? current.sourceType,
         String(changes.sourceUrl ?? current.sourceUrl ?? "").trim(),
-        String(changes.sourceToken ?? current.sourceToken ?? "").trim(),
+        // Leerer/fehlender Token = bestehenden behalten (Schwaerzung im Frontend
+        // liefert keinen Klartext zurueck); Ablage stets verschluesselt.
+        changes.sourceToken && String(changes.sourceToken).trim()
+          ? encryptToken(String(changes.sourceToken).trim())
+          : encryptToken(String(current.sourceToken ?? "").trim()),
         String(changes.includePattern ?? current.includePattern ?? "").trim(),
         String(changes.excludePattern ?? current.excludePattern ?? "").trim(),
         changes.enabled === undefined ? (current.enabled ? 1 : 0) : changes.enabled ? 1 : 0,
