@@ -116,6 +116,16 @@ import {
 // Für die Test-Suite weiterhin aus app.js erreichbar.
 export { normalizeSyncSourceUrl, validateProductionRuntimeConfiguration };
 
+// Entfernt den Quell-Token aus einer Gemeindequelle, bevor sie an den Client
+// geht (S5): nie der Klartext, nur ob ein Token gesetzt ist.
+function redactSourceToken(source) {
+  if (!source) {
+    return source;
+  }
+  const { sourceToken, ...rest } = source;
+  return { ...rest, sourceTokenSet: isTokenSet(sourceToken) };
+}
+
 export function createApp(options = {}) {
   const logger = options.logger ?? console;
   const normalizedSyncSourceUrl = normalizeSyncSourceUrl(
@@ -1332,7 +1342,7 @@ export function createApp(options = {}) {
     );
 
     response.json({
-      items: municipalitySourcesRepository.listAll(),
+      items: municipalitySourcesRepository.listAll().map(redactSourceToken),
       summary: municipalitySourcesRepository.getSummary(),
       catalogItems: coverageSnapshot.catalogItems,
       sharedSources: coverageSnapshot.sharedSources,
@@ -1400,7 +1410,7 @@ export function createApp(options = {}) {
     weeklySyncService.refreshSchedule();
     const coverageSnapshot = municipalitySourcesRepository.getCoverageSnapshot();
     response.json({
-      item: updated,
+      item: redactSourceToken(updated),
       summary: municipalitySourcesRepository.getSummary(),
       catalogItems: coverageSnapshot.catalogItems,
       sharedSources: coverageSnapshot.sharedSources,
