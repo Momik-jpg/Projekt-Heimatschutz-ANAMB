@@ -780,7 +780,7 @@ function renderTable() {
 
   if (!rows.length) {
     el.tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">
-      <h4>Keine Baugesuche gefunden</h4>
+      <h3>Keine Baugesuche gefunden</h3>
       <p>Filter zurücksetzen oder einen anderen Reiter wählen.</p>
       <button class="btn ghost" type="button" data-reset-empty>Filter zurücksetzen</button>
     </div></td></tr>`;
@@ -1619,7 +1619,7 @@ function iconSvg(name) {
 function renderSources() {
   renderSourceStats();
   if (!isMaster()) {
-    el.srcBody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><h4>Nur Master-Konto</h4><p>Gemeindequellen und Zugriffsschlüssel sind nur mit Master-Rechten bearbeitbar.</p></div></td></tr>`;
+    el.srcBody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><h3>Nur Master-Konto</h3><p>Gemeindequellen und Zugriffsschlüssel sind nur mit Master-Rechten bearbeitbar.</p></div></td></tr>`;
     return;
   }
   const rows = sourceRows();
@@ -1674,7 +1674,7 @@ function renderImportPane() {
 
 function renderKeys() {
   if (!isMaster()) {
-    el.keysBody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><h4>Nur Master-Konto</h4><p>Zugänge und Registrierungsschlüssel sind nur mit Master-Rechten sichtbar.</p></div></td></tr>`;
+    el.keysBody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><h3>Nur Master-Konto</h3><p>Zugänge und Registrierungsschlüssel sind nur mit Master-Rechten sichtbar.</p></div></td></tr>`;
     return;
   }
   const userRows = state.adminUsers.map((user) => {
@@ -1708,7 +1708,7 @@ function renderKeys() {
       <td class="cell-actions"><span class="row-actions">${used ? "" : `<button class="icon-btn danger" title="Löschen" aria-label="Schlüssel löschen" data-key-delete="${escapeHtml(key.id)}">${iconSvg("close")}</button>`}</span></td>
     </tr>`;
   });
-  el.keysBody.innerHTML = [...userRows, ...keyRows].join("") || `<tr><td colspan="5"><div class="empty-state"><h4>Keine Zugänge gefunden</h4></div></td></tr>`;
+  el.keysBody.innerHTML = [...userRows, ...keyRows].join("") || `<tr><td colspan="5"><div class="empty-state"><h3>Keine Zugänge gefunden</h3></div></td></tr>`;
   const railCount = $('[data-pane="keys"] .rc');
   if (railCount) railCount.textContent = String(state.adminUsers.length + state.registrationKeys.filter((key) => !key.usedAt).length);
 }
