@@ -14,6 +14,10 @@ import { randomBytes } from "node:crypto";
 import { seedApplications } from "./seed/applications.js";
 import { seedUsers } from "./seed/users.js";
 import { createUserPasswordRecord } from "./repository/usersRepository.js";
+import {
+  cleanImportedAddress,
+  normalizeImportedDates
+} from "./domain/applicationImportNormalization.js";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const defaultDbPath = process.env.DATABASE_PATH || join(rootDir, "data", "heimatschutz.sqlite");
@@ -57,6 +61,7 @@ const seededPasswordMap = (() => {
 const schema = `
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
+  PRAGMA secure_delete = ON;
 
   CREATE TABLE IF NOT EXISTS applications (
     id TEXT PRIMARY KEY,
@@ -816,6 +821,37 @@ function applicationsCount(db) {
   return Number(db.prepare("SELECT COUNT(*) AS count FROM applications").get()?.count ?? 0);
 }
 
+function repairImportedApplicationFields(db) {
+  const rows = db.prepare(`
+    SELECT id, address, publication_date, deadline_date, project_type,
+           description, created_at
+    FROM applications
+  `).all();
+  const update = db.prepare(`
+    UPDATE applications
+    SET address = ?, publication_date = ?, deadline_date = ?, updated_at = ?
+    WHERE id = ?
+  `);
+  const repairedAt = new Date().toISOString();
+
+  for (const row of rows) {
+    const address = cleanImportedAddress(row.address) || row.address;
+    const dates = normalizeImportedDates({
+      publicationDate: row.publication_date,
+      deadlineDate: row.deadline_date,
+      text: [row.description, row.project_type, row.address].filter(Boolean).join(" "),
+      referenceDate: new Date()
+    });
+    if (
+      address !== row.address
+      || dates.publicationDate !== row.publication_date
+      || dates.deadlineDate !== row.deadline_date
+    ) {
+      update.run(address, dates.publicationDate, dates.deadlineDate, repairedAt, row.id);
+    }
+  }
+}
+
 /**
  * Legt vor einer destruktiven Migration eine Sicherungskopie der SQLite-Datei
  * an (best effort). Per MIGRATION_BACKUP=false abschaltbar; bei In-Memory-DB,
@@ -900,6 +936,11 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
     db,
     { id: "clear-invalid-deadlines", dbPath, destructive: true },
     normalizeInvalidApplicationDeadlines
+  );
+  applyMigrationOnce(
+    db,
+    { id: "repair-imported-application-fields-v1", dbPath, destructive: true },
+    repairImportedApplicationFields
   );
   applyMigrationOnce(db, { id: "cleanup-seed-artifacts-and-junk", dbPath, destructive: true }, (database) => {
     database.exec(`

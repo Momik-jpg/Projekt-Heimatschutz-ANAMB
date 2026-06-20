@@ -1293,7 +1293,9 @@ export function createApp(options = {}) {
     enabled: options.maintenanceEnabled ?? process.env.MAINTENANCE_ENABLED !== "false",
     intervalMs:
       options.maintenanceIntervalMs ??
-      Number(process.env.MAINTENANCE_INTERVAL_HOURS ?? 24) * 60 * 60 * 1000,
+      (process.env.MAINTENANCE_INTERVAL_HOURS
+        ? Number(process.env.MAINTENANCE_INTERVAL_HOURS) * 60 * 60 * 1000
+        : null),
     runOnStart: options.maintenanceRunOnStart ?? true,
     backupEnabled: options.backupEnabled ?? process.env.BACKUP_ENABLED === "true",
     backupDir: normalizeEnvString(options.backupDir ?? process.env.BACKUP_DIR ?? ""),

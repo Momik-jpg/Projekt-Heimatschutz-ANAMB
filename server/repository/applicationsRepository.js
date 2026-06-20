@@ -3,6 +3,10 @@ import {
   classifyProjectScale,
   getApplicationRegion
 } from "../domain/applicationPresentation.js";
+import {
+  cleanImportedAddress,
+  normalizeImportedDates
+} from "../domain/applicationImportNormalization.js";
 import { importQueue } from "../seed/applications.js";
 
 export const protectionStatuses = [
@@ -32,7 +36,7 @@ function mapRow(row) {
     sourceUrl: row.source_url,
     municipality: row.municipality,
     region: getApplicationRegion(row.municipality),
-    address: row.address,
+    address: cleanImportedAddress(row.address),
     parcel: row.parcel,
     coordinates: row.coordinates,
     locationPrecision: row.location_precision ?? "",
@@ -139,18 +143,24 @@ function buildListQuery(filters) {
 }
 
 function buildImportedRecord(item, syncedAt) {
+  const dates = normalizeImportedDates({
+    publicationDate: item.publicationDate,
+    deadlineDate: item.deadlineDate,
+    text: [item.description, item.projectType, item.address].filter(Boolean).join(" "),
+    referenceDate: syncedAt
+  });
   return {
     id: item.id || `BG-${randomBytes(6).toString("hex").toUpperCase()}`,
     source: item.source,
     sourceReference: item.sourceReference,
     sourceUrl: item.sourceUrl,
     municipality: item.municipality,
-    address: item.address,
+    address: cleanImportedAddress(item.address),
     parcel: item.parcel ?? "",
     coordinates: item.coordinates ?? "",
     locationPrecision: item.locationPrecision ?? "",
-    publicationDate: item.publicationDate,
-    deadlineDate: item.deadlineDate,
+    publicationDate: dates.publicationDate,
+    deadlineDate: dates.deadlineDate,
     projectType: item.projectType,
     description: item.description,
     protectionStatus: item.protectionStatus,
@@ -507,7 +517,13 @@ export function createApplicationsRepository(db) {
         `).run(referenceDateOnly);
 
         db.exec("COMMIT");
-        return result.changes ?? 0;
+        const removed = result.changes ?? 0;
+        if (removed > 0) {
+          // secure_delete überschreibt gelöschte Inhalte; der Checkpoint entfernt
+          // zusätzlich alte Frames aus der WAL-Datei.
+          db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+        }
+        return removed;
       } catch (error) {
         db.exec("ROLLBACK");
         throw error;
