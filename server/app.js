@@ -450,15 +450,10 @@ export function createApp(options = {}) {
   app.get("/health", (_request, response) => handleHealthCheck(_request, response, healthDatabasePath));
   app.get("/api/health", (_request, response) => handleHealthCheck(_request, response, healthDatabasePath));
 
-  app.get("/api/auth/users", (_request, response) => {
-    response.json({
-      items: usersRepository.listPublicUsers().map((user) => ({
-        id: user.id,
-        displayName: user.displayName,
-        role: user.role
-      }))
-    });
-  });
+  // Hinweis: Der frühere oeffentliche Endpoint GET /api/auth/users wurde entfernt
+  // (S6). Er lieferte ohne Anmeldung interne User-IDs, Anzeigenamen und Rollen und
+  // wurde vom Frontend nicht genutzt. Benutzerlisten gibt es nur noch unter
+  // /api/admin/users (Master-Recht erforderlich).
 
   app.get("/api/auth/session", (request, response) => {
     const currentSession = resolveCurrentUser(request, sessionsRepository, usersRepository);
