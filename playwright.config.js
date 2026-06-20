@@ -36,6 +36,7 @@ export default defineConfig({
       AUTO_SYNC_RUN_ON_START: "false",
       AGIS_REFRESH_ON_START: "false",
       MAINTENANCE_ENABLED: "false",
+      MIGRATION_BACKUP: "false",
       SYNC_DISABLE_DEFAULT_AMTSBLATT: "true"
     }
   }

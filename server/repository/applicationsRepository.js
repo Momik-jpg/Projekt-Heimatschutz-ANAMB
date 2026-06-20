@@ -1,4 +1,12 @@
 import { randomBytes } from "node:crypto";
+import {
+  classifyProjectScale,
+  getApplicationRegion
+} from "../domain/applicationPresentation.js";
+import {
+  cleanImportedAddress,
+  normalizeImportedDates
+} from "../domain/applicationImportNormalization.js";
 import { importQueue } from "../seed/applications.js";
 
 export const protectionStatuses = [
@@ -27,7 +35,8 @@ function mapRow(row) {
     sourceReference: row.source_reference,
     sourceUrl: row.source_url,
     municipality: row.municipality,
-    address: row.address,
+    region: getApplicationRegion(row.municipality),
+    address: cleanImportedAddress(row.address),
     parcel: row.parcel,
     coordinates: row.coordinates,
     locationPrecision: row.location_precision ?? "",
@@ -35,6 +44,10 @@ function mapRow(row) {
     deadlineDate: row.deadline_date,
     projectType: row.project_type,
     description: row.description,
+    projectScale: classifyProjectScale({
+      projectType: row.project_type,
+      description: row.description
+    }),
     protectionStatus: row.protection_status,
     agisMatch: row.agis_match,
     agisLayers: JSON.parse(row.agis_layers || "[]"),
@@ -130,18 +143,24 @@ function buildListQuery(filters) {
 }
 
 function buildImportedRecord(item, syncedAt) {
+  const dates = normalizeImportedDates({
+    publicationDate: item.publicationDate,
+    deadlineDate: item.deadlineDate,
+    text: [item.description, item.projectType, item.address].filter(Boolean).join(" "),
+    referenceDate: syncedAt
+  });
   return {
     id: item.id || `BG-${randomBytes(6).toString("hex").toUpperCase()}`,
     source: item.source,
     sourceReference: item.sourceReference,
     sourceUrl: item.sourceUrl,
     municipality: item.municipality,
-    address: item.address,
+    address: cleanImportedAddress(item.address),
     parcel: item.parcel ?? "",
     coordinates: item.coordinates ?? "",
     locationPrecision: item.locationPrecision ?? "",
-    publicationDate: item.publicationDate,
-    deadlineDate: item.deadlineDate,
+    publicationDate: dates.publicationDate,
+    deadlineDate: dates.deadlineDate,
     projectType: item.projectType,
     description: item.description,
     protectionStatus: item.protectionStatus,
@@ -464,30 +483,51 @@ export function createApplicationsRepository(db) {
       }
     },
 
-    // Ablaufdatum / Aufbewahrung: löscht unberührte Fälle, deren Auflagefrist
-    // länger als retentionDays zurückliegt. Vom Team bearbeitete Fälle (Status
-    // ungleich "new", mit Notiz, Zuständiger oder Kommentar) bleiben erhalten.
-    pruneExpiredApplications({ retentionDays = 90, referenceDate = new Date() } = {}) {
-      const days = Number(retentionDays);
+    // Einen Tag nach der Frist verschwindet der komplette Fall. Fälle ohne
+    // verlässliche Frist bleiben erhalten und müssen in der Oberfläche auffallen.
+    pruneExpiredApplications({ referenceDate = new Date() } = {}) {
+      const date = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
 
-      if (!Number.isFinite(days) || days < 0) {
+      if (Number.isNaN(date.getTime())) {
         return 0;
       }
 
-      const cutoff = new Date(referenceDate.getTime() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const result = db
-        .prepare(`
-          DELETE FROM applications
-          WHERE workflow_status = 'new'
-            AND IFNULL(assignee, '') = ''
-            AND IFNULL(note, '') = ''
-            AND IFNULL(deadline_date, '') <> ''
-            AND date(deadline_date) < date(?)
-            AND id NOT IN (SELECT application_id FROM application_comments)
-        `)
-        .run(cutoff);
+      const referenceDateOnly = [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getDate()).padStart(2, "0")
+      ].join("-");
 
-      return result.changes ?? 0;
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        db.prepare(`
+          DELETE FROM application_learning_rules
+          WHERE created_from_application_id IN (
+            SELECT id
+            FROM applications
+            WHERE IFNULL(deadline_date, '') <> ''
+              AND date(deadline_date) < date(?)
+          )
+        `).run(referenceDateOnly);
+
+        const result = db.prepare(`
+          DELETE FROM applications
+          WHERE IFNULL(deadline_date, '') <> ''
+            AND date(deadline_date) < date(?)
+        `).run(referenceDateOnly);
+
+        db.exec("COMMIT");
+        const removed = result.changes ?? 0;
+        if (removed > 0) {
+          // secure_delete überschreibt gelöschte Inhalte; der Checkpoint entfernt
+          // zusätzlich alte Frames aus der WAL-Datei.
+          db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+        }
+        return removed;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     },
 
     getDashboard({ referenceDate = new Date() } = {}) {

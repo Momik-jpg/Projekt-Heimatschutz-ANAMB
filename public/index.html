@@ -3,17 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <title>Heimatschutz Aargau - Arbeitsplatz</title>
   <link rel="icon" href="wappen.svg" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="fonts.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="redesign.css">
 </head>
 <body>
+  <a class="skip-link" href="#mainContent">Zum Inhalt springen</a>
+  <noscript>
+    <div class="noscript-banner" role="alert">
+      Diese Anwendung benötigt JavaScript. Bitte aktivieren Sie JavaScript im Browser, um den Arbeitsplatz zu nutzen.
+    </div>
+  </noscript>
   <section id="authShell" class="auth-shell hidden" aria-labelledby="loginTitle">
     <div class="auth-card">
       <div class="auth-copy">
@@ -166,7 +169,7 @@
     </header>
 
     <!-- ============ Arbeitsliste ============ -->
-    <main class="view active" id="view-work">
+    <main class="view active" id="view-work" tabindex="-1"><span id="mainContent" tabindex="-1" class="sr-only">Hauptinhalt</span>
     <div class="titleband">
       <div class="titleband-copy">
         <p class="bread">Startseite › Baugesuche › <span>Arbeitsliste</span></p>
@@ -184,12 +187,12 @@
       <section class="panel list-panel">
         <div class="panel-head">
           <div>
-            <h3>Fälle</h3>
+            <h2>Fälle</h2>
             <p id="activeFilterText" class="sub">Aktuell: offene und laufende Fälle.</p>
           </div>
           <div class="ph-actions">
             <button id="syncBtn" class="icon-btn sm" type="button" title="Liste aktualisieren">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <span id="resultCount" class="count-tag">0 Baugesuche</span>
           </div>
@@ -197,11 +200,15 @@
         <nav class="tabs" aria-label="Schnellauswahl">
           <button class="tab active" data-tab="all" type="button">Arbeitsliste <span class="tab-count" data-count="all">0</span></button>
           <button class="tab" data-tab="important" type="button">Schutztreffer <span class="tab-count" data-count="important">0</span></button>
-          <button class="tab" data-tab="manual" type="button">Von Hand prüfen <span class="tab-count" data-count="manual">0</span></button>
-          <button class="tab" data-tab="open" type="button">Nur offen</button>
-          <button class="tab" data-tab="due-soon" type="button">Frist bald <span class="tab-count" data-count="due-soon">0</span></button>
-          <button class="tab" data-tab="archive" type="button">Alle / Archiv</button>
         </nav>
+        <div class="region-filters" role="group" aria-label="Regionen filtern">
+          <span class="region-label">Region</span>
+          <button class="region-filter" data-region="Berner Aargau" type="button" aria-pressed="false">Berner Aargau</button>
+          <button class="region-filter" data-region="Fricktal" type="button" aria-pressed="false">Fricktal</button>
+          <button class="region-filter" data-region="Baden" type="button" aria-pressed="false">Baden</button>
+          <button class="region-filter" data-region="Freiamt" type="button" aria-pressed="false">Freiamt</button>
+          <span class="region-hint">Keine Auswahl zeigt alle Regionen.</span>
+        </div>
         <form class="filter-bar" onsubmit="return false">
           <label class="fb-search"><span>Suche</span><input id="fltSearch" type="search" placeholder="Ort, Adresse"></label>
           <label class="fb-municipality"><span>Ort</span><select id="fltMun"><option value="">Alle Gemeinden</option></select></label>
@@ -230,10 +237,10 @@
           <table>
             <colgroup><col class="c-mun"><col class="c-app"><col class="c-hit"><col class="c-due"><col class="c-stat"></colgroup>
             <thead><tr>
-              <th class="sortable" data-sort="municipality"><span class="th-inner">Gemeinde <svg class="sort-ind" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
+              <th class="sortable" data-sort="municipality"><span class="th-inner">Gemeinde <svg class="sort-ind" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
               <th>Baugesuch</th>
               <th>AGIS-Treffer</th>
-              <th class="sortable" data-sort="dueDays"><span class="th-inner">Frist <svg class="sort-ind" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
+              <th class="sortable" data-sort="dueDays"><span class="th-inner">Frist <svg class="sort-ind" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
               <th>Status</th>
             </tr></thead>
             <tbody id="tbody"></tbody>
@@ -245,19 +252,19 @@
       <aside class="panel detail-panel">
         <div class="panel-head">
           <div>
-            <h3>Prüfung</h3>
+            <h2>Prüfung</h2>
             <p id="detailHelper" class="sub">Entscheidung, Karte und interne Bearbeitung.</p>
           </div>
           <div class="detail-status-row">
             <span id="detailStatusBadge" class="detail-badge-slot">Keine Auswahl</span>
             <button id="printBtn" class="icon-btn sm" type="button" title="Fall drucken / als PDF">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <button id="nextOpen" class="btn ghost detail-next-btn" type="button">Nächstes offenes →</button>
           </div>
         </div>
 
-        <div id="detailEmpty" class="detail-empty hidden">
+        <div id="detailEmpty" class="detail-empty">
           <div class="empty-state">
             <svg class="ill" viewBox="0 0 96 96" fill="none" aria-hidden="true">
               <rect x="20" y="14" width="56" height="68" rx="6" fill="#eef4fb" stroke="#a3d4ef" stroke-width="2"/>
@@ -265,12 +272,12 @@
               <circle cx="64" cy="64" r="16" fill="#fff" stroke="#007ab8" stroke-width="3"/>
               <path d="m76 76 8 8" stroke="#007ab8" stroke-width="3" stroke-linecap="round"/>
             </svg>
-            <h4>Kein Fall ausgewählt</h4>
+            <h3>Kein Fall ausgewählt</h3>
             <p>Wählen Sie links ein Baugesuch, um Fakten, Karte, Verlauf und Bearbeitung zu sehen.</p>
           </div>
         </div>
 
-        <div id="detailBody" class="detail-body">
+        <div id="detailBody" class="detail-body hidden">
           <dl class="facts">
             <div class="fact"><dt>Ort</dt><dd id="fMun">–</dd></div>
             <div class="fact"><dt>Adresse</dt><dd id="fAddr">–</dd></div>
@@ -278,7 +285,13 @@
             <div class="fact"><dt>Publiziert</dt><dd id="fPub">–</dd></div>
             <div class="fact"><dt>Fristende</dt><dd id="fDue">–</dd></div>
             <div class="fact"><dt>AGIS-Treffer</dt><dd id="fAgis">–</dd></div>
-            <div class="fact wide"><dt>Bauvorhaben</dt><dd id="fProject">–</dd></div>
+            <div class="fact wide"><dt>Bauvorhaben</dt><dd>
+              <span id="fProject">–</span>
+              <span class="project-detail-meta">
+                <span id="projectScale" class="project-scale scale-unbekannt">Unbekannt</span>
+                <a id="sourceLink" class="source-link" href="#" target="_blank" rel="noreferrer">Originaldokument öffnen</a>
+              </span>
+            </dd></div>
           </dl>
 
           <section class="map-card">
@@ -294,7 +307,7 @@
 
           <section class="assessment">
             <p class="ttl">Einschätzung</p>
-            <h4 id="recTitle">–</h4>
+            <h3 id="recTitle">–</h3>
             <p id="recText">–</p>
             <div class="meta">
               <span id="recBadge" class="badge neutral">–</span>
@@ -390,8 +403,8 @@
             <div class="adm-card-head">
               <div><h2>Gemeindequellen</h2><p class="sub">Woher die Baugesuche je Gemeinde bezogen werden. Status und Quelle pflegen.</p></div>
               <div class="adm-toolbar">
-                <span class="search-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5" stroke-linecap="round"/></svg><input id="srcSearch" type="search" placeholder="Gemeinde suchen …"></span>
-                <button class="tool-btn" type="button" data-toast="Neue Gemeindequelle – Formular geöffnet."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Quelle hinzufügen</button>
+                <span class="search-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5" stroke-linecap="round"/></svg><input id="srcSearch" type="search" placeholder="Gemeinde suchen …"></span>
+                <button class="tool-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" stroke-linecap="round" stroke-linejoin="round"/></svg>Quelle bearbeiten</button>
               </div>
             </div>
             <div class="adm-card-body flush">
@@ -408,7 +421,7 @@
           <div class="adm-card">
             <div class="adm-card-head">
               <div><h2>Import &amp; Sync</h2><p class="sub">Automatischer Abgleich von Amtsblatt und Gemeindeportalen. Manuell auslösbar.</p></div>
-              <button class="btn" type="button" id="runImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>Import jetzt starten</button>
+              <button class="btn" type="button" id="runImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>Import jetzt starten</button>
             </div>
             <div class="stat-row">
               <div class="stat"><p class="k">Letzter Lauf</p><p class="v stat-time">heute 06:10</p><p class="d up">erfolgreich</p></div>
@@ -428,11 +441,11 @@
           <div class="adm-card">
             <div class="adm-card-head">
               <div><h2>Zugänge &amp; Schlüssel</h2><p class="sub">Benutzerkonten der Denkmalpflege und API-Schlüssel für AGIS und Datenquellen.</p></div>
-              <button class="tool-btn" type="button" data-toast="Neuer Zugang – Einladung versendet."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Zugang einladen</button>
+              <button class="tool-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Schlüssel erstellen</button>
             </div>
             <div class="adm-card-body flush">
               <table class="adm-table">
-                <thead><tr><th>Person / Dienst</th><th>Rolle</th><th>Schlüssel</th><th>Letzter Zugriff</th><th>Status</th><th class="cell-actions">Aktion</th></tr></thead>
+                <thead><tr><th>Person / Dienst</th><th>Rolle</th><th>Schlüssel</th><th>Status</th><th class="cell-actions">Aktion</th></tr></thead>
                 <tbody id="keysBody"></tbody>
               </table>
             </div>

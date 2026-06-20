@@ -1,5 +1,10 @@
 import { copyFileSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+
+export function millisecondsUntilNextLocalMaintenance(now = new Date()) {
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return Math.max(1, next.getTime() - now.getTime());
+}
 
 // Hintergrund-Wartung: räumt abgelaufene Sessions/Schlüssel und alte
 // Audit-Einträge auf und legt (optional) regelmässige SQLite-Backups an.
@@ -11,28 +16,71 @@ export function createMaintenanceService({
   masterSetupKeysRepository,
   passwordResetKeysRepository,
   auditLogRepository,
+  applicationsRepository,
   enabled = true,
-  intervalMs = 24 * 60 * 60 * 1000,
+  intervalMs = null,
   runOnStart = true,
   backupEnabled = false,
   backupDir = "",
   backupRetention = 7,
   auditRetentionDays = 365,
-  logger = console
+  logger = console,
+  nowProvider = () => new Date(),
+  setTimeoutFn = setTimeout,
+  clearTimeoutFn = clearTimeout
 } = {}) {
   let timerId = null;
+  let lastCleanup = { removedApplications: 0, purgedBackups: 0 };
+
+  function purgeDatabaseBackups() {
+    if (!dbPath || dbPath === ":memory:") return 0;
+    const root = resolve(dirname(dbPath));
+    const prefix = `${basename(dbPath)}.`;
+    const directories = [root];
+    let removed = 0;
+
+    while (directories.length) {
+      const directory = directories.pop();
+      let entries = [];
+      try {
+        entries = readdirSync(directory, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      for (const entry of entries) {
+        const target = join(directory, entry.name);
+        if (entry.isDirectory() && !entry.isSymbolicLink()) {
+          directories.push(target);
+        } else if (entry.isFile() && entry.name.startsWith(prefix) && entry.name.endsWith(".bak")) {
+          try {
+            rmSync(target, { force: true });
+            removed += 1;
+          } catch {
+            logger.warn?.(`SQLite-Backup konnte nicht gelöscht werden: ${target}`);
+          }
+        }
+      }
+    }
+    return removed;
+  }
 
   function runCleanup() {
-    const now = new Date().toISOString();
+    const referenceDate = nowProvider();
+    const now = referenceDate.toISOString();
     let removed = 0;
 
     sessionsRepository?.deleteExpired?.(now);
     removed += registrationKeysRepository?.deleteStale?.(now) ?? 0;
     removed += masterSetupKeysRepository?.deleteStale?.(now) ?? 0;
     removed += passwordResetKeysRepository?.deleteStale?.(now) ?? 0;
+    const removedApplications = applicationsRepository?.pruneExpiredApplications?.({ referenceDate }) ?? 0;
+    removed += removedApplications;
+    const purgedBackups = removedApplications > 0 ? purgeDatabaseBackups() : 0;
+    lastCleanup = { removedApplications, purgedBackups };
 
     if (auditRetentionDays > 0 && auditLogRepository?.deleteOlderThan) {
-      const cutoff = new Date(Date.now() - auditRetentionDays * 24 * 60 * 60 * 1000).toISOString();
+      const cutoff = new Date(referenceDate.getTime() - auditRetentionDays * 24 * 60 * 60 * 1000).toISOString();
       auditLogRepository.deleteOlderThan(cutoff);
     }
 
@@ -86,7 +134,24 @@ export function createMaintenanceService({
   function runNow() {
     const removed = runCleanup();
     const backup = runBackup();
-    return { removed, backup };
+    return { removed, backup, ...lastCleanup };
+  }
+
+  function scheduleNext() {
+    const configuredInterval = Number(intervalMs);
+    const delay = Number.isFinite(configuredInterval) && configuredInterval > 0
+      ? configuredInterval
+      : millisecondsUntilNextLocalMaintenance(nowProvider());
+    timerId = setTimeoutFn(() => {
+      try {
+        runNow();
+      } catch (error) {
+        logger.warn?.(`Wartung fehlgeschlagen: ${error.message}`);
+      } finally {
+        scheduleNext();
+      }
+    }, delay);
+    timerId?.unref?.();
   }
 
   return {
@@ -103,25 +168,19 @@ export function createMaintenanceService({
         }
       }
 
-      timerId = setInterval(() => {
-        try {
-          runNow();
-        } catch (error) {
-          logger.warn?.(`Wartung fehlgeschlagen: ${error.message}`);
-        }
-      }, intervalMs);
-      timerId.unref?.();
+      scheduleNext();
     },
 
     stop() {
       if (timerId) {
-        clearInterval(timerId);
+        clearTimeoutFn(timerId);
         timerId = null;
       }
     },
 
     runNow,
     runCleanup,
-    runBackup
+    runBackup,
+    purgeDatabaseBackups
   };
 }

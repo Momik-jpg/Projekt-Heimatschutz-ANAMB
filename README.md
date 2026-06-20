@@ -99,7 +99,12 @@ Z: Zeihen, Zofingen*, Zuzgen
 ## Lokal starten
 
 Voraussetzung:
-- Node.js 24 oder neuer
+- Node.js 24 oder neuer (zwingend: die Datenbank nutzt das noch experimentelle
+  Modul `node:sqlite`; die Node-Major-Version sollte daher gepinnt werden)
+
+Schriften werden lokal ausgeliefert (`public/fonts/`, eingebunden über
+`public/fonts.css`) – kein Google-Fonts-CDN, damit keine Nutzerdaten an Dritte
+abfliessen. Neu generieren bei Schriftänderungen: `node scripts/fetch-fonts.mjs`.
 
 PowerShell:
 

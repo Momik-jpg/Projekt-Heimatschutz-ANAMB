@@ -38,6 +38,7 @@ data/e2e.sqlite-wal
 .agents/
 .codex/
 .serena/
+.superpowers/
 graphify-out/
 
 docs/screenshots/
