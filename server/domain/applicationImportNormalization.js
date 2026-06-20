@@ -84,9 +84,6 @@ export function normalizeImportedDates({ publicationDate, deadlineDate, text, re
   const today = localDateOnly(referenceDate);
 
   if (today && normalizedPublication > today) normalizedPublication = "";
-  if (normalizedPublication && normalizedDeadline && normalizedPublication > normalizedDeadline) {
-    normalizedPublication = "";
-  }
   return { publicationDate: normalizedPublication, deadlineDate: normalizedDeadline };
 }
 
