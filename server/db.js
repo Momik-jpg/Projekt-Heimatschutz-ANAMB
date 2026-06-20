@@ -1,6 +1,11 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+// ACHTUNG: node:sqlite (DatabaseSync) ist in Node noch als *experimental* markiert
+// ("might change at any time") und erfordert Node >= 24 (siehe package.json engines).
+// Folgen: (1) Die API kann sich zwischen Node-Versionen ändern – Node-Version pinnen.
+// (2) DatabaseSync ist synchron und blockiert die Event-Loop bei jedem Query; für den
+// internen Low-Traffic-Betrieb akzeptabel, bei steigender Last auf better-sqlite3 wechseln.
 import { DatabaseSync } from "node:sqlite";
 import {
   aargauMunicipalities,

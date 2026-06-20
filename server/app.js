@@ -71,8 +71,8 @@ const contentSecurityPolicy = [
   "frame-ancestors 'none'",
   "object-src 'none'",
   "script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com https://challenges.cloudflare.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
-  "font-src 'self' https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline' https://unpkg.com",
+  "font-src 'self'",
   "img-src 'self' data: https:",
   "connect-src 'self' https://www.ag.ch https://unpkg.com https://challenges.cloudflare.com",
   "frame-src https://challenges.cloudflare.com"
@@ -431,6 +431,11 @@ function setStaticAssetHeaders(response, filePath) {
 
   if ([".svg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico"].includes(extension)) {
     response.setHeader("Cache-Control", "public, max-age=86400");
+    return;
+  }
+
+  if ([".woff2", ".woff"].includes(extension)) {
+    response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
   }
 }
 
