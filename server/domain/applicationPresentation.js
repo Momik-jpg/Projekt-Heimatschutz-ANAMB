@@ -215,6 +215,8 @@ const largeProjectPattern =
   /mehrfamilienh(?:aus|äuser)|\bmfh\b|wohnüberbauung|arealüberbauung|überbauung|industrie(?:halle|bau)|gewerbebau|geschäftshaus|schul(?:haus|anlage)|mehrzweckhalle|spital|pflegeheim|hotel|wohn- und geschäftshaus/iu;
 const smallProjectPattern =
   /wärmepumpe|photovoltaik|pv-anlage|solaranlage|dachfenster|fensterersatz|reklame|werbeanlage|klimaanlage|ladestation|e-ladestation|sichtschutz|pergola|gartenhaus|geräteschuppen|velounterstand|carport|schwimmbecken|pool|fassaden(?:änderung|anstrich)|dachsanierung/iu;
+const mediumProjectPattern =
+  /einfamilienhaus|\befh\b|doppeleinfamilienhaus|reihenhaus|anbau|umbau|aufstockung|umnutzung|ersatzneubau|neubau|sanierung|renovation|garage|terrasse|balkon|dachausbau/iu;
 
 export function getApplicationRegion(municipality) {
   const normalizedMunicipality = String(municipality || "").trim().toLocaleLowerCase("de-CH");
@@ -228,5 +230,6 @@ export function classifyProjectScale(application = {}) {
 
   if (largeProjectPattern.test(description)) return "gross";
   if (smallProjectPattern.test(description)) return "klein";
-  return "mittel";
+  if (mediumProjectPattern.test(description)) return "mittel";
+  return "unbekannt";
 }

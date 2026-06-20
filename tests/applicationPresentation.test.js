@@ -24,5 +24,5 @@ test("klassifiziert grosse vor mittleren und kleinen Vorhaben", () => {
   assert.equal(classifyProjectScale({ projectType: "Umbau MFH Pestalozzistrasse" }), "gross");
   assert.equal(classifyProjectScale({ projectType: "Anbau Einfamilienhaus" }), "mittel");
   assert.equal(classifyProjectScale({ projectType: "Neue Wärmepumpe" }), "klein");
-  assert.equal(classifyProjectScale({ projectType: "Baugesuch" }), "mittel");
+  assert.equal(classifyProjectScale({ projectType: "Baugesuch" }), "unbekannt");
 });

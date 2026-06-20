@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { PDFParse } from "pdf-parse";
+import { extractPublicationDateRange } from "../domain/applicationImportNormalization.js";
 import { aargauMunicipalityNames } from "../seed/municipalitySources.js";
 
 // Normalisierter Suchschlüssel für Gemeindenamen: ohne Diakritika, ohne
@@ -1774,31 +1775,7 @@ function normalizeImportedProjectType(projectType, sourceUrl = "") {
 }
 
 function extractDateRangeFromText(value) {
-  const text = normalizeWhitespace(value);
-  const dashMatch = text.match(new RegExp(`(${swissDateLikePatternSource})\\s*[–-]\\s*(${swissDateLikePatternSource})`, "i"));
-
-  if (dashMatch?.[1] && dashMatch?.[2]) {
-    return {
-      publicationDate: normalizeDate(dashMatch[1]),
-      deadlineDate: normalizeDate(dashMatch[2])
-    };
-  }
-
-  const rangeMatch = text.match(
-    new RegExp(`\\bvom\\b\\s*(${swissDateLikePatternSource})[\\s\\S]{0,40}?\\bbis\\b\\s*(${swissDateLikePatternSource})`, "i")
-  );
-
-  if (!rangeMatch?.[1] || !rangeMatch?.[2]) {
-    return {
-      publicationDate: "",
-      deadlineDate: ""
-    };
-  }
-
-  return {
-    publicationDate: normalizeDate(rangeMatch[1]),
-    deadlineDate: normalizeDate(rangeMatch[2])
-  };
+  return extractPublicationDateRange(normalizeWhitespace(value));
 }
 
 function extractPublicationDateFromText(value) {
