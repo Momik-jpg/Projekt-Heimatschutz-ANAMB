@@ -214,7 +214,8 @@ svg { display: block; }
 /* ---- Liste --------------------------------------------------------- */
 .list-panel {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  /* panel-head, tabs, region-filters, filter-bar, table-shell */
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   height: calc(100vh - 196px);
   min-height: 540px;
 }
