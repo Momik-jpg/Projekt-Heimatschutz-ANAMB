@@ -1160,6 +1160,16 @@ export function createApp(options = {}) {
       return;
     }
 
+    const rateLimitKey = `2fa:${request.ip || "unknown"}`;
+    if (loginRateLimiter) {
+      const limitStatus = loginRateLimiter.check(rateLimitKey);
+      if (limitStatus.limited) {
+        response.setHeader("Retry-After", String(limitStatus.retryAfterSeconds));
+        response.status(429).json({ error: "Zu viele 2FA-Versuche. Bitte in einigen Minuten erneut versuchen." });
+        return;
+      }
+    }
+
     const code = String(request.body?.code ?? "").trim();
     const pendingSecret = settingsRepository.getValue(masterTotpPendingSecretSettingKey);
 
@@ -1169,10 +1179,12 @@ export function createApp(options = {}) {
     }
 
     if (!verifyTotp(pendingSecret, code)) {
+      loginRateLimiter?.recordFailure(rateLimitKey);
       response.status(400).json({ error: "Der Code ist ungültig. Bitte erneut versuchen." });
       return;
     }
 
+    loginRateLimiter?.recordSuccess(rateLimitKey);
     settingsRepository.setValue(masterTotpSecretSettingKey, pendingSecret);
     settingsRepository.setValue(masterTotpEnabledSettingKey, "1");
     settingsRepository.deleteByKey(masterTotpPendingSecretSettingKey);
@@ -1192,14 +1204,26 @@ export function createApp(options = {}) {
       return;
     }
 
+    const rateLimitKey = `2fa:${request.ip || "unknown"}`;
+    if (loginRateLimiter) {
+      const limitStatus = loginRateLimiter.check(rateLimitKey);
+      if (limitStatus.limited) {
+        response.setHeader("Retry-After", String(limitStatus.retryAfterSeconds));
+        response.status(429).json({ error: "Zu viele 2FA-Versuche. Bitte in einigen Minuten erneut versuchen." });
+        return;
+      }
+    }
+
     const code = String(request.body?.code ?? "").trim();
     const secret = settingsRepository.getValue(masterTotpSecretSettingKey);
 
     if (!secret || !verifyTotp(secret, code)) {
+      loginRateLimiter?.recordFailure(rateLimitKey);
       response.status(400).json({ error: "Der Code ist ungültig. Bitte erneut versuchen." });
       return;
     }
 
+    loginRateLimiter?.recordSuccess(rateLimitKey);
     settingsRepository.deleteByKey(masterTotpSecretSettingKey);
     settingsRepository.deleteByKey(masterTotpEnabledSettingKey);
     settingsRepository.deleteByKey(masterTotpPendingSecretSettingKey);
