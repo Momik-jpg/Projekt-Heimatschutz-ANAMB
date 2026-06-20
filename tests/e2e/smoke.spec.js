@@ -37,6 +37,9 @@ test("Arbeitsliste: Fälle und Tabs werden geladen", async ({ page }) => {
   const firstRow = page.locator("#tbody tr[data-id]").first();
   await expect(firstRow).toBeVisible();
   await expect(firstRow).toHaveClass(/unread/);
+  await expect(page.locator("#tbody tr.selected")).toHaveCount(0);
+  await expect(page.locator("#detailEmpty")).toBeVisible();
+  await expect(firstRow.locator(".unread-dot")).toHaveAttribute("aria-hidden", "true");
   await expect(page.locator("#resultCount")).toContainText("Baugesuch");
   const totalCount = ((await page.locator("#resultCount").textContent()) ?? "").trim();
   // Nur die beiden fachlichen Hauptreiter bleiben bestehen.
@@ -78,8 +81,31 @@ test("Detail: Bauvorhaben-Feld zeigt sauberen Text (Regressionsschutz)", async (
   expect(text).not.toBe("–");
   // Regressionsschutz für den Bauvorhaben-Fix: kein roher Mischtext / HTML
   expect(text).not.toMatch(/Bauherr|Bauplatz|Grundeigent|Projektverfasser|<[a-z/]/i);
-  await expect(page.locator("#projectScale")).toContainText(/Klein|Mittel|Gross/);
+  await expect(page.locator("#projectScale")).toContainText(/Klein|Mittel|Gross|Unbekannt/);
   await expect(page.locator("#sourceLink")).toHaveAttribute("href", /^https?:\/\//);
+});
+
+test("Mobile: Arbeitsliste bleibt ohne horizontales Scrollen bedienbar", async ({ page }) => {
+  await page.setViewportSize({ width: 500, height: 844 });
+  await loginAsMaster(page);
+  await revealOlderRowsIfNeeded(page);
+
+  const dimensions = await page.evaluate(() => {
+    const shell = document.querySelector(".list-panel .table-shell");
+    const list = document.querySelector(".list-panel");
+    const detail = document.querySelector(".detail-panel");
+    return {
+      pageWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+      tableWidth: shell.scrollWidth,
+      tableViewport: shell.clientWidth,
+      detailDistance: detail.getBoundingClientRect().top - list.getBoundingClientRect().top
+    };
+  });
+
+  expect(dimensions.pageWidth).toBeLessThanOrEqual(dimensions.viewportWidth);
+  expect(dimensions.tableWidth).toBeLessThanOrEqual(dimensions.tableViewport + 1);
+  expect(dimensions.detailDistance).toBeLessThan(1800);
 });
 
 test("Verwaltung: Master sieht Gemeindequellen", async ({ page }) => {

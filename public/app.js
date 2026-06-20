@@ -666,6 +666,10 @@ function itemTitle(item) {
 
 function readableAddress(item) {
   const address = normalizeText(item.address)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+box(?:\s+box[-\w]+)+["']?(?:\s+[\s\S]*)?$/i, "")
+    .replace(/\s+data-[\w-]+\s*=\s*["'][\s\S]*$/i, "")
+    .replace(/\s+(?:Gegen das obenstehende|Gegen dieses Baugesuch|Einsprachen sind)\b[\s\S]*$/i, "")
     .replace(/\.{2,}\s*\[mehr\].*$/i, "")
     .replace(/\s*\[mehr\].*$/i, "")
     .replace(/\s*(?:Bauherr(?:schaft)?|Grundeigentümer(?:in)?|Projektverfasser|Bauprojekt|Bauvorhaben|Lage):.*$/i, "");
@@ -785,7 +789,7 @@ function renderTable() {
 
   const recentRows = rows.filter((item) => publicationAgeDays(item) <= 14);
   const olderRows = rows.filter((item) => publicationAgeDays(item) > 14);
-  const scaleLabel = (scale) => ({ klein: "Klein", mittel: "Mittel", gross: "Gross" })[scale] || "Mittel";
+  const scaleLabel = (scale) => ({ klein: "Klein", mittel: "Mittel", gross: "Gross", unbekannt: "Unbekannt" })[scale] || "Unbekannt";
   const renderRows = (items) => items
     .map((item) => {
       const protection = protectionMeta(item);
@@ -797,7 +801,7 @@ function renderTable() {
         due.cls === "due-over" ? "urg-over" : due.cls === "due-soon" ? "urg-soon" : ""
       ].filter(Boolean).join(" ");
       return `<tr tabindex="0" data-id="${escapeHtml(item.id)}" class="${classes}">
-        <td><span class="unread-dot" aria-label="Ungelesen"></span><span class="cell-mun">${escapeHtml(item.municipality || "-")}</span><span class="cell-mun-sub">${escapeHtml(item.region || item.source || "Baugesuch")}</span></td>
+        <td><span class="unread-dot" aria-hidden="true"></span>${item.isRead ? "" : '<span class="sr-only">Ungelesen: </span>'}<span class="cell-mun">${escapeHtml(item.municipality || "-")}</span><span class="cell-mun-sub">${escapeHtml(item.region || item.source || "Baugesuch")}</span></td>
         <td><span class="cell-app-title">${escapeHtml(itemTitle(item))}</span><span class="cell-app-sub">${escapeHtml(readableAddress(item))}</span><span class="cell-app-meta">Publiziert ${escapeHtml(formatDate(item.publicationDate))} · ${escapeHtml(scaleLabel(item.projectScale))}</span></td>
         <td><span class="hit ${protection.cls}">${escapeHtml(protection.label)}</span></td>
         <td><span class="cell-due">${escapeHtml(formatDate(item.deadlineDate))}</span><span class="cell-due-meta ${due.cls}">${escapeHtml(due.txt)}</span></td>
@@ -1099,7 +1103,10 @@ function ensureMap() {
     attribution: "&copy; OpenStreetMap"
   }).addTo(mapState.instance);
   mapState.marker = window.L.marker([47.3925, 8.0442], {
-    icon: createLocationMarkerIcon()
+    icon: createLocationMarkerIcon(),
+    title: "Standort des Baugesuchs",
+    alt: "Standort des Baugesuchs",
+    keyboard: true
   }).addTo(mapState.instance);
   mapState.overlayGroup = window.L.featureGroup().addTo(mapState.instance);
   return mapState.instance;
@@ -1457,8 +1464,8 @@ function renderDetail() {
   el.fDue.innerHTML = `${escapeHtml(formatDate(item.deadlineDate))} <span class="cell-due-meta cell-due-meta-inline ${due.cls}">· ${escapeHtml(due.txt)}</span>`;
   el.fAgis.textContent = item.agisMatch || protection.label;
   el.fProject.textContent = readableProject(item);
-  el.projectScale.textContent = ({ klein: "Klein", mittel: "Mittel", gross: "Gross" })[item.projectScale] || "Mittel";
-  el.projectScale.className = `project-scale scale-${item.projectScale || "mittel"}`;
+  el.projectScale.textContent = ({ klein: "Klein", mittel: "Mittel", gross: "Gross", unbekannt: "Unbekannt" })[item.projectScale] || "Unbekannt";
+  el.projectScale.className = `project-scale scale-${item.projectScale || "unbekannt"}`;
   const sourceUrl = String(item.sourceUrl || "").trim();
   const hasSourceUrl = /^https?:\/\//i.test(sourceUrl);
   el.sourceLink.classList.toggle("hidden", !hasSourceUrl);
@@ -1726,8 +1733,8 @@ async function loadDashboard() {
 async function loadApplications() {
   const payload = await requestJson("/api/applications");
   state.items = payload.items ?? [];
-  if (!state.selectedId || !state.items.some((item) => item.id === state.selectedId)) {
-    state.selectedId = visibleItems()[0]?.id ?? state.items[0]?.id ?? null;
+  if (state.selectedId && !state.items.some((item) => item.id === state.selectedId)) {
+    state.selectedId = null;
   }
 }
 
@@ -1984,8 +1991,9 @@ function wireEvents() {
     state.activeTab = button.dataset.tab;
     state.showOlder = false;
     $$(".tab").forEach((entry) => entry.classList.toggle("active", entry === button));
-    const first = visibleItems()[0];
-    if (first) state.selectedId = first.id;
+    if (state.selectedId && !visibleItems().some((item) => item.id === state.selectedId)) {
+      state.selectedId = null;
+    }
     renderTable();
     renderDetail();
     if (state.selectedId) loadComments(state.selectedId);
