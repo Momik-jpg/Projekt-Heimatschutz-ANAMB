@@ -1,0 +1,38 @@
+# Hosting-neutraler Betrieb: App als Container, Cloudflare davor via Tunnel.
+# Start: docker compose up -d --build
+services:
+  app:
+    build: .
+    image: heimatschutz-aargau
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_PATH: /data/heimatschutz.sqlite
+    volumes:
+      - hsa-data:/data
+    # Nur an localhost gebunden (kein oeffentlicher Port). Mit Cloudflare Tunnel
+    # ist selbst das optional – der Tunnel erreicht die App ueber das Compose-Netz.
+    ports:
+      - "127.0.0.1:3000:3000"
+    expose:
+      - "3000"
+
+  # Cloudflare Tunnel: macht die App oeffentlich erreichbar, ohne am Server einen
+  # Port zu oeffnen (TLS/WAF/CDN/DDoS via Cloudflare). Token aus Cloudflare Zero
+  # Trust -> Networks -> Tunnels; dort den Public Hostname auf http://app:3000
+  # routen. CLOUDFLARE_TUNNEL_TOKEN in .env setzen. Ohne Token diesen Dienst
+  # weglassen (z. B. fuer reinen lokalen/VPS-internen Betrieb).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - app
+
+volumes:
+  hsa-data:
