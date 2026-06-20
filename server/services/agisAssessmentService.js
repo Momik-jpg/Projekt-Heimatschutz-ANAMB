@@ -1,3 +1,5 @@
+import { sanitizeForLog } from "../logSafe.js";
+
 function parseSwissCoordinates(coordinates) {
   if (!coordinates) {
     return null;
@@ -286,7 +288,7 @@ export function createAgisAssessmentService({ repository, agisGeometryService, l
           locationPrecision: item.locationPrecision
         });
       } catch (error) {
-        logger.warn?.(`AGIS-Neubewertung fehlgeschlagen für ${item.id}: ${error.message}`);
+        logger.warn?.(`AGIS-Neubewertung fehlgeschlagen für ${sanitizeForLog(item.id)}: ${sanitizeForLog(error.message)}`);
         return null;
       }
     },

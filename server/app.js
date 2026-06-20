@@ -42,6 +42,7 @@ import { createMailService } from "./services/mailService.js";
 import { createMaintenanceService } from "./services/maintenanceService.js";
 import { buildOtpauthUri, generateTotpSecret, verifyTotp } from "./services/totp.js";
 import { encryptToken, decryptToken, isTokenSet } from "./services/tokenCrypto.js";
+import { sanitizeForLog } from "./logSafe.js";
 
 import {
   gzipAsync,
@@ -187,7 +188,7 @@ export function createApp(options = {}) {
     try {
       return Boolean(await turnstileVerifyImpl(token, turnstileSecretKey, request.ip));
     } catch (error) {
-      logger.warn?.(`Turnstile-Prüfung fehlgeschlagen: ${error.message}`);
+      logger.warn?.(`Turnstile-Prüfung fehlgeschlagen: ${sanitizeForLog(error.message)}`);
       return false;
     }
   }
@@ -344,7 +345,7 @@ export function createApp(options = {}) {
   }
 
   const masterSetupReadyPromise = ensureMasterAccountReady().catch((error) => {
-    logger.warn?.(`Master-Setup konnte nicht abgeschlossen werden: ${error.message}`);
+    logger.warn?.(`Master-Setup konnte nicht abgeschlossen werden: ${sanitizeForLog(error.message)}`);
     return null;
   });
   const loginRateLimiter =
@@ -416,7 +417,7 @@ export function createApp(options = {}) {
   });
   const initialAgisRefreshPromise = agisAssessmentEnabled && (options.agisRefreshOnStart ?? true)
     ? agisAssessmentService.refreshAll().catch((error) => {
-        console.warn(`AGIS-Neubewertung beim Start fehlgeschlagen: ${error.message}`);
+        console.warn(`AGIS-Neubewertung beim Start fehlgeschlagen: ${sanitizeForLog(error.message)}`);
         return null;
       })
     : Promise.resolve(null);
@@ -830,7 +831,7 @@ export function createApp(options = {}) {
         expiresAt
       });
     } catch (error) {
-      logger.warn?.(`Passwort-Reset-Mail fehlgeschlagen: ${error.message}`);
+      logger.warn?.(`Passwort-Reset-Mail fehlgeschlagen: ${sanitizeForLog(error.message)}`);
     }
 
     recordAudit("auth.password_reset_requested", request, { target: username });
