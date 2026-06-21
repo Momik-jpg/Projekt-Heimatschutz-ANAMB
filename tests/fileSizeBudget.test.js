@@ -15,8 +15,7 @@ const EXEMPT = new Set([
   "server/seed/municipalitySources.js",
   // Bekannte Uebergroessen – TODO splitten (Allowlist verkleinern):
   "public/app.js",
-  "server/app.js",
-  "server/services/applicationsSyncDiscovery.js"
+  "server/app.js"
 ]);
 
 async function collectJsFiles(relDir) {
