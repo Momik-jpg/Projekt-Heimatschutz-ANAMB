@@ -288,7 +288,6 @@ async function queryContextAreaFeatures(fetchImpl, east, north) {
 
       features.push(...normalizeAreaFeatures(payload.features, layer));
     } catch {
-      continue;
     }
   }
 

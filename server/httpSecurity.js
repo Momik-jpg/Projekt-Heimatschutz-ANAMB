@@ -1,7 +1,7 @@
 // HTTP-Sicherheit (Cookies/CSRF/Header/Kompression/Rate-Limit/Turnstile) – aus httpSupport.js aufgeteilt.
 import { promisify } from "node:util";
 import { gzip } from "node:zlib";
-import { extname, join } from "node:path";
+import { extname, } from "node:path";
 import {
   nowIso
 } from "./httpSupportCore.js";

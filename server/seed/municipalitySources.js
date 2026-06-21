@@ -805,7 +805,7 @@ function buildPrimarySourceDefinition(municipality, rawPrefill, operationalSourc
   };
 }
 
-function buildMunicipalityQualityAssessment(municipality, rawPrefill, operationalSource, primarySource) {
+function buildMunicipalityQualityAssessment(_municipality, rawPrefill, operationalSource, primarySource) {
   const cueText = `${operationalSource.sourceUrl} ${rawPrefill.matchedText}`.trim();
   const looksLikeDedicatedBuildingPage =
     htmlBuildingPagePattern.test(cueText) && !htmlEbauPortalPattern.test(cueText) && !htmlWrongTopicPattern.test(cueText);

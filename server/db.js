@@ -1,7 +1,5 @@
 import {
-  seededPasswordMap,
   insertSeedRecords,
-  lockedPasswordRecord,
   insertSeedUsers,
   insertSeedMunicipalitySources,
   upsertSeedMunicipalities,
@@ -17,16 +15,12 @@ import {
   ensureColumn,
   normalizeLegacyApplicationCoordinates,
   normalizeInvalidApplicationDeadlines,
-  hasAppliedMigration,
-  recordAppliedMigration,
-  applicationsCount,
   repairImportedApplicationFields,
-  backupDatabaseBeforeMigration,
   applyMigrationOnce
 } from "./db/migrations.js";
 
-import { copyFileSync, mkdirSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 // ACHTUNG: node:sqlite (DatabaseSync) ist in Node noch als *experimental* markiert
 // ("might change at any time") und erfordert Node >= 24 (siehe package.json engines).
@@ -40,16 +34,9 @@ import {
   aargauMunicipalitySourceLinks,
   aargauMunicipalitySources,
   aargauPublicationSources,
-  isAutoManagedMunicipalitySourceNote
 } from "./seed/municipalitySources.js";
-import { randomBytes } from "node:crypto";
 import { seedApplications } from "./seed/applications.js";
 import { seedUsers } from "./seed/users.js";
-import { createUserPasswordRecord } from "./repository/usersRepository.js";
-import {
-  cleanImportedAddress,
-  normalizeImportedDates
-} from "./domain/applicationImportNormalization.js";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const defaultDbPath = process.env.DATABASE_PATH || join(rootDir, "data", "heimatschutz.sqlite");
@@ -63,9 +50,9 @@ const defaultSeedDemoApplications =
  */
 export function createDatabase(dbPath = defaultDbPath, options = {}) {
   const databaseOptions = /** @type {Record<string, unknown>} */ (options);
-  const seedDemoApplications = databaseOptions["seedDemoApplications"] ?? defaultSeedDemoApplications;
-  const masterAccountPassword = String(databaseOptions["masterAccountPassword"] ?? process.env.MASTER_ACCOUNT_PASSWORD ?? "").trim();
-  const defaultLoginPassword = String(databaseOptions["defaultLoginPassword"] ?? process.env.DEFAULT_LOGIN_PASSWORD ?? "").trim();
+  const seedDemoApplications = databaseOptions.seedDemoApplications ?? defaultSeedDemoApplications;
+  const masterAccountPassword = String(databaseOptions.masterAccountPassword ?? process.env.MASTER_ACCOUNT_PASSWORD ?? "").trim();
+  const defaultLoginPassword = String(databaseOptions.defaultLoginPassword ?? process.env.DEFAULT_LOGIN_PASSWORD ?? "").trim();
   mkdirSync(dirname(dbPath), { recursive: true });
 
   const db = new DatabaseSync(dbPath);

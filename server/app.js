@@ -45,53 +45,25 @@ import { encryptToken, decryptToken, isTokenSet } from "./services/tokenCrypto.j
 import { sanitizeForLog } from "./logSafe.js";
 
 import {
-  gzipAsync,
-  currentDir,
-  rootDir,
   publicDir,
-  sessionCookieName,
-  sessionMaxAgeSeconds,
-  registrationKeyLifetimeDays,
   agisBaugesucheDatendocUrl,
-  placeholderPasswordValues,
-  placeholderSyncSourceMarkers,
-  contentSecurityPolicy,
-  municipalitySourcePatternMaxLength,
-  municipalitySourcePatternMaxTerms,
-  municipalitySourcePatternTermMaxLength,
-  municipalitySourcePatternUnsupportedChars,
   nowIso,
   buildSessionExpiry,
   buildRegistrationKeyExpiry,
   normalizeEnvString,
-  normalizeHttpUrl,
-  looksLikeEmailAddress,
-  validateMunicipalitySourceSearchPattern,
-  looksLikeMachineReadableSourceUrl,
-  normalizeSecretForComparison,
   isPlaceholderPassword,
   normalizeSyncSourceUrl,
   validateProductionRuntimeConfiguration,
   generateRegistrationKey,
-  masterSetupKeyLifetimeHours,
   generateMasterSetupKey,
   buildMasterSetupExpiry,
-  passwordResetKeyLifetimeHours,
   generatePasswordResetKey,
   buildPasswordResetExpiry,
-  normalizeRegistrationKey,
-  parseCookies,
-  isSecureRequest,
   buildSessionCookie,
   buildExpiredSessionCookie,
-  csrfProtectedMethods,
-  getRequestHosts,
   createCsrfOriginGuard,
   setCommonSecurityHeaders,
   setStaticAssetHeaders,
-  compressibleContentTypePattern,
-  isCompressibleContentType,
-  appendVaryHeader,
   createCompressionMiddleware,
   createLoginRateLimiter,
   verifyTurnstileToken,
@@ -100,17 +72,14 @@ import {
   validateRegistrationKeyCreationPayload,
   validatePasswordResetPayload,
   validateManualImportPayload,
-  looksLikeAmtsblattUrl,
   validateSyncSettingsPayload,
   validateMunicipalitySourcePayload,
   validateCommentPayload,
   resolveCurrentUser,
   isMasterUser,
   handleHealthCheck,
-  escapeCsvValue,
   buildCsvResponse,
   validateApplicationPatch,
-  shouldCreateImportNotification,
   buildImportNotificationEntries
 } from "./httpSupport.js";
 
@@ -274,7 +243,7 @@ export function createApp(options = {}) {
 
     const subject = "Heimatschutz Aargau – Passwort zurücksetzen";
     const text = [
-      `Hallo ${displayName || ""}`.trim() + ",",
+      `${`Hallo ${displayName || ""}`.trim()},`,
       "",
       "für Ihr Konto wurde ein Passwort-Reset angefordert. Bitte öffnen Sie die Anwendung,",
       'wählen Sie "Passwort vergessen" und geben Sie den folgenden Einmal-Schlüssel zusammen',
@@ -787,7 +756,7 @@ export function createApp(options = {}) {
       ? usersRepository.getContactByEmail(email)
       : usersRepository.getContactByUsername(username);
 
-    if (!contact || !contact.email) {
+    if (!contact?.email) {
       // Keine passende E-Mail/kein Konto: bewusst dieselbe Antwort (kein Rückschluss).
       recordAudit("auth.password_reset_requested", request, {
         target: email || username,

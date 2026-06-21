@@ -271,7 +271,7 @@ export async function buildStructuredPublicationImportedItems(
     const excludeMatcher = createSourcePatternMatcher(source.excludePattern);
     const matchingText = normalizeWhitespace([resolvedUrl, blockText, bauobjekt, bauplatz].filter(Boolean).join(" "));
 
-    if (excludeMatcher && excludeMatcher(matchingText)) {
+    if (excludeMatcher?.(matchingText)) {
       continue;
     }
 

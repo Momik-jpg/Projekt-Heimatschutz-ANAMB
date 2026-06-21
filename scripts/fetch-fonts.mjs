@@ -59,5 +59,5 @@ for (const fam of families) {
 }
 
 const header = "/* Self-hosted Schriften (latin, latin-ext) – generiert via scripts/fetch-fonts.mjs */\n\n";
-await writeFile("public/fonts.css", header + faces.join("\n\n") + "\n");
+await writeFile("public/fonts.css", `${header + faces.join("\n\n")}\n`);
 console.log(`\nDone: ${faces.length} @font-face Regeln -> public/fonts.css`);

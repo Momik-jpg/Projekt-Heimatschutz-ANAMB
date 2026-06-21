@@ -202,7 +202,7 @@ export function cleanPublicationProjectSegment(value, address = "") {
 
   const normalizedAddress = sanitizeExtractedAddress(address);
   let text = normalizeWhitespace(value)
-    .replace(new RegExp(`\\s*-\\s*(?:frist|auflage|publiziert)\\b[\\s\\S]*$`, "i"), "")
+    .replace(/\s*-\s*(?:frist|auflage|publiziert)\b[\s\S]*$/i, "")
     .replace(/\bBG\s*20\d{2}(?:[-/.]\d+)?\b/gi, "")
     .replace(/\bBaugesuch(?:e)?\b[:\s-]*/gi, "")
     .replace(/\bÖffentliche(?:r|)? Auflage\b[:\s-]*/gi, "")

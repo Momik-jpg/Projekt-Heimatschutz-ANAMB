@@ -34,6 +34,6 @@ test("leere Werte bleiben leer", () => {
 
 test("manipulierter Ciphertext entschlüsselt nicht (Auth-Tag)", () => {
   const stored = encryptToken("integritaet");
-  const tampered = stored.slice(0, -4) + "AAAA";
+  const tampered = `${stored.slice(0, -4)}AAAA`;
   assert.equal(decryptToken(tampered), "");
 });
