@@ -24,6 +24,14 @@ export const workflowStatuses = [
   "archived"
 ];
 
+const deadlineProvenances = new Set(["explicit", "derived-rule", "missing", "legacy-unknown"]);
+const addressProvenances = new Set(["official-field", "geocoder", "fallback", "legacy-unknown"]);
+
+function normalizeProvenance(value, allowedValues) {
+  const normalized = String(value ?? "").trim();
+  return allowedValues.has(normalized) ? normalized : "legacy-unknown";
+}
+
 function mapRow(row) {
   if (!row) {
     return null;
@@ -37,11 +45,13 @@ function mapRow(row) {
     municipality: row.municipality,
     region: getApplicationRegion(row.municipality),
     address: cleanImportedAddress(row.address),
+    addressProvenance: row.address_provenance ?? "legacy-unknown",
     parcel: row.parcel,
     coordinates: row.coordinates,
     locationPrecision: row.location_precision ?? "",
     publicationDate: row.publication_date,
     deadlineDate: row.deadline_date,
+    deadlineProvenance: row.deadline_provenance ?? "legacy-unknown",
     projectType: row.project_type,
     description: row.description,
     projectScale: classifyProjectScale({
@@ -52,6 +62,7 @@ function mapRow(row) {
     agisMatch: row.agis_match,
     agisLayers: JSON.parse(row.agis_layers || "[]"),
     workflowStatus: row.workflow_status,
+    archivedAt: row.archived_at ?? "",
     assignee: row.assignee,
     note: row.note,
     automatedAssessment: row.automated_assessment,
@@ -102,17 +113,20 @@ function buildListQuery(filters) {
       source_url,
       municipality,
       address,
+      address_provenance,
       parcel,
       coordinates,
       location_precision,
       publication_date,
       deadline_date,
+      deadline_provenance,
       project_type,
       description,
       protection_status,
       agis_match,
       agis_layers,
       workflow_status,
+      archived_at,
       assignee,
       note,
       automated_assessment,
@@ -156,17 +170,20 @@ function buildImportedRecord(item, syncedAt) {
     sourceUrl: item.sourceUrl,
     municipality: item.municipality,
     address: cleanImportedAddress(item.address),
+    addressProvenance: normalizeProvenance(item.addressProvenance, addressProvenances),
     parcel: item.parcel ?? "",
     coordinates: item.coordinates ?? "",
     locationPrecision: item.locationPrecision ?? "",
     publicationDate: dates.publicationDate,
     deadlineDate: dates.deadlineDate,
+    deadlineProvenance: normalizeProvenance(item.deadlineProvenance, deadlineProvenances),
     projectType: item.projectType,
     description: item.description,
     protectionStatus: item.protectionStatus,
     agisMatch: item.agisMatch,
     agisLayers: item.agisLayers ?? [],
     workflowStatus: item.workflowStatus ?? "new",
+    archivedAt: item.archivedAt ?? "",
     assignee: item.assignee ?? "",
     note: item.note ?? "",
     automatedAssessment: item.automatedAssessment ?? "",
@@ -197,17 +214,20 @@ export function createApplicationsRepository(db) {
       source_url,
       municipality,
       address,
+      address_provenance,
       parcel,
       coordinates,
       location_precision,
       publication_date,
       deadline_date,
+      deadline_provenance,
       project_type,
       description,
       protection_status,
       agis_match,
       agis_layers,
       workflow_status,
+      archived_at,
       assignee,
       note,
       automated_assessment,
@@ -215,7 +235,7 @@ export function createApplicationsRepository(db) {
       last_sync_at,
       created_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const updateImportedStatement = db.prepare(`
     UPDATE applications
@@ -223,11 +243,13 @@ export function createApplicationsRepository(db) {
         source_url = ?,
         municipality = ?,
         address = ?,
+        address_provenance = ?,
         parcel = ?,
         coordinates = ?,
         location_precision = ?,
         publication_date = ?,
         deadline_date = ?,
+        deadline_provenance = ?,
         project_type = ?,
         description = ?,
         protection_status = ?,
@@ -265,17 +287,20 @@ export function createApplicationsRepository(db) {
             source_url,
             municipality,
             address,
+            address_provenance,
             parcel,
             coordinates,
             location_precision,
             publication_date,
             deadline_date,
+            deadline_provenance,
             project_type,
             description,
             protection_status,
             agis_match,
             agis_layers,
             workflow_status,
+            archived_at,
             assignee,
             note,
             automated_assessment,
@@ -366,11 +391,13 @@ export function createApplicationsRepository(db) {
               next.sourceUrl,
               next.municipality,
               next.address,
+              next.addressProvenance,
               next.parcel,
               next.coordinates,
               next.locationPrecision,
               next.publicationDate,
               next.deadlineDate,
+              next.deadlineProvenance,
               next.projectType,
               next.description,
               next.protectionStatus,
@@ -399,17 +426,20 @@ export function createApplicationsRepository(db) {
             next.sourceUrl,
             next.municipality,
             next.address,
+            next.addressProvenance,
             next.parcel,
             next.coordinates,
             next.locationPrecision,
             next.publicationDate,
             next.deadlineDate,
+            next.deadlineProvenance,
             next.projectType,
             next.description,
             next.protectionStatus,
             next.agisMatch,
             JSON.stringify(next.agisLayers),
             next.workflowStatus,
+            next.archivedAt,
             next.assignee,
             next.note,
             next.automatedAssessment,
@@ -483,51 +513,28 @@ export function createApplicationsRepository(db) {
       }
     },
 
-    // Einen Tag nach der Frist verschwindet der komplette Fall. Fälle ohne
-    // verlässliche Frist bleiben erhalten und müssen in der Oberfläche auffallen.
-    pruneExpiredApplications({ referenceDate = new Date() } = {}) {
+    // Nur ausdrücklich belegte Fristen dürfen einen automatischen Statuswechsel
+    // auslösen. Der vollständige Fall und alle Team-Daten bleiben erhalten.
+    archiveExpiredApplications({ referenceDate = new Date() } = {}) {
       const date = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
 
       if (Number.isNaN(date.getTime())) {
         return 0;
       }
 
-      const referenceDateOnly = [
-        date.getFullYear(),
-        String(date.getMonth() + 1).padStart(2, "0"),
-        String(date.getDate()).padStart(2, "0")
-      ].join("-");
-
-      db.exec("BEGIN IMMEDIATE");
-      try {
-        db.prepare(`
-          DELETE FROM application_learning_rules
-          WHERE created_from_application_id IN (
-            SELECT id
-            FROM applications
-            WHERE IFNULL(deadline_date, '') <> ''
-              AND date(deadline_date) < date(?)
-          )
-        `).run(referenceDateOnly);
-
-        const result = db.prepare(`
-          DELETE FROM applications
-          WHERE IFNULL(deadline_date, '') <> ''
-            AND date(deadline_date) < date(?)
-        `).run(referenceDateOnly);
-
-        db.exec("COMMIT");
-        const removed = result.changes ?? 0;
-        if (removed > 0) {
-          // secure_delete überschreibt gelöschte Inhalte; der Checkpoint entfernt
-          // zusätzlich alte Frames aus der WAL-Datei.
-          db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
-        }
-        return removed;
-      } catch (error) {
-        db.exec("ROLLBACK");
-        throw error;
-      }
+      const referenceDateOnly = date.toISOString().slice(0, 10);
+      const archivedAt = date.toISOString();
+      const result = db.prepare(`
+        UPDATE applications
+        SET workflow_status = 'archived',
+            archived_at = ?,
+            updated_at = ?
+        WHERE IFNULL(deadline_date, '') <> ''
+          AND deadline_provenance = 'explicit'
+          AND workflow_status NOT IN ('cleared', 'archived')
+          AND date(deadline_date) < date(?)
+      `).run(archivedAt, archivedAt, referenceDateOnly);
+      return result.changes ?? 0;
     },
 
     getDashboard({ referenceDate = new Date() } = {}) {

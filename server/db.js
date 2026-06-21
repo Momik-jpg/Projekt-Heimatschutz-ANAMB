@@ -59,6 +59,9 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
   db.exec(schema);
   ensureColumn(db, "users", "email", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "applications", "location_precision", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "applications", "address_provenance", "TEXT NOT NULL DEFAULT 'legacy-unknown'");
+  ensureColumn(db, "applications", "deadline_provenance", "TEXT NOT NULL DEFAULT 'legacy-unknown'");
+  ensureColumn(db, "applications", "archived_at", "TEXT NOT NULL DEFAULT ''");
   // Datenmigrationen laufen einmalig pro Datenbank (vermerkt in
   // schema_migrations), nicht bei jedem Start. Vor destruktiven Schritten wird
   // – sofern Daten vorhanden sind – ein Backup angelegt.
@@ -359,4 +362,3 @@ export function getDefaultDbPath() {
 
 // applyMigrationOnce bleibt aus db.js erreichbar (Tests).
 export { applyMigrationOnce };
-

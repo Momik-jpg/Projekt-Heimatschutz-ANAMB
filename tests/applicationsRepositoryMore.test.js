@@ -95,14 +95,18 @@ test("pruneUntouchedMunicipalityImports: leere Quelle, Keep-Liste, Schutz berüh
   );
 });
 
-test("pruneExpiredApplications: ungültiges Datum, Vergangenheits-Frist, ohne Frist bleibt", () => {
+test("archiveExpiredApplications: ungültiges Datum, bestätigte Frist, ohne Frist bleibt", () => {
   const repo = setup();
-  assert.equal(repo.pruneExpiredApplications({ referenceDate: "kein-datum" }), 0);
+  assert.equal(repo.archiveExpiredApplications({ referenceDate: "kein-datum" }), 0);
 
-  repo.importItems([makeItem({ ref: "ALT", deadlineDate: "2026-03-01" }), makeItem({ ref: "OHNE" })]);
-  const removed = repo.pruneExpiredApplications({ referenceDate: new Date("2026-06-21") });
-  assert.equal(removed, 1);
-  assert.deepEqual(repo.list().map((x) => x.sourceReference), ["OHNE"]);
+  repo.importItems([
+    { ...makeItem({ ref: "ALT", deadlineDate: "2026-03-01" }), deadlineProvenance: "explicit" },
+    { ...makeItem({ ref: "OHNE" }), deadlineProvenance: "missing" }
+  ]);
+  const archived = repo.archiveExpiredApplications({ referenceDate: new Date("2026-06-21") });
+  assert.equal(archived, 1);
+  assert.equal(repo.list().find((item) => item.sourceReference === "ALT").workflowStatus, "archived");
+  assert.equal(repo.list().find((item) => item.sourceReference === "OHNE").workflowStatus, "new");
 });
 
 test("getDashboard: Kennzahlen, Quellen, dringende Fälle, ambiguousAddress", () => {

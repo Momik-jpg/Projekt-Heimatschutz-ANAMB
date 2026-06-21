@@ -13,7 +13,7 @@ test("plant die tägliche Wartung auf den nächsten lokalen Tageswechsel", () =>
   assert.equal(millisecondsUntilNextLocalMaintenance(now), 15 * 60 * 1000);
 });
 
-test("entfernt nach abgelaufenen Fällen alle SQLite-Sicherungskopien", () => {
+test("behält SQLite-Sicherungskopien nach automatischer Fallarchivierung", () => {
   const directory = mkdtempSync(join(tmpdir(), "heimatschutz-maintenance-"));
   const backupDirectory = join(directory, "backups", "legacy");
   const rootBackup = join(directory, "heimatschutz.sqlite.manual.bak");
@@ -26,17 +26,17 @@ test("entfernt nach abgelaufenen Fällen alle SQLite-Sicherungskopien", () => {
     const service = createMaintenanceService({
       dbPath: join(directory, "heimatschutz.sqlite"),
       applicationsRepository: {
-        pruneExpiredApplications: () => 2
+        archiveExpiredApplications: () => 2
       },
       runOnStart: false,
       backupEnabled: false
     });
 
     const result = service.runNow();
-    assert.equal(result.removedApplications, 2);
-    assert.equal(result.purgedBackups, 2);
-    assert.equal(existsSync(rootBackup), false);
-    assert.equal(existsSync(nestedBackup), false);
+    assert.equal(result.archivedApplications, 2);
+    assert.equal(result.purgedBackups, 0);
+    assert.equal(existsSync(rootBackup), true);
+    assert.equal(existsSync(nestedBackup), true);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

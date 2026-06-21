@@ -15,7 +15,7 @@ test("runCleanup summiert Entfernungen und ruft Audit-Bereinigung", () => {
     registrationKeysRepository: { deleteStale: () => 1 },
     masterSetupKeysRepository: { deleteStale: () => 2 },
     passwordResetKeysRepository: { deleteStale: () => 0 },
-    applicationsRepository: { pruneExpiredApplications: () => 3 },
+    applicationsRepository: { archiveExpiredApplications: () => 3 },
     auditLogRepository: {
       deleteOlderThan: () => {
         auditCalled = true;
@@ -36,7 +36,7 @@ test("runCleanup ohne Audit-Retention laesst deleteOlderThan aus", () => {
   let auditCalled = false;
   const service = createMaintenanceService({
     dbPath: ":memory:",
-    applicationsRepository: { pruneExpiredApplications: () => 0 },
+    applicationsRepository: { archiveExpiredApplications: () => 0 },
     auditLogRepository: {
       deleteOlderThan: () => {
         auditCalled = true;
@@ -57,7 +57,7 @@ test("start: deaktiviert -> kein Timer; aktiv -> runOnStart + scheduleNext + sto
   const base = {
     dbPath: ":memory:",
     applicationsRepository: {
-      pruneExpiredApplications: () => {
+      archiveExpiredApplications: () => {
         ran += 1;
         return 0;
       }

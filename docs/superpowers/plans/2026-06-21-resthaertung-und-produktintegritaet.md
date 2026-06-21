@@ -85,7 +85,7 @@ Expected: 294 Tests, 91.01 % Zeilen, 75.23 % Branches, 94.59 % Funktionen.
 - Modify: `tests/maintenanceServiceMore.test.js`
 - Create: `tests/applicationRetentionSafety.test.js`
 
-- [ ] **Step 1: Fehlende Sicherheitsverträge als rote Tests formulieren**
+- [x] **Step 1: Fehlende Sicherheitsverträge als rote Tests formulieren**
 
 Die Testdatei enthält vier konkrete Fälle mit einer `:memory:`-Datenbank: Ein
 abgelaufener unberührter Fall wird archiviert und bleibt abfragbar; ein
@@ -98,28 +98,29 @@ Run: `node --test tests/applicationRetentionSafety.test.js tests/maintenanceServ
 
 Expected: Mindestens die neuen Verträge schlagen mit dem aktuellen Code fehl.
 
-- [ ] **Step 2: Minimale Provenienzspalte sicher migrieren**
+- [x] **Step 2: Minimale Provenienzspalte sicher migrieren**
 
 `applications.deadline_provenance` erhält die erlaubten Werte `explicit`,
 `derived-rule`, `missing` und `legacy-unknown`. Bestehende Datensätze werden
 konservativ als `legacy-unknown` markiert; die Migration darf keine Fristen
 automatisch als bestätigt einstufen.
 
-- [ ] **Step 3: Fristablauf als Zustandswechsel statt Hard-Delete implementieren**
+- [x] **Step 3: Fristablauf als Zustandswechsel statt Hard-Delete implementieren**
 
 In `applicationsRepository.js` eine Methode `archiveExpiredApplications` einführen. Nur Fälle mit bestätigter Frist dürfen automatisch auf `workflow_status='archived'` gesetzt werden. Kommentare, Lesestatus, Lernregeln und Historie bleiben erhalten.
 
-- [ ] **Step 4: Physische Löschung separat und konservativ machen**
+- [x] **Step 4: Physische Löschung separat und konservativ machen**
 
-Eine Methode `purgeArchivedApplications` darf erst nach Task 2 aktiviert werden
-und nur Fälle löschen, die:
+Die automatische physische Löschung bleibt deaktiviert. Eine spätere Methode
+`purgeArchivedApplications` darf frühestens nach erfolgreicher Backup-Restore-
+Verifikation aus Task 8 eingeführt werden und nur Fälle löschen, die:
 
 - länger als `APPLICATION_RETENTION_DAYS` archiviert sind,
 - keine Notiz, Zuweisung oder Kommentare besitzen,
 - keine unbestätigte oder abgeleitete Frist besitzen,
 - in einer vor dem Lauf erstellten und verifizierten Sicherung enthalten sind.
 
-- [ ] **Step 5: Backup-Kopplung entfernen**
+- [x] **Step 5: Backup-Kopplung entfernen**
 
 In `maintenanceService.js` diese Logik vollständig entfernen:
 
@@ -129,17 +130,19 @@ const purgedBackups = removedApplications > 0 ? purgeDatabaseBackups() : 0;
 
 Backups werden ausschliesslich nach einer zeit- und anzahlbasierten Backup-Retention bereinigt, nie als Nebenwirkung einer Fachdatensäuberung.
 
-- [ ] **Step 6: Konfiguration tatsächlich verdrahten**
+- [x] **Step 6: Irreführende Retention-Konfiguration entfernen**
 
-`APPLICATION_RETENTION_DAYS` aus der Umgebung lesen, validieren und an den Maintenance-Service übergeben. `0` bedeutet keine physische Löschung.
+Da kein sicherer physischer Purge existiert, wird die wirkungslose
+`APPLICATION_RETENTION_DAYS`-Angabe entfernt. Die Dokumentation verspricht nur
+die tatsächlich implementierte Archivierung.
 
-- [ ] **Step 7: Tests grün machen**
+- [x] **Step 7: Tests grün machen**
 
 Run: `node --test tests/applicationRetention.test.js tests/applicationRetentionSafety.test.js tests/maintenanceService.test.js tests/maintenanceServiceMore.test.js`
 
 Expected: Alle Retention- und Backup-Verträge grün.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add server/repository/applicationsRepository.js server/services/maintenanceService.js server/app.js server/db/schema.js server/db/migrations.js .env.example tests/applicationRetention.test.js tests/applicationRetentionSafety.test.js tests/maintenanceService.test.js tests/maintenanceServiceMore.test.js

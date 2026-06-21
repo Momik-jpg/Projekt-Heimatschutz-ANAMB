@@ -1,5 +1,5 @@
 import { copyFileSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 export function millisecondsUntilNextLocalMaintenance(now = new Date()) {
   const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -30,40 +30,7 @@ export function createMaintenanceService({
   clearTimeoutFn = clearTimeout
 } = {}) {
   let timerId = null;
-  let lastCleanup = { removedApplications: 0, purgedBackups: 0 };
-
-  function purgeDatabaseBackups() {
-    if (!dbPath || dbPath === ":memory:") return 0;
-    const root = resolve(dirname(dbPath));
-    const prefix = `${basename(dbPath)}.`;
-    const directories = [root];
-    let removed = 0;
-
-    while (directories.length) {
-      const directory = directories.pop();
-      let entries = [];
-      try {
-        entries = readdirSync(directory, { withFileTypes: true });
-      } catch {
-        continue;
-      }
-
-      for (const entry of entries) {
-        const target = join(directory, entry.name);
-        if (entry.isDirectory() && !entry.isSymbolicLink()) {
-          directories.push(target);
-        } else if (entry.isFile() && entry.name.startsWith(prefix) && entry.name.endsWith(".bak")) {
-          try {
-            rmSync(target, { force: true });
-            removed += 1;
-          } catch {
-            logger.warn?.(`SQLite-Backup konnte nicht gelöscht werden: ${target}`);
-          }
-        }
-      }
-    }
-    return removed;
-  }
+  let lastCleanup = { archivedApplications: 0, purgedBackups: 0 };
 
   function runCleanup() {
     const referenceDate = nowProvider();
@@ -74,10 +41,9 @@ export function createMaintenanceService({
     removed += registrationKeysRepository?.deleteStale?.(now) ?? 0;
     removed += masterSetupKeysRepository?.deleteStale?.(now) ?? 0;
     removed += passwordResetKeysRepository?.deleteStale?.(now) ?? 0;
-    const removedApplications = applicationsRepository?.pruneExpiredApplications?.({ referenceDate }) ?? 0;
-    removed += removedApplications;
-    const purgedBackups = removedApplications > 0 ? purgeDatabaseBackups() : 0;
-    lastCleanup = { removedApplications, purgedBackups };
+    const archivedApplications = applicationsRepository?.archiveExpiredApplications?.({ referenceDate }) ?? 0;
+    removed += archivedApplications;
+    lastCleanup = { archivedApplications, purgedBackups: 0 };
 
     if (auditRetentionDays > 0 && auditLogRepository?.deleteOlderThan) {
       const cutoff = new Date(referenceDate.getTime() - auditRetentionDays * 24 * 60 * 60 * 1000).toISOString();
@@ -180,7 +146,6 @@ export function createMaintenanceService({
 
     runNow,
     runCleanup,
-    runBackup,
-    purgeDatabaseBackups
+    runBackup
   };
 }
