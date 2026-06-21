@@ -6520,7 +6520,9 @@ test("protected AGIS ArcGIS sources can sync automatically with a token", async 
 
   assert.equal(saveResponse.status, 200);
   assert.equal(saveResponse.payload.sourceUrl, "https://www.ag.ch/geoportal/rest/services/AGIS/afb_bauges/MapServer");
-  assert.equal(saveResponse.payload.sourceToken, "AGIS-TOKEN-123");
+  // S5: Der Token wird nie an den Client zurueckgegeben, nur dass einer gesetzt ist.
+  assert.equal(saveResponse.payload.sourceTokenSet, true);
+  assert.ok(!("sourceToken" in saveResponse.payload), "Token darf nicht zurueckgegeben werden");
 
   const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
     method: "POST",

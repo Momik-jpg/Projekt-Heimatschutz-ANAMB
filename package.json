@@ -7,6 +7,9 @@
     "dev": "node --watch server/app.js",
     "start": "node server/app.js",
     "test": "node --test",
+    "lint": "biome lint server scripts tests",
+    "lint:all": "biome lint",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=73 --test-coverage-functions=94",
     "pretest:e2e": "node tests/e2e/clean-db.mjs",
     "test:e2e": "playwright test",
     "diagnose:manual-review": "node scripts/diagnose-manual-review.js",
@@ -40,6 +43,7 @@
     "pdf-parse": "^2.4.5"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
     "@playwright/test": "^1.60.0"
   }
 }

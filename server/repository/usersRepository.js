@@ -60,18 +60,6 @@ export async function createUserPasswordRecordAsync(password) {
 
 export function createUsersRepository(db) {
   return {
-    listPublicUsers() {
-      return db
-        .prepare(`
-          SELECT id, username, display_name, role
-          FROM users
-          WHERE active = 1
-          ORDER BY display_name ASC
-        `)
-        .all()
-        .map(mapUser);
-    },
-
     listForAdmin() {
       return db
         .prepare(`

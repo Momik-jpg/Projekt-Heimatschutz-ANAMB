@@ -41,55 +41,29 @@ import { createApplicationReadsRepository } from "./repository/applicationReadsR
 import { createMailService } from "./services/mailService.js";
 import { createMaintenanceService } from "./services/maintenanceService.js";
 import { buildOtpauthUri, generateTotpSecret, verifyTotp } from "./services/totp.js";
+import { encryptToken, decryptToken, isTokenSet } from "./services/tokenCrypto.js";
+import { sanitizeForLog } from "./logSafe.js";
 
 import {
-  gzipAsync,
-  currentDir,
-  rootDir,
   publicDir,
-  sessionCookieName,
-  sessionMaxAgeSeconds,
-  registrationKeyLifetimeDays,
   agisBaugesucheDatendocUrl,
-  placeholderPasswordValues,
-  placeholderSyncSourceMarkers,
-  contentSecurityPolicy,
-  municipalitySourcePatternMaxLength,
-  municipalitySourcePatternMaxTerms,
-  municipalitySourcePatternTermMaxLength,
-  municipalitySourcePatternUnsupportedChars,
   nowIso,
   buildSessionExpiry,
   buildRegistrationKeyExpiry,
   normalizeEnvString,
-  normalizeHttpUrl,
-  looksLikeEmailAddress,
-  validateMunicipalitySourceSearchPattern,
-  looksLikeMachineReadableSourceUrl,
-  normalizeSecretForComparison,
   isPlaceholderPassword,
   normalizeSyncSourceUrl,
   validateProductionRuntimeConfiguration,
   generateRegistrationKey,
-  masterSetupKeyLifetimeHours,
   generateMasterSetupKey,
   buildMasterSetupExpiry,
-  passwordResetKeyLifetimeHours,
   generatePasswordResetKey,
   buildPasswordResetExpiry,
-  normalizeRegistrationKey,
-  parseCookies,
-  isSecureRequest,
   buildSessionCookie,
   buildExpiredSessionCookie,
-  csrfProtectedMethods,
-  getRequestHosts,
   createCsrfOriginGuard,
   setCommonSecurityHeaders,
   setStaticAssetHeaders,
-  compressibleContentTypePattern,
-  isCompressibleContentType,
-  appendVaryHeader,
   createCompressionMiddleware,
   createLoginRateLimiter,
   verifyTurnstileToken,
@@ -98,22 +72,29 @@ import {
   validateRegistrationKeyCreationPayload,
   validatePasswordResetPayload,
   validateManualImportPayload,
-  looksLikeAmtsblattUrl,
   validateSyncSettingsPayload,
   validateMunicipalitySourcePayload,
   validateCommentPayload,
   resolveCurrentUser,
   isMasterUser,
   handleHealthCheck,
-  escapeCsvValue,
   buildCsvResponse,
   validateApplicationPatch,
-  shouldCreateImportNotification,
   buildImportNotificationEntries
 } from "./httpSupport.js";
 
 // Für die Test-Suite weiterhin aus app.js erreichbar.
 export { normalizeSyncSourceUrl, validateProductionRuntimeConfiguration };
+
+// Entfernt den Quell-Token aus einer Gemeindequelle, bevor sie an den Client
+// geht (S5): nie der Klartext, nur ob ein Token gesetzt ist.
+function redactSourceToken(source) {
+  if (!source) {
+    return source;
+  }
+  const { sourceToken, ...rest } = source;
+  return { ...rest, sourceTokenSet: isTokenSet(sourceToken) };
+}
 
 export function createApp(options = {}) {
   const logger = options.logger ?? console;
@@ -176,7 +157,7 @@ export function createApp(options = {}) {
     try {
       return Boolean(await turnstileVerifyImpl(token, turnstileSecretKey, request.ip));
     } catch (error) {
-      logger.warn?.(`Turnstile-Prüfung fehlgeschlagen: ${error.message}`);
+      logger.warn?.(`Turnstile-Prüfung fehlgeschlagen: ${sanitizeForLog(error.message)}`);
       return false;
     }
   }
@@ -262,7 +243,7 @@ export function createApp(options = {}) {
 
     const subject = "Heimatschutz Aargau – Passwort zurücksetzen";
     const text = [
-      `Hallo ${displayName || ""}`.trim() + ",",
+      `${`Hallo ${displayName || ""}`.trim()},`,
       "",
       "für Ihr Konto wurde ein Passwort-Reset angefordert. Bitte öffnen Sie die Anwendung,",
       'wählen Sie "Passwort vergessen" und geben Sie den folgenden Einmal-Schlüssel zusammen',
@@ -333,7 +314,7 @@ export function createApp(options = {}) {
   }
 
   const masterSetupReadyPromise = ensureMasterAccountReady().catch((error) => {
-    logger.warn?.(`Master-Setup konnte nicht abgeschlossen werden: ${error.message}`);
+    logger.warn?.(`Master-Setup konnte nicht abgeschlossen werden: ${sanitizeForLog(error.message)}`);
     return null;
   });
   const loginRateLimiter =
@@ -372,7 +353,7 @@ export function createApp(options = {}) {
     sourceUrl: normalizedSyncSourceUrl,
     getSourceUrl: () => settingsRepository.getValue("sync_source_url", normalizedSyncSourceUrl),
     sourceToken: normalizedSyncSourceToken,
-    getSourceToken: () => settingsRepository.getValue("sync_source_token", normalizedSyncSourceToken),
+    getSourceToken: () => decryptToken(settingsRepository.getValue("sync_source_token", normalizedSyncSourceToken)),
     sourceType: normalizeEnvString(options.syncSourceType ?? process.env.SYNC_SOURCE_TYPE ?? ""),
     getSourceType: () => settingsRepository.getValue("sync_source_type", normalizeEnvString(options.syncSourceType ?? process.env.SYNC_SOURCE_TYPE ?? "")),
     sourceMunicipality: normalizeEnvString(options.syncSourceMunicipality ?? process.env.SYNC_SOURCE_MUNICIPALITY ?? ""),
@@ -405,7 +386,7 @@ export function createApp(options = {}) {
   });
   const initialAgisRefreshPromise = agisAssessmentEnabled && (options.agisRefreshOnStart ?? true)
     ? agisAssessmentService.refreshAll().catch((error) => {
-        console.warn(`AGIS-Neubewertung beim Start fehlgeschlagen: ${error.message}`);
+        console.warn(`AGIS-Neubewertung beim Start fehlgeschlagen: ${sanitizeForLog(error.message)}`);
         return null;
       })
     : Promise.resolve(null);
@@ -450,15 +431,10 @@ export function createApp(options = {}) {
   app.get("/health", (_request, response) => handleHealthCheck(_request, response, healthDatabasePath));
   app.get("/api/health", (_request, response) => handleHealthCheck(_request, response, healthDatabasePath));
 
-  app.get("/api/auth/users", (_request, response) => {
-    response.json({
-      items: usersRepository.listPublicUsers().map((user) => ({
-        id: user.id,
-        displayName: user.displayName,
-        role: user.role
-      }))
-    });
-  });
+  // Hinweis: Der frühere oeffentliche Endpoint GET /api/auth/users wurde entfernt
+  // (S6). Er lieferte ohne Anmeldung interne User-IDs, Anzeigenamen und Rollen und
+  // wurde vom Frontend nicht genutzt. Benutzerlisten gibt es nur noch unter
+  // /api/admin/users (Master-Recht erforderlich).
 
   app.get("/api/auth/session", (request, response) => {
     const currentSession = resolveCurrentUser(request, sessionsRepository, usersRepository);
@@ -780,7 +756,7 @@ export function createApp(options = {}) {
       ? usersRepository.getContactByEmail(email)
       : usersRepository.getContactByUsername(username);
 
-    if (!contact || !contact.email) {
+    if (!contact?.email) {
       // Keine passende E-Mail/kein Konto: bewusst dieselbe Antwort (kein Rückschluss).
       recordAudit("auth.password_reset_requested", request, {
         target: email || username,
@@ -824,7 +800,7 @@ export function createApp(options = {}) {
         expiresAt
       });
     } catch (error) {
-      logger.warn?.(`Passwort-Reset-Mail fehlgeschlagen: ${error.message}`);
+      logger.warn?.(`Passwort-Reset-Mail fehlgeschlagen: ${sanitizeForLog(error.message)}`);
     }
 
     recordAudit("auth.password_reset_requested", request, { target: username });
@@ -1165,6 +1141,16 @@ export function createApp(options = {}) {
       return;
     }
 
+    const rateLimitKey = `2fa:${request.ip || "unknown"}`;
+    if (loginRateLimiter) {
+      const limitStatus = loginRateLimiter.check(rateLimitKey);
+      if (limitStatus.limited) {
+        response.setHeader("Retry-After", String(limitStatus.retryAfterSeconds));
+        response.status(429).json({ error: "Zu viele 2FA-Versuche. Bitte in einigen Minuten erneut versuchen." });
+        return;
+      }
+    }
+
     const code = String(request.body?.code ?? "").trim();
     const pendingSecret = settingsRepository.getValue(masterTotpPendingSecretSettingKey);
 
@@ -1174,10 +1160,12 @@ export function createApp(options = {}) {
     }
 
     if (!verifyTotp(pendingSecret, code)) {
+      loginRateLimiter?.recordFailure(rateLimitKey);
       response.status(400).json({ error: "Der Code ist ungültig. Bitte erneut versuchen." });
       return;
     }
 
+    loginRateLimiter?.recordSuccess(rateLimitKey);
     settingsRepository.setValue(masterTotpSecretSettingKey, pendingSecret);
     settingsRepository.setValue(masterTotpEnabledSettingKey, "1");
     settingsRepository.deleteByKey(masterTotpPendingSecretSettingKey);
@@ -1197,14 +1185,26 @@ export function createApp(options = {}) {
       return;
     }
 
+    const rateLimitKey = `2fa:${request.ip || "unknown"}`;
+    if (loginRateLimiter) {
+      const limitStatus = loginRateLimiter.check(rateLimitKey);
+      if (limitStatus.limited) {
+        response.setHeader("Retry-After", String(limitStatus.retryAfterSeconds));
+        response.status(429).json({ error: "Zu viele 2FA-Versuche. Bitte in einigen Minuten erneut versuchen." });
+        return;
+      }
+    }
+
     const code = String(request.body?.code ?? "").trim();
     const secret = settingsRepository.getValue(masterTotpSecretSettingKey);
 
     if (!secret || !verifyTotp(secret, code)) {
+      loginRateLimiter?.recordFailure(rateLimitKey);
       response.status(400).json({ error: "Der Code ist ungültig. Bitte erneut versuchen." });
       return;
     }
 
+    loginRateLimiter?.recordSuccess(rateLimitKey);
     settingsRepository.deleteByKey(masterTotpSecretSettingKey);
     settingsRepository.deleteByKey(masterTotpEnabledSettingKey);
     settingsRepository.deleteByKey(masterTotpPendingSecretSettingKey);
@@ -1221,7 +1221,8 @@ export function createApp(options = {}) {
 
     response.json({
       sourceUrl: settingsRepository.getValue("sync_source_url", normalizedSyncSourceUrl),
-      sourceToken: settingsRepository.getValue("sync_source_token", normalizedSyncSourceToken),
+      // Token wird nie an den Client zurueckgegeben (S5), nur ob einer gesetzt ist.
+      sourceTokenSet: isTokenSet(settingsRepository.getValue("sync_source_token", normalizedSyncSourceToken)),
       sourceType: settingsRepository.getValue("sync_source_type", normalizeEnvString(options.syncSourceType ?? process.env.SYNC_SOURCE_TYPE ?? "")),
       sourceMunicipality: settingsRepository.getValue(
         "sync_source_municipality",
@@ -1254,7 +1255,7 @@ export function createApp(options = {}) {
       weeklySyncService.refreshSchedule();
       response.json({
         sourceUrl: "",
-        sourceToken: "",
+        sourceTokenSet: false,
         sourceType: "",
         sourceMunicipality: "",
         municipalitySourcesSummary: municipalitySourcesRepository.getSummary(),
@@ -1279,7 +1280,7 @@ export function createApp(options = {}) {
       currentTimestamp
     );
     const storedToken = validation.value.sourceToken
-      ? settingsRepository.setValue("sync_source_token", validation.value.sourceToken, currentTimestamp)
+      ? settingsRepository.setValue("sync_source_token", encryptToken(validation.value.sourceToken), currentTimestamp)
       : (settingsRepository.deleteByKey("sync_source_token"), null);
     const storedType = validation.value.sourceType
       ? settingsRepository.setValue("sync_source_type", validation.value.sourceType, currentTimestamp)
@@ -1291,7 +1292,7 @@ export function createApp(options = {}) {
 
     response.json({
       sourceUrl: storedSetting.value,
-      sourceToken: storedToken?.value ?? "",
+      sourceTokenSet: Boolean(storedToken),
       sourceType: storedType?.value ?? "",
       sourceMunicipality: storedMunicipality?.value ?? "",
       municipalitySourcesSummary: municipalitySourcesRepository.getSummary(),
@@ -1311,7 +1312,7 @@ export function createApp(options = {}) {
     );
 
     response.json({
-      items: municipalitySourcesRepository.listAll(),
+      items: municipalitySourcesRepository.listAll().map(redactSourceToken),
       summary: municipalitySourcesRepository.getSummary(),
       catalogItems: coverageSnapshot.catalogItems,
       sharedSources: coverageSnapshot.sharedSources,
@@ -1379,7 +1380,7 @@ export function createApp(options = {}) {
     weeklySyncService.refreshSchedule();
     const coverageSnapshot = municipalitySourcesRepository.getCoverageSnapshot();
     response.json({
-      item: updated,
+      item: redactSourceToken(updated),
       summary: municipalitySourcesRepository.getSummary(),
       catalogItems: coverageSnapshot.catalogItems,
       sharedSources: coverageSnapshot.sharedSources,
