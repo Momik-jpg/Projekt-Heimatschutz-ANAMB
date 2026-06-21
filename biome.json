@@ -17,5 +17,17 @@
 				"noImportantStyles": "off"
 			}
 		}
-	}
+	},
+	"overrides": [
+		{
+			"includes": ["public/js/**"],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noUnusedVariables": "off"
+					}
+				}
+			}
+		}
+	]
 }
