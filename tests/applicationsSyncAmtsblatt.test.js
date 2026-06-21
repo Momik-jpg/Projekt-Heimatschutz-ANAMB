@@ -7,7 +7,9 @@ import {
   extractAmtsblattLabeledValue,
   deriveAmtsblattMunicipality,
   parseAmtsblattEntries,
-  amtsblattParcelPattern
+  amtsblattParcelPattern,
+  buildAmtsblattItemFromEntry,
+  hasAmtsblattGeocodableLocation
 } from "../server/services/applicationsSyncAmtsblatt.js";
 
 test("isAmtsblattSourceUrl", () => {
@@ -67,4 +69,47 @@ test("parseAmtsblattEntries: Baugesuch-Block wird erkannt, anderer ignoriert", (
     "<div>Rubrik: Mitteilung | Traktanden: Budget</div></li>";
   assert.deepEqual(parseAmtsblattEntries(`<ul>${andere}</ul>`), []);
   assert.deepEqual(parseAmtsblattEntries(""), []);
+});
+
+test("buildAmtsblattItemFromEntry: belegte Frist -> explicit, Adresse aus Feld", async () => {
+  const entry = {
+    stelle: "Gemeinde Aarau",
+    location: "Hauptstrasse 12 (Parzelle 345)",
+    bauvorhaben: "Neubau Mehrfamilienhaus",
+    title: "Bau- und Rodungsgesuch",
+    publicationDate: "2026-06-01",
+    bodyText: "Bauherrschaft Muster. Einsprachefrist bis 15.07.2026.",
+    detailPath: "/eintrag/1"
+  };
+  const item = await buildAmtsblattItemFromEntry(entry, "https://amtsblatt.ag.ch", "https://amtsblatt.ag.ch/p/", null, 1000, new Map());
+  assert.equal(item.municipality, "Aarau");
+  assert.equal(item.address, "Hauptstrasse 12");
+  assert.equal(item.parcel, "345");
+  assert.equal(item.deadlineDate, "2026-07-15");
+  assert.equal(item.deadlineProvenance, "explicit");
+  assert.equal(item.addressProvenance, "official-field");
+  assert.equal(item.protectionStatus, "manual-review", "ohne Geocoding -> manuelle Pruefung");
+  assert.equal(item.ambiguousAddress, 1);
+});
+
+test("buildAmtsblattItemFromEntry: fehlende Frist -> missing, keine erfundene Frist", async () => {
+  const item = await buildAmtsblattItemFromEntry(
+    { stelle: "Gemeinde Aarau", location: "", bauvorhaben: "Umbau", title: "x", publicationDate: "", bodyText: "kein Datum", detailPath: "/e/2" },
+    "https://amtsblatt.ag.ch",
+    "https://amtsblatt.ag.ch/p/",
+    null,
+    1000,
+    new Map()
+  );
+  assert.equal(item.deadlineDate, "");
+  assert.equal(item.deadlineProvenance, "missing");
+  assert.equal(item.address, "Adresse aus Amtsblatt prüfen");
+  assert.equal(item.addressProvenance, "fallback");
+  assert.match(item.automatedAssessment, /Frist fehlt/);
+});
+
+test("hasAmtsblattGeocodableLocation: Parzelle/Strasse ja, sonst nein", () => {
+  assert.equal(hasAmtsblattGeocodableLocation({ location: "Hauptstrasse 12 (Parzelle 345)" }), true);
+  assert.equal(hasAmtsblattGeocodableLocation({ location: "Dorfweg 5" }), true);
+  assert.equal(hasAmtsblattGeocodableLocation({ location: "kein ort" }), false);
 });
