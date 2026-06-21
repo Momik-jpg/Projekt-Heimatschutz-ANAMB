@@ -14,8 +14,7 @@ const EXEMPT = new Set([
   // Reiner Datenkatalog (Spec-Ausnahme):
   "server/seed/municipalitySources.js",
   // Bekannte Uebergroessen – TODO splitten (Allowlist verkleinern):
-  "public/app.js",
-  "server/app.js"
+  "public/app.js"
 ]);
 
 async function collectJsFiles(relDir) {
