@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   buildDiscoverySearchRequestUrl,
   buildDiscoverySearchRequestsFromHtml,
+  buildDiscoverySearchRequestsFromOpenSearchLinks,
   buildDiscoverySearchRequestsFromOpenSearchXml,
   buildFallbackDiscoverySearchRequests,
+  collectDiscoveryCandidatesFromSiteSearch,
   collectOpenSearchDescriptionUrlsFromHtml
 } from "../server/services/discovery/discoverySearch.js";
 
@@ -66,4 +68,55 @@ test("buildDiscoverySearchRequestsFromOpenSearchXml: HTML-Template mit {searchTe
   assert.ok(requests.length > 0, "HTML-Template ergibt Requests");
   assert.ok(requests.every((r) => r.url.startsWith("https://gemeinde.ch/s?q=")));
   assert.deepEqual(buildDiscoverySearchRequestsFromOpenSearchXml(xml, "kein-url"), []);
+});
+
+test("buildDiscoverySearchRequestsFromOpenSearchLinks: laedt OSD und baut Requests", async () => {
+  const html = '<link rel="search" type="application/opensearchdescription+xml" href="/osd.xml">';
+  const osdXml = '<OpenSearchDescription><Url type="text/html" template="https://gemeinde.ch/s?q={searchTerms}"/></OpenSearchDescription>';
+  const fetchImpl = async () => new Response(osdXml, { status: 200, headers: { "content-type": "application/xml" } });
+  const requests = await buildDiscoverySearchRequestsFromOpenSearchLinks(html, "https://gemeinde.ch/start", fetchImpl, 1000);
+  assert.ok(requests.length > 0);
+  assert.ok(requests.every((r) => r.url.startsWith("https://gemeinde.ch/s?q=")));
+});
+
+test("buildDiscoverySearchRequestsFromOpenSearchLinks: Fehler beim OSD-Laden -> leer", async () => {
+  const html = '<link rel="search" type="application/opensearchdescription+xml" href="/osd.xml">';
+  const fetchImpl = async () => {
+    throw new Error("OSD weg");
+  };
+  assert.deepEqual(await buildDiscoverySearchRequestsFromOpenSearchLinks(html, "https://gemeinde.ch/start", fetchImpl, 1000), []);
+});
+
+test("collectDiscoveryCandidatesFromSiteSearch: sammelt Treffer aus Suchergebnissen", async () => {
+  const candidates = new Map();
+  const fetchImpl = async () =>
+    new Response('<a href="/baugesuche">Baugesuche Publikation</a>', { status: 200, headers: { "content-type": "text/html" } });
+  await collectDiscoveryCandidatesFromSiteSearch("https://gemeinde.ch/", fetchImpl, 1000, candidates);
+  assert.ok(candidates.size >= 1);
+
+  // Ungueltige Root-URL -> kein Wurf, keine Kandidaten.
+  const empty = new Map();
+  await collectDiscoveryCandidatesFromSiteSearch("kein-url", fetchImpl, 1000, empty);
+  assert.equal(empty.size, 0);
+});
+
+test("buildDiscoverySearchRequestsFromHtml: POST, bracketed Feldname und Fallback-Textinput", () => {
+  const post = buildDiscoverySearchRequestsFromHtml(
+    '<form action="/search" method="post"><input name="tx_kesearch_pi1[sword]" type="text"><input type="submit"></form>',
+    "https://gemeinde.ch/"
+  );
+  assert.ok(post.length > 0);
+  assert.ok(post.every((r) => r.method === "POST"));
+
+  const fallback = buildDiscoverySearchRequestsFromHtml(
+    '<form action="/suche" method="get"><input name="freitext" type="search"></form>',
+    "https://gemeinde.ch/"
+  );
+  assert.ok(fallback.length > 0, "Textinput dient als Suchfeld-Fallback");
+
+  // Formular ohne benennbares Suchfeld -> keine Requests.
+  assert.equal(
+    buildDiscoverySearchRequestsFromHtml('<form action="/suche"><input type="checkbox"></form>', "https://gemeinde.ch/").length,
+    0
+  );
 });
