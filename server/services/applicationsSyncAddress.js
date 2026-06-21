@@ -366,7 +366,7 @@ export function extractAddressFromText(value) {
 
   const patterns = [
     /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]*(?:strasse|strasse|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)\s+\d+[A-Za-z]?)\b/ui,
-    /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]+)+(?:strasse|strasse|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)?\s+\d+[A-Za-z]?)\b/u
+    /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüéèà'’.-]+){1,6}(?:strasse|strasse|weg|gasse|gässli|gaessli|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)?\s+\d+[A-Za-z]?)\b/u
   ];
 
   for (const pattern of patterns) {
