@@ -7,7 +7,7 @@
     "dev": "node --watch server/app.js",
     "start": "node server/app.js",
     "test": "node --test",
-    "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=88 --test-coverage-branches=66 --test-coverage-functions=90",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=89 --test-coverage-branches=69 --test-coverage-functions=93",
     "pretest:e2e": "node tests/e2e/clean-db.mjs",
     "test:e2e": "playwright test",
     "diagnose:manual-review": "node scripts/diagnose-manual-review.js",
