@@ -283,7 +283,7 @@ test("server sends security and cache headers for app assets", async (context) =
   });
 
   const healthResponse = await requestJson(testServer.baseUrl, "/health");
-  const scriptResponse = await requestText(testServer.baseUrl, "/app.js");
+  const scriptResponse = await requestText(testServer.baseUrl, "/js/core.js");
   const indexResponse = await requestText(testServer.baseUrl, "/");
 
   assert.equal(healthResponse.headers.get("x-content-type-options"), "nosniff");
