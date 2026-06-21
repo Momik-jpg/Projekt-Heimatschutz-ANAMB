@@ -371,14 +371,14 @@ export function backfillSeedMunicipalitySources(db, items, updatedAt) {
       continue;
     }
 
-    const currentSourceType = String(current["source_type"] ?? "manual");
-    const currentSourceUrl = String(current["source_url"] ?? "");
-    const currentSourceToken = String(current["source_token"] ?? "");
-    const currentIncludePattern = String(current["include_pattern"] ?? "");
-    const currentExcludePattern = String(current["exclude_pattern"] ?? "");
-    const currentEnabled = Number(current["enabled"] ?? 0);
-    const currentDigitalStatus = String(current["digital_status"] ?? "unknown");
-    const currentNotes = String(current["notes"] ?? "");
+    const currentSourceType = String(current.source_type ?? "manual");
+    const currentSourceUrl = String(current.source_url ?? "");
+    const currentSourceToken = String(current.source_token ?? "");
+    const currentIncludePattern = String(current.include_pattern ?? "");
+    const currentExcludePattern = String(current.exclude_pattern ?? "");
+    const currentEnabled = Number(current.enabled ?? 0);
+    const currentDigitalStatus = String(current.digital_status ?? "unknown");
+    const currentNotes = String(current.notes ?? "");
     const isLegacyBlankSeed =
       currentSourceType === "manual" &&
       currentSourceUrl.trim() === "" &&

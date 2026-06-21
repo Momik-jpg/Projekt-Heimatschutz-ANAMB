@@ -16,7 +16,7 @@ function hasControlChar(text) {
 }
 
 test("entfernt Zeilenumbrueche (verhindert gefaelschte Logzeilen)", () => {
-  const forged = "BG-1" + LF + "INFO: Admin-Login erfolgreich von 10.0.0.1";
+  const forged = `BG-1${LF}INFO: Admin-Login erfolgreich von 10.0.0.1`;
   const safe = sanitizeForLog(forged);
   assert.equal(hasControlChar(safe), false, "keine Steuerzeichen im Ergebnis");
   assert.ok(safe.includes("BG-1"));
@@ -24,7 +24,7 @@ test("entfernt Zeilenumbrueche (verhindert gefaelschte Logzeilen)", () => {
 });
 
 test("entfernt CR/LF/TAB und Steuerzeichen", () => {
-  const safe = sanitizeForLog("a" + CR + LF + "b" + TAB + "c d");
+  const safe = sanitizeForLog(`a${CR}${LF}b${TAB}c d`);
   assert.equal(safe, "a b c d");
   assert.equal(hasControlChar(safe), false);
 });

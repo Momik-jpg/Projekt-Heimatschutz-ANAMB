@@ -688,7 +688,7 @@ function dueMeta(item) {
   return { cls: "due-ok", txt: formatDueRelative(days), days };
 }
 
-function isOverdue(item) {
+function _isOverdue(item) {
   // Überfällig = offener Fall mit Frist in der Vergangenheit.
   // Abgeschlossene/archivierte Fälle gelten nicht als überfällig.
   if (item.workflowStatus === "cleared" || item.workflowStatus === "archived") return false;

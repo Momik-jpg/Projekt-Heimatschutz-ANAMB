@@ -1,6 +1,5 @@
 // Eingabe-Validierung und Normalisierung – aus httpSupport.js aufgeteilt.
 import { workflowStatuses } from "./repository/applicationsRepository.js";
-import { join } from "node:path";
 import {
   municipalityDigitalStatuses,
   municipalitySourceTypes
