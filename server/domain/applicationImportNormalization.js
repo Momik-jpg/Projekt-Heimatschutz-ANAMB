@@ -92,7 +92,7 @@ export function cleanImportedAddress(value) {
     .replace(/<[^>]*>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
-    .replace(/\s+box(?:\s+box[-\w]+)+["']?(?:\s+[\s\S]*)?$/i, "")
+    .replace(/\s+box(?:\s+box[-\w]+){1,20}["']?(?:\s+[\s\S]*)?$/i, "")
     .replace(/\s+data-[\w-]+\s*=\s*["'][\s\S]*$/i, "")
     .replace(/\s+(?:Gegen das obenstehende|Gegen dieses Baugesuch|Einsprachen sind|Die öffentliche Auflage)\b[\s\S]*$/i, "")
     .replace(/\s+/g, " ")

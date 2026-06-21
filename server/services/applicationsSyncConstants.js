@@ -112,7 +112,8 @@ export const clearlyNonAddressPattern =
 export const projectLikeAddressPattern =
   /\b(sanierung|umbau|umnutzung|anbau|neubau|ersatzneubau|erweiterung|ausbau|rückbau|rueckbau|renovation|aufwertungsmassnahmen?|baugesuch|publikation)\b/i;
 
-export const garbledProjectTypePattern = /^(?:[._-]*\d{2,}[._-]*)+$/;
+// Linear-sicher (kein verschachteltes [._-]* an beiden Gruppen-Enden -> kein ReDoS).
+export const garbledProjectTypePattern = /^(?:[._-]*\d{2,})+[._-]*$/;
 
 export const garbledStructuredTextPattern =
   /\b(name-sort|datum-sort|data-page-length|_kategorieid|_thumbnail|customerid=|readspeaker|sind sie sicher, dass sie diesen eintrag löschen möchten|cms cms)\b/i;
