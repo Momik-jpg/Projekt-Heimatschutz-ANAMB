@@ -3,7 +3,7 @@
 Die App ist hosting-neutral (Docker/VPS/lokal). Empfohlen wird der Betrieb als
 Container mit **Cloudflare davor via Tunnel** – so liegt kein Port offen am
 Server, und Cloudflare liefert TLS, WAF, CDN und DDoS-Schutz. Es gibt keine
-Railway-spezifischen Abhängigkeiten.
+anbieterspezifischen Abhängigkeiten.
 
 ## 1. Voraussetzungen
 

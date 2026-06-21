@@ -10,7 +10,7 @@ reproduzierbar grüne Gates ohne bekannte Release-Blocker.
 
 - Stack bleibt: Node.js 24 + Express 5 + `node:sqlite` + nodemailer. Kein Rewrite.
 - Hosting **neutral** (Docker/VPS/lokal); **Cloudflare davor** via Tunnel
-  (`cloudflared`) + DNS + TLS + WAF/CDN/DDoS. Keine Railway-spezifischen Reste.
+  (`cloudflared`) + DNS + TLS + WAF/CDN/DDoS. Keine anbieterspezifischen Reste.
 - Branch `feat/haertung-und-architektur`, PR nach `main`. Jeder Befund = eigener
   Commit mit Test.
 
@@ -136,7 +136,7 @@ Ist: Biome 102 Fehler/28 Warnungen, Oxlint 33 Warnungen.
 - Produktionsfertiges `Dockerfile` (multi-stage, non-root, HEALTHCHECK).
 - `docker-compose.yml` für VPS; `cloudflared`-Beispielconfig (Tunnel → Container);
   ENV-Dokumentation (inkl. `TOKEN_ENCRYPTION_KEY`).
-- Keine Railway-Reste.
+- Keine anbieterspezifischen Hosting-Reste.
 - Abnahme: `docker build` + Container-Boot + `/api/health` hinter Tunnel dokumentiert.
 
 ---
@@ -148,4 +148,4 @@ Ist: Biome 102 Fehler/28 Warnungen, Oxlint 33 Warnungen.
 - Coverage ≥ 90 % Zeilen / ≥ 80 % Branch.
 - Keine undokumentierten Scannerfehler (Semgrep-Parserfehler = hartes CI-Fail).
 - Keine Produktiv-Quelldatei > 800 Zeilen ausser deklarierten Datenkatalogen.
-- Hosting ohne Railway-spezifische Abhängigkeiten.
+- Hosting ohne anbieterspezifische Abhängigkeiten.

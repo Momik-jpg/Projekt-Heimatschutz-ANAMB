@@ -15,7 +15,7 @@ zuletzt**, jede Phase test-gegated, je eigener Commit. Basis: PR #4
 | Branches ≥ 80 % | ⏳ 71.4 % | **A** |
 | Keine undokumentierten Scannerfehler | ⏳ | **B, C** |
 | Keine Prod-Datei > 800 Z. (ausser Datenkataloge) | ⏳ | **D, E, F** |
-| Hosting ohne Railway | ✅ | erledigt (Phase 4) |
+| Hosting neutral, ohne anbieterspezifische Bindung | ✅ | erledigt (Phase 4) |
 
 ---
 
