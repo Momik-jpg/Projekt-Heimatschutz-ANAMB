@@ -113,3 +113,22 @@ test("hasAmtsblattGeocodableLocation: Parzelle/Strasse ja, sonst nein", () => {
   assert.equal(hasAmtsblattGeocodableLocation({ location: "Dorfweg 5" }), true);
   assert.equal(hasAmtsblattGeocodableLocation({ location: "kein ort" }), false);
 });
+
+test("buildAmtsblattItemFromEntry: mit Geocoding -> no-hit und Koordinaten", async () => {
+  const geo = async () =>
+    new Response(
+      JSON.stringify({ results: [{ attrs: { label: "Hauptstrasse 12 5000 Aarau", x: 2645000, y: 1249000, origin: "address" } }] }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  const item = await buildAmtsblattItemFromEntry(
+    { stelle: "Gemeinde Aarau", location: "Hauptstrasse 12", bauvorhaben: "Neubau", title: "x", publicationDate: "2026-06-01", bodyText: "Frist bis 15.07.2026", detailPath: "/e/9" },
+    "https://amtsblatt.ag.ch",
+    "https://amtsblatt.ag.ch/p/",
+    geo,
+    1000,
+    new Map()
+  );
+  assert.equal(item.coordinates, "2645000,1249000");
+  assert.equal(item.protectionStatus, "no-hit");
+  assert.equal(item.ambiguousAddress, 0);
+});

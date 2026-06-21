@@ -40,3 +40,79 @@ test("getOfficialFeatures: Fetch-Fehler werden abgefangen -> leeres Ergebnis (gr
   assert.deepEqual(result.areaFeatures, []);
   assert.deepEqual(result.pointFeatures, []);
 });
+
+function jsonResponse(payload) {
+  return new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } });
+}
+
+test("getOfficialFeatures: Flaechen- und Punkt-Treffer werden geparst", async () => {
+  const fetchImpl = async (url) => {
+    const target = String(url);
+    if (target.includes("are_isos")) {
+      // Aussenring (im Uhrzeigersinn) + Loch (gegen Uhrzeigersinn) im Inneren.
+      return jsonResponse({
+        features: [
+          {
+            geometry: {
+              rings: [
+                [[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]],
+                [[2, 2], [8, 2], [8, 8], [2, 8], [2, 2]]
+              ]
+            },
+            attributes: { OBJECTID: 1, BENENN_F: "Altstadt", KAT_F: "A", Bedeutung: "national" }
+          }
+        ]
+      });
+    }
+    if (target.includes("dp_denkmalpflege")) {
+      return jsonResponse({
+        features: [
+          {
+            geometry: { x: 2660000, y: 1240000 },
+            attributes: { TITEL: "Inventarobjekt", GEMEINDE: "Aarau", ADRESSE: "Hauptstrasse 12", SIGNATUR: "S-1" }
+          }
+        ]
+      });
+    }
+    return jsonResponse({ features: [] });
+  };
+
+  const service = createAgisGeometryService({ fetchImpl });
+  const result = await service.getOfficialFeatures({ east: 2660000, north: 1240000 });
+
+  assert.equal(result.matched.area, true);
+  assert.equal(result.matched.points, true);
+  assert.equal(result.areaFeatures.length, 1);
+  assert.equal(result.areaFeatures[0].properties.title, "Altstadt");
+  assert.ok(result.areaFeatures[0].parts.length >= 1, "Polygon-Teile vorhanden");
+  assert.equal(result.pointFeatures.length, 1);
+  assert.equal(result.pointFeatures[0].properties.address, "Hauptstrasse 12");
+  assert.ok(result.displayAreaFeatures.length >= 1);
+  assert.ok(result.displayPointFeatures.length >= 1);
+});
+
+test("getOfficialFeatures: AGIS-Fehlerpayload einer Ebene wird toleriert", async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes("dp_denkmalpflege")) {
+      return jsonResponse({ error: { message: "Layer überlastet" } });
+    }
+    return jsonResponse({ features: [] });
+  };
+  const service = createAgisGeometryService({ fetchImpl });
+  const result = await service.getOfficialFeatures({ east: 2660001, north: 1240001 });
+  // Flaeche leer, Punkte als rejected -> Fallback auf leere Liste, kein Wurf.
+  assert.equal(result.matched.points, false);
+  assert.deepEqual(result.pointFeatures, []);
+});
+
+test("getOfficialFeatures: nicht-ok-Antwort einer Ebene wird toleriert", async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes("are_isos")) {
+      return new Response("boom", { status: 500 });
+    }
+    return jsonResponse({ features: [] });
+  };
+  const service = createAgisGeometryService({ fetchImpl });
+  const result = await service.getOfficialFeatures({ east: 2660002, north: 1240002 });
+  assert.equal(result.matched.area, false);
+});

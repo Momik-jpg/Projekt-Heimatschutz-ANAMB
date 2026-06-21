@@ -89,3 +89,51 @@ test("buildStructuredPublicationImportedItems: Block ohne Geocoding -> manual-re
   assert.equal(items[0].protectionStatus, "manual-review");
   assert.equal(items[0].sourceUrl, "https://gemeinde.ch/detail/1");
 });
+
+function geocodeMock() {
+  return async () =>
+    new Response(
+      JSON.stringify({ results: [{ attrs: { label: "Hauptstrasse 12 5000 Aarau", x: 2645000, y: 1249000, origin: "address" } }] }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+}
+
+test("buildTabularImportedItems: mit Geocoding -> no-hit und Koordinaten", async () => {
+  const items = await buildTabularImportedItems(tableHtml, source, 1000, geocodeMock(), new Map());
+  assert.equal(items.length, 1);
+  assert.equal(items[0].coordinates, "2645000,1249000");
+  assert.equal(items[0].protectionStatus, "no-hit");
+  assert.equal(items[0].ambiguousAddress, 0);
+});
+
+test("buildStructuredPublicationImportedItems: mit Geocoding -> no-hit", async () => {
+  const items = await buildStructuredPublicationImportedItems(structuredHtml, source, 1000, geocodeMock(), new Map(), {
+    publicationDate: "",
+    deadlineDate: ""
+  });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].coordinates, "2645000,1249000");
+  assert.equal(items[0].protectionStatus, "no-hit");
+});
+
+test("buildStructuredPublicationImportedItems: excludePattern und includePattern", async () => {
+  const excluded = await buildStructuredPublicationImportedItems(
+    structuredHtml,
+    { ...source, excludePattern: "Neubau" },
+    1000,
+    null,
+    new Map(),
+    { publicationDate: "", deadlineDate: "" }
+  );
+  assert.deepEqual(excluded, [], "excludePattern verwirft den Block");
+
+  const notIncluded = await buildStructuredPublicationImportedItems(
+    structuredHtml,
+    { ...source, includePattern: "Spezialfall" },
+    1000,
+    null,
+    new Map(),
+    { publicationDate: "", deadlineDate: "" }
+  );
+  assert.deepEqual(notIncluded, [], "includePattern ohne Treffer verwirft den Block");
+});
