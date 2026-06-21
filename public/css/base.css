@@ -1,0 +1,83 @@
+/* =====================================================================
+   App-Gerüst
+   ===================================================================== */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ---- Kopf ---------------------------------------------------------- */
+.masthead { background: var(--panel); border-top: 3px solid var(--brand-700); }
+
+.mast-util {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  padding: 7px clamp(16px, 2.2vw, 30px);
+  background: var(--surface-quiet);
+  border-bottom: 1px solid var(--panel-border);
+  font-size: 0.78rem; color: var(--ink-500);
+}
+.mast-org b { color: var(--ink-800); font-weight: 700; }
+.mast-org .dept { margin-left: 12px; color: var(--ink-500); }
+.mast-account { display: inline-flex; align-items: center; gap: 12px; }
+.mast-account .user-name { color: var(--ink-900); font-weight: 700; }
+.mast-account .user-role {
+  margin-left: 8px; padding: 1px 9px; border-radius: var(--r-pill);
+  background: var(--brand-50); border: 1px solid var(--brand-100);
+  color: var(--brand-800); font-size: 0.72rem; font-weight: 600;
+}
+.util-link {
+  background: none; cursor: pointer;
+  border: 1px solid var(--stone-300); border-radius: var(--r-pill);
+  padding: 3px 12px;
+  color: var(--brand-700); font-size: 0.76rem; font-weight: 600;
+  text-decoration: none;
+  transition: color var(--t), border-color var(--t), background var(--t);
+}
+.util-link:hover { color: var(--brand-800); border-color: var(--brand-300); background: var(--brand-50); }
+
+.mast-main {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 24px; flex-wrap: wrap;
+  padding: 13px clamp(16px, 2.2vw, 30px);
+}
+.brand { display: inline-flex; align-items: center; gap: 13px; }
+.brand .wappen { height: 38px; width: auto; flex: none; }
+.brand .word b { display: block; font-size: 1.16rem; font-weight: 700; color: var(--ink-900); letter-spacing: 0; }
+.brand .word span { display: block; font-size: 0.82rem; color: var(--ink-500); margin-top: 1px; }
+
+.mast-tools { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tool-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 36px; padding: 7px 13px;
+  border: 1px solid var(--stone-300); border-radius: var(--r-sm);
+  background: var(--panel); color: var(--ink-700);
+  font-size: 0.84rem; font-weight: 600;
+  transition: border-color var(--t), color var(--t), background var(--t);
+}
+.tool-btn svg { width: 16px; height: 16px; }
+.tool-btn:hover { border-color: var(--brand-700); color: var(--brand-700); background: var(--brand-50); }
+.tool-btn[aria-pressed="true"] { border-color: var(--brand-700); color: var(--brand-700); background: var(--brand-50); }
+
+/* ---- Titelband (blau) --------------------------------------------- */
+.titleband {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 24px; flex-wrap: wrap;
+  padding: 18px clamp(16px, 2.2vw, 30px) 20px;
+  background: var(--brand-700);
+  color: #fff;
+}
+.titleband .bread { font-size: 0.78rem; color: #bcd9ee; margin: 0 0 7px; letter-spacing: 0; }
+.titleband .bread span { color: #fff; font-weight: 600; }
+.titleband h1 { font-size: 1.7rem; font-weight: 700; color: #fff; }
+.titleband .lead { margin: 6px 0 0; color: #e6f0fa; font-size: 0.96rem; }
+.titleband-meta { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; }
+.band-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border-radius: var(--r-sm);
+  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.28);
+  color: #eef5fc; font-size: 0.78rem; font-weight: 600; white-space: nowrap;
+}
+.band-chip b { color: #fff; font-weight: 700; }
+.band-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: #7fe3b0; }
