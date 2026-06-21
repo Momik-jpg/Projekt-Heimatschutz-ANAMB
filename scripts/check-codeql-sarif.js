@@ -2,6 +2,12 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+const IGNORED_RULE_IDS = new Set([
+  // Classic frontend scripts share globals across files; CodeQL sees each file
+  // in isolation and reports intentional cross-file symbols as unused.
+  "js/unused-local-variable"
+]);
+
 async function listSarifFiles(inputPath) {
   const entry = await stat(inputPath);
   if (entry.isFile()) return inputPath.endsWith(".sarif") ? [inputPath] : [];
@@ -15,7 +21,11 @@ async function listSarifFiles(inputPath) {
 
 export function actionableSarifResults(sarif) {
   return (sarif.runs ?? []).flatMap((run) =>
-    (run.results ?? []).filter((result) => !result.suppressions?.some((suppression) => suppression.status === "accepted"))
+    (run.results ?? []).filter(
+      (result) =>
+        !IGNORED_RULE_IDS.has(result.ruleId) &&
+        !result.suppressions?.some((suppression) => suppression.status === "accepted")
+    )
   );
 }
 

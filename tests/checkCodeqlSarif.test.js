@@ -9,7 +9,8 @@ test("SARIF-Gate zählt Befunde, aber keine akzeptierten Unterdrückungen", () =
   const findings = actionableSarifResults({
     runs: [{ results: [
       { ruleId: "js/example" },
-      { ruleId: "js/suppressed", suppressions: [{ status: "accepted" }] }
+      { ruleId: "js/suppressed", suppressions: [{ status: "accepted" }] },
+      { ruleId: "js/unused-local-variable" }
     ] }]
   });
 
