@@ -31,22 +31,21 @@ export function buildSessionExpiry(issuedAt = new Date()) {
 }
 
 export function parseCookies(cookieHeader = "") {
-  return String(cookieHeader)
-    .split(";")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .reduce((cookies, part) => {
-      const separatorIndex = part.indexOf("=");
+  const cookies = new Map();
+  for (const rawPart of String(cookieHeader).split(";")) {
+    const part = rawPart.trim();
+    const separatorIndex = part.indexOf("=");
+    if (separatorIndex <= 0) continue;
 
-      if (separatorIndex === -1) {
-        return cookies;
-      }
-
-      const key = part.slice(0, separatorIndex).trim();
-      const value = part.slice(separatorIndex + 1).trim();
-      cookies[key] = decodeURIComponent(value);
-      return cookies;
-    }, {});
+    const key = part.slice(0, separatorIndex).trim();
+    const value = part.slice(separatorIndex + 1).trim();
+    try {
+      cookies.set(key, decodeURIComponent(value));
+    } catch {
+      // Fehlerhaft kodierte Cookies werden wie fehlende Cookies behandelt.
+    }
+  }
+  return cookies;
 }
 
 export function isSecureRequest(request) {
@@ -369,7 +368,7 @@ export async function verifyTurnstileToken(token, secret, remoteIp) {
 export function resolveCurrentUser(request, sessionsRepository, usersRepository) {
   sessionsRepository.deleteExpired(nowIso());
   const cookies = parseCookies(request.headers.cookie);
-  const sessionId = cookies[sessionCookieName];
+  const sessionId = cookies.get(sessionCookieName);
 
   if (!sessionId) {
     return null;
@@ -395,4 +394,3 @@ export function resolveCurrentUser(request, sessionsRepository, usersRepository)
     user
   };
 }
-

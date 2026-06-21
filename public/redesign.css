@@ -456,6 +456,11 @@ tbody tr:focus-visible td:last-child { box-shadow: inset -2px 0 0 var(--brand-70
 .map-legend {
   display: flex;
   flex-wrap: wrap;
+  min-width: 0;
+  margin: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
   gap: 8px 14px;
   padding: 10px 13px;
   border-top: 1px solid var(--line-soft);
@@ -1813,12 +1818,16 @@ body.dark .tab.active .tab-count {
   align-items: center;
   flex-wrap: wrap;
   gap: 7px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
   padding: 10px 14px;
   border-bottom: 1px solid var(--panel-border);
   background: #fff;
 }
 
 .region-label {
+  padding: 0;
   margin-right: 3px;
   color: var(--ink-600);
   font-size: 11px;

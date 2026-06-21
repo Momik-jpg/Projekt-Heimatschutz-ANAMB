@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import {
   cleanImportedAddress,
   extractPublicationDateRange,
-  normalizeImportedDates
+  normalizeImportedDates,
+  stripMarkupTags
 } from "../server/domain/applicationImportNormalization.js";
 
 test("liest Datumsbereiche, wenn nur das Enddatum ein Jahr enthält", () => {
@@ -48,4 +49,5 @@ test("entfernt importierte HTML- und Seitentextreste aus Adressen", () => {
     "Dorfstrasse 24"
   );
   assert.equal(cleanImportedAddress("<strong>Steigstrasse 28</strong>"), "Steigstrasse 28");
+  assert.equal(stripMarkupTags("vor <b>fett</b> nach"), "vor  fett  nach");
 });

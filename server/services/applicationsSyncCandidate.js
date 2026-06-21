@@ -1,5 +1,6 @@
 // Baugesuch-Import: Candidate-Helfer (aus applicationsSyncCommon.js aufgeteilt).
 import { createHash, randomBytes } from "node:crypto";
+import { stripMarkupTags } from "../domain/applicationImportNormalization.js";
 import {
   firstNonEmptyValue,
   normalizeArray,
@@ -152,8 +153,7 @@ export function looksLikeMarkupJunk(value) {
 }
 
 export function cleanProjectText(value) {
-  const text = String(value ?? "")
-    .replace(/<[^>]*>/g, " ")
+  const text = stripMarkupTags(value)
     .replace(/&(?:nbsp|amp|lt|gt|quot|#0?39|apos);/gi, " ")
     .replace(/\b[\w-]+\s*=\s*"[^"]*"/g, " ")
     .replace(/\b[\w-]+\s*=\s*'[^']*'/g, " ")

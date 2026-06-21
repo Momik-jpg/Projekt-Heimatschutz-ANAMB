@@ -150,8 +150,8 @@ function normalizeWhitespace(value) {
 function stripHtml(value) {
   return normalizeWhitespace(
     String(value ?? "")
-      .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*[^>]*>/gi, " ")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*[^>]*>/gi, " ")
       .replace(/<!--[\s\S]*?-->/g, " ")
       .replace(/<[^>]+>/g, " ")
   );
@@ -952,7 +952,7 @@ function summarize(results, allLinkAudits, applicationSummary, fetchedUrlCount) 
 }
 
 function markdownEscape(value) {
-  return String(value ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+  return String(value ?? "").replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }
 
 function buildMarkdown(report) {

@@ -201,14 +201,14 @@
           <button class="tab active" data-tab="all" type="button">Arbeitsliste <span class="tab-count" data-count="all">0</span></button>
           <button class="tab" data-tab="important" type="button">Schutztreffer <span class="tab-count" data-count="important">0</span></button>
         </nav>
-        <div class="region-filters" role="group" aria-label="Regionen filtern">
-          <span class="region-label">Region</span>
+        <fieldset class="region-filters">
+          <legend class="region-label">Region</legend>
           <button class="region-filter" data-region="Berner Aargau" type="button" aria-pressed="false">Berner Aargau</button>
           <button class="region-filter" data-region="Fricktal" type="button" aria-pressed="false">Fricktal</button>
           <button class="region-filter" data-region="Baden" type="button" aria-pressed="false">Baden</button>
           <button class="region-filter" data-region="Freiamt" type="button" aria-pressed="false">Freiamt</button>
           <span class="region-hint">Keine Auswahl zeigt alle Regionen.</span>
-        </div>
+        </fieldset>
         <form class="filter-bar" onsubmit="return false">
           <label class="fb-search"><span>Suche</span><input id="fltSearch" type="search" placeholder="Ort, Adresse"></label>
           <label class="fb-municipality"><span>Ort</span><select id="fltMun"><option value="">Alle Gemeinden</option></select></label>
@@ -289,7 +289,7 @@
               <span id="fProject">–</span>
               <span class="project-detail-meta">
                 <span id="projectScale" class="project-scale scale-unbekannt">Unbekannt</span>
-                <a id="sourceLink" class="source-link" href="#" target="_blank" rel="noreferrer">Originaldokument öffnen</a>
+                <a id="sourceLink" class="source-link" href="/" target="_blank" rel="noreferrer">Originaldokument öffnen</a>
               </span>
             </dd></div>
           </dl>
@@ -297,11 +297,11 @@
           <section class="map-card">
             <div class="map-card-head">
               <div><p class="ttl">Standort</p><p id="mapStatus" class="st">Standort wird angezeigt</p></div>
-              <a id="agisLink" class="map-link" href="#" target="_blank" rel="noreferrer">AGIS öffnen</a>
+              <a id="agisLink" class="map-link" href="https://www.ag.ch/app/agisviewer4/v1/agisviewer.html" target="_blank" rel="noreferrer">AGIS öffnen</a>
             </div>
-            <div id="detailMap" class="detail-map" aria-label="Standort auf Karte"></div>
+            <section id="detailMap" class="detail-map" aria-label="Standort auf Karte"></section>
             <p id="mapFallback" class="map-fallback hidden">Für dieses Gesuch ist noch kein genauer Standort vorhanden.</p>
-            <div id="mapLegend" class="map-legend hidden" aria-label="Kartenlegende"></div>
+            <fieldset id="mapLegend" class="map-legend hidden" aria-label="Kartenlegende"></fieldset>
             <p id="mapSymbolHint" class="map-symbol-hint hidden"></p>
           </section>
 

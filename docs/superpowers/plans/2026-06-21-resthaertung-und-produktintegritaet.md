@@ -308,17 +308,17 @@ git commit -m "fix(security): GCM validieren und Zugangsdatenwechsel fail-closed
 - Modify: `public/index.html`
 - Modify: `server/app.js`
 
-- [ ] **Step 1: Biome-Konfiguration migrieren**
+- [x] **Step 1: Biome-Konfiguration migrieren**
 
 Run: `npx biome migrate --write`
 
 Expected: Keine Deprecation-Meldung für `recommended`.
 
-- [ ] **Step 2: Vollständiges Lint-Gate definieren**
+- [x] **Step 2: Vollständiges Lint-Gate definieren**
 
 `lint` und CI müssen `server`, `public`, `scripts` und `tests` prüfen. Warnungen werden als Fehler behandelt. `lint:all` darf kein optionaler Nebenpfad bleiben.
 
-- [ ] **Step 3: 18 Frontend-Fehler und 3 Backend-Warnungen beheben**
+- [x] **Step 3: 18 Frontend-Fehler und 3 Backend-Warnungen beheben**
 
 Callbacks mit Blockkörpern ohne Rückgabewert schreiben, echte semantische Elemente/ARIA-Rollen verwenden und die Kommaoperatoren in normale `if`-Blöcke auflösen.
 
@@ -326,17 +326,19 @@ Run: `npm run lint`
 
 Expected: Exit 0, 0 Fehler, 0 Warnungen, 0 Deprecations.
 
-- [ ] **Step 4: CodeQL-Funktion aktivieren oder lokalen Fallback bauen**
+- [x] **Step 4: CodeQL-Funktion aktivieren oder lokalen Fallback bauen**
 
 Bevor CodeQL als erfüllt markiert wird, in den Repository-Einstellungen Code Scanning aktivieren. Falls der GitHub-Tarif dies nicht zulässt, muss der Workflow CodeQL lokal ausführen, SARIF als Artifact hochladen und aufgrund der Resultate selbst fehlschlagen; ein bloss scheiternder SARIF-Upload ist kein Security-Gate.
 
-- [ ] **Step 5: `main` mit einem Ruleset schützen**
+- [x] **Step 5: `main` mit einem Ruleset schützen**
 
 Mindestens:
 
 - Pull Request erforderlich.
 - Required status checks: `CI / test`, `Semgrep / SAST (Semgrep)`, `CodeQL / Analyze (JavaScript)`.
 - Branch muss vor Merge aktuell sein.
+
+Umgesetzt als aktiver Repository-Ruleset `main: Pflichtprüfungen` (ID `17947349`). Da das private Repository kein GitHub Advanced Security hat, läuft CodeQL mit `upload: never`, speichert SARIF als Artifact und erzwingt mit `scripts/check-codeql-sarif.js` selbst 0 nicht unterdrückte Befunde.
 - Kein Merge bei offenen Checks.
 - Admin-Bypass deaktivieren oder dokumentiert begrenzen.
 

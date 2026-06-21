@@ -1,4 +1,5 @@
 import express from "express";
+import { rateLimit } from "express-rate-limit";
 import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -422,6 +423,15 @@ export function createApp(options = {}) {
 
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 1200,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    handler: (_request, response) => {
+      response.status(429).json({ error: "Zu viele Anfragen. Bitte versuchen Sie es später erneut." });
+    }
+  }));
   app.use(setCommonSecurityHeaders);
   if (options.compression !== false) {
     app.use(createCompressionMiddleware(typeof options.compression === "object" ? options.compression : {}));
@@ -1288,15 +1298,26 @@ export function createApp(options = {}) {
       normalizedSourceUrlFromInput,
       currentTimestamp
     );
-    const storedToken = validation.value.sourceToken
-      ? settingsRepository.setValue("sync_source_token", encryptToken(validation.value.sourceToken), currentTimestamp)
-      : (settingsRepository.deleteByKey("sync_source_token"), null);
-    const storedType = validation.value.sourceType
-      ? settingsRepository.setValue("sync_source_type", validation.value.sourceType, currentTimestamp)
-      : (settingsRepository.deleteByKey("sync_source_type"), null);
-    const storedMunicipality = validation.value.sourceMunicipality
-      ? settingsRepository.setValue("sync_source_municipality", validation.value.sourceMunicipality, currentTimestamp)
-      : (settingsRepository.deleteByKey("sync_source_municipality"), null);
+    let storedToken = null;
+    if (validation.value.sourceToken) {
+      storedToken = settingsRepository.setValue("sync_source_token", encryptToken(validation.value.sourceToken), currentTimestamp);
+    } else {
+      settingsRepository.deleteByKey("sync_source_token");
+    }
+
+    let storedType = null;
+    if (validation.value.sourceType) {
+      storedType = settingsRepository.setValue("sync_source_type", validation.value.sourceType, currentTimestamp);
+    } else {
+      settingsRepository.deleteByKey("sync_source_type");
+    }
+
+    let storedMunicipality = null;
+    if (validation.value.sourceMunicipality) {
+      storedMunicipality = settingsRepository.setValue("sync_source_municipality", validation.value.sourceMunicipality, currentTimestamp);
+    } else {
+      settingsRepository.deleteByKey("sync_source_municipality");
+    }
     weeklySyncService.refreshSchedule();
 
     response.json({

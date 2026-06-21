@@ -33,7 +33,7 @@ export function buildSwissGeocodeQueryUrl(address, municipality) {
 
 export function normalizeSwissGeocodeMunicipalityName(municipality) {
   return String(municipality ?? "")
-    .replace(/\s*\(AG\)\s*/i, " AG")
+    .replace(/\(AG\)/gi, " AG")
     .replace(/\s+/g, " ")
     .trim();
 }

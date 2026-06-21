@@ -584,7 +584,9 @@ function showAuthPanel(name) {
     reset: el.resetPasswordForm,
     master: el.masterSetupForm
   };
-  Object.entries(forms).forEach(([key, form]) => form?.classList.toggle("hidden", key !== name));
+  Object.entries(forms).forEach(([key, form]) => {
+    form?.classList.toggle("hidden", key !== name);
+  });
   if (name === "login") {
     ensureTurnstile(el.loginTurnstile);
     setTimeout(() => el.loginUsername?.focus(), 0);
@@ -767,7 +769,9 @@ function updateTabCounts() {
 function renderMunicipalityOptions() {
   const selected = state.filters.municipality;
   const municipalities = new Set(state.dashboard?.municipalities ?? []);
-  state.items.forEach((item) => municipalities.add(item.municipality));
+  state.items.forEach((item) => {
+    municipalities.add(item.municipality);
+  });
   const options = [...municipalities].filter(Boolean).sort((a, b) => a.localeCompare(b, "de-CH"));
   el.fltMun.innerHTML = `<option value="">Alle Gemeinden</option>${options
     .map((municipality) => `<option value="${escapeHtml(municipality)}">${escapeHtml(municipality)}</option>`)
@@ -1626,7 +1630,9 @@ function renderSources() {
   }
   const rows = sourceRows();
   const hitsByMunicipality = new Map();
-  state.items.forEach((item) => hitsByMunicipality.set(item.municipality, (hitsByMunicipality.get(item.municipality) ?? 0) + 1));
+  state.items.forEach((item) => {
+    hitsByMunicipality.set(item.municipality, (hitsByMunicipality.get(item.municipality) ?? 0) + 1);
+  });
 
   el.srcBody.innerHTML = rows
     .map((source) => {
@@ -1813,13 +1819,21 @@ function fillPrintArea(item) {
 }
 
 function switchView(view) {
-  $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
-  $$(".view").forEach((node) => node.classList.toggle("active", node.id === `view-${view}`));
+  $$(".nav-item").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === view);
+  });
+  $$(".view").forEach((node) => {
+    node.classList.toggle("active", node.id === `view-${view}`);
+  });
 }
 
 function switchPane(pane) {
-  $$(".rail-item").forEach((button) => button.classList.toggle("active", button.dataset.pane === pane));
-  $$(".admin-pane").forEach((node) => node.classList.toggle("active", node.id === `pane-${pane}`));
+  $$(".rail-item").forEach((button) => {
+    button.classList.toggle("active", button.dataset.pane === pane);
+  });
+  $$(".admin-pane").forEach((node) => {
+    node.classList.toggle("active", node.id === `pane-${pane}`);
+  });
 }
 
 async function editSource(sourceId) {
@@ -1989,27 +2003,33 @@ function wireEvents() {
     showLoggedOut();
   });
 
-  $$(".tab").forEach((button) => button.addEventListener("click", () => {
-    state.activeTab = button.dataset.tab;
-    state.showOlder = false;
-    $$(".tab").forEach((entry) => entry.classList.toggle("active", entry === button));
-    if (state.selectedId && !visibleItems().some((item) => item.id === state.selectedId)) {
-      state.selectedId = null;
-    }
-    renderTable();
-    renderDetail();
-    if (state.selectedId) loadComments(state.selectedId);
-  }));
+  $$(".tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeTab = button.dataset.tab;
+      state.showOlder = false;
+      $$(".tab").forEach((entry) => {
+        entry.classList.toggle("active", entry === button);
+      });
+      if (state.selectedId && !visibleItems().some((item) => item.id === state.selectedId)) {
+        state.selectedId = null;
+      }
+      renderTable();
+      renderDetail();
+      if (state.selectedId) loadComments(state.selectedId);
+    });
+  });
 
-  $$(".region-filter").forEach((button) => button.addEventListener("click", () => {
-    const region = button.dataset.region;
-    if (state.selectedRegions.has(region)) state.selectedRegions.delete(region);
-    else state.selectedRegions.add(region);
-    state.showOlder = false;
-    button.classList.toggle("active", state.selectedRegions.has(region));
-    button.setAttribute("aria-pressed", String(state.selectedRegions.has(region)));
-    renderTable();
-  }));
+  $$(".region-filter").forEach((button) => {
+    button.addEventListener("click", () => {
+      const region = button.dataset.region;
+      if (state.selectedRegions.has(region)) state.selectedRegions.delete(region);
+      else state.selectedRegions.add(region);
+      state.showOlder = false;
+      button.classList.toggle("active", state.selectedRegions.has(region));
+      button.setAttribute("aria-pressed", String(state.selectedRegions.has(region)));
+      renderTable();
+    });
+  });
 
   el.fltSearch.addEventListener("input", (event) => {
     state.filters.search = event.target.value;
@@ -2052,15 +2072,17 @@ function wireEvents() {
       if (row) selectItem(row.dataset.id);
     }
   });
-  $$("th.sortable").forEach((th) => th.addEventListener("click", () => {
-    const key = th.dataset.sort;
-    if (state.sortKey === key) state.sortDir *= -1;
-    else {
-      state.sortKey = key;
-      state.sortDir = 1;
-    }
-    renderTable();
-  }));
+  $$("th.sortable").forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (state.sortKey === key) state.sortDir *= -1;
+      else {
+        state.sortKey = key;
+        state.sortDir = 1;
+      }
+      renderTable();
+    });
+  });
 
   el.syncBtn.addEventListener("click", async () => {
     el.syncBtn.classList.add("spin");
@@ -2154,8 +2176,12 @@ function wireEvents() {
   el.fontToggle.addEventListener("click", () => {
     applyLargeTextPreference(!document.documentElement.classList.contains("large-text"));
   });
-  $$(".nav-item").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
-  $$(".rail-item").forEach((button) => button.addEventListener("click", () => switchPane(button.dataset.pane)));
+  $$(".nav-item").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.view));
+  });
+  $$(".rail-item").forEach((button) => {
+    button.addEventListener("click", () => switchPane(button.dataset.pane));
+  });
   el.srcSearch.addEventListener("input", (event) => {
     state.sourceSearch = event.target.value;
     renderSources();

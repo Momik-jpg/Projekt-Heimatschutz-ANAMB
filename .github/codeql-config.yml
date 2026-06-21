@@ -1,0 +1,6 @@
+name: Heimatschutz application code
+
+paths:
+  - server
+  - public
+  - scripts

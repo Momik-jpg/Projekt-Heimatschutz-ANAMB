@@ -87,9 +87,24 @@ export function normalizeImportedDates({ publicationDate, deadlineDate, text, re
   return { publicationDate: normalizedPublication, deadlineDate: normalizedDeadline };
 }
 
+export function stripMarkupTags(value) {
+  let output = "";
+  let insideTag = false;
+  for (const character of String(value ?? "")) {
+    if (character === "<") {
+      insideTag = true;
+    } else if (character === ">" && insideTag) {
+      insideTag = false;
+      output += " ";
+    } else if (!insideTag) {
+      output += character;
+    }
+  }
+  return output;
+}
+
 export function cleanImportedAddress(value) {
-  return String(value ?? "")
-    .replace(/<[^>]*>/g, " ")
+  return stripMarkupTags(value)
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/\s+box(?:\s+box[-\w]+){1,20}["']?(?:\s+[\s\S]*)?$/i, "")

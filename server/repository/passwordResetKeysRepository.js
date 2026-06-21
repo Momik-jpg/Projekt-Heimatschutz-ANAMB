@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
+import { scryptSync } from "node:crypto";
 
 // Reset-Keys werden nur als SHA-256-Hash gespeichert; der Klartext-Key geht per
 // E-Mail an die Nutzerin/den Nutzer.
 export function hashResetKey(key) {
-  return createHash("sha256").update(String(key ?? "").trim().toUpperCase()).digest("hex");
+  return scryptSync(String(key ?? "").trim().toUpperCase(), "heimatschutz-password-reset-v1", 32).toString("hex");
 }
 
 function mapResetKey(row) {

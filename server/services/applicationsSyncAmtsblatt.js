@@ -378,7 +378,7 @@ export async function enrichAmtsblattEntryFromDetail(entry, origin, fetchImpl, r
     const streetMatch = bodyParcel
       ? null
       : detailText.match(
-          /([A-ZÄÖÜ][A-Za-zÄÖÜäöüss.-]*(?:strasse|strasse|weg|gasse|platz|allee|ring|rain|halde|steig|matte|acker|feld|quai|ufer)\s*\d{0,4}\s*[a-z]?)/i
+          /([A-ZÄÖÜ][A-Za-zÄÖÜäöü.-]*(?:strasse|weg|gasse|platz|allee|ring|rain|halde|steig|matte|acker|feld|quai|ufer)\s*\d{0,4}\s*[a-z]?)/i
         );
     const bodyStreet = streetMatch ? normalizeWhitespace(streetMatch[1]) : "";
 

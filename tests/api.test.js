@@ -8015,6 +8015,7 @@ test("responses carry hardened security headers including HSTS", async (context)
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.equal(response.headers.get("x-frame-options"), "DENY");
   assert.equal(response.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+  assert.match(response.headers.get("ratelimit") ?? "", /r=\d+;\s*t=\d+/);
 });
 
 test("large responses are gzip-compressed when the client accepts it", async (context) => {
