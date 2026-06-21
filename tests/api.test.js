@@ -435,6 +435,10 @@ test("master can reset a forgotten password for a team member", async (context) 
     username: "master",
     password: TEST_MASTER_PASSWORD
   });
+  const luciaCookie = await login(testServer.baseUrl, {
+    username: "lucia.vettori",
+    password: "Heimat2026!"
+  });
 
   const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
     headers: {
@@ -457,6 +461,11 @@ test("master can reset a forgotten password for a team member", async (context) 
   });
 
   assert.equal(resetResponse.status, 200);
+
+  const revokedSession = await requestJson(testServer.baseUrl, "/api/auth/session", {
+    headers: { Cookie: luciaCookie }
+  });
+  assert.equal(revokedSession.payload.authenticated, false);
 
   const oldLoginResponse = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",
@@ -8254,6 +8263,10 @@ test("self-service password reset by email works for accounts with an email", as
   testServer.db
     .prepare("UPDATE users SET email = 'lucia@example.test' WHERE username = 'lucia.vettori'")
     .run();
+  const luciaCookie = await login(testServer.baseUrl, {
+    username: "lucia.vettori",
+    password: "Heimat2026!"
+  });
 
   const forgot = await requestJson(testServer.baseUrl, "/api/auth/forgot-password", {
     method: "POST",
@@ -8270,6 +8283,11 @@ test("self-service password reset by email works for accounts with an email", as
     body: JSON.stringify({ key: resetKeys[0].key, password: "NeuLucia_2026!" })
   });
   assert.equal(reset.status, 200);
+
+  const revokedSession = await requestJson(testServer.baseUrl, "/api/auth/session", {
+    headers: { Cookie: luciaCookie }
+  });
+  assert.equal(revokedSession.payload.authenticated, false);
 
   const newLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",

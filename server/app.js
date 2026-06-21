@@ -301,8 +301,9 @@ export function createApp(options = {}) {
     const key = generateMasterSetupKey();
     const expiresAt = buildMasterSetupExpiry(new Date(now));
 
+    const setupKeyId = `MSK-${randomBytes(8).toString("hex")}`;
     masterSetupKeysRepository.create({
-      id: `MSK-${randomBytes(8).toString("hex")}`,
+      id: setupKeyId,
       userId: masterUserId,
       keyHash: hashSetupKey(key),
       sentTo: masterSetupEmail,
@@ -310,12 +311,17 @@ export function createApp(options = {}) {
       expiresAt
     });
 
-    await deliverMasterSetupKey({ key, sentTo: masterSetupEmail, expiresAt });
+    try {
+      await deliverMasterSetupKey({ key, sentTo: masterSetupEmail, expiresAt });
+    } catch (error) {
+      masterSetupKeysRepository.deleteById(setupKeyId);
+      throw error;
+    }
   }
 
   const masterSetupReadyPromise = ensureMasterAccountReady().catch((error) => {
     logger.warn?.(`Master-Setup konnte nicht abgeschlossen werden: ${sanitizeForLog(error.message)}`);
-    return null;
+    throw error;
   });
   const loginRateLimiter =
     options.loginRateLimit === false
@@ -862,6 +868,7 @@ export function createApp(options = {}) {
       }
 
       passwordResetKeysRepository.deletePendingForUser(resetKey.userId);
+      sessionsRepository.deleteByUserId(resetKey.userId);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -994,6 +1001,8 @@ export function createApp(options = {}) {
       response.status(404).json({ error: "Benutzer nicht gefunden." });
       return;
     }
+
+    sessionsRepository.deleteByUserId(updatedUser.id);
 
     recordAudit("admin.password_reset", request, {
       target: updatedUser.username ?? updatedUser.displayName

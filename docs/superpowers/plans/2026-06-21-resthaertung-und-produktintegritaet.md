@@ -232,10 +232,10 @@ git commit -m "fix(import): Amtsblatt-Fristen belegen und Feldprovenienz speiche
 - Modify: `server/repository/masterSetupKeysRepository.js`
 - Modify: `tests/tokenCrypto.test.js`
 - Modify: `tests/httpValidation.test.js`
-- Create: `tests/passwordResetSessionRevocation.test.js`
+- Modify: `tests/api.test.js`
 - Create: `tests/masterSetupDeliveryFailure.test.js`
 
-- [ ] **Step 1: AES-GCM-Negativtests schreiben**
+- [x] **Step 1: AES-GCM-Negativtests schreiben**
 
 In `tests/tokenCrypto.test.js` werden gültige Chiffrate gezielt mit einem
 15-Byte-Tag und einem 11-Byte-IV neu zusammengesetzt; `decryptToken` muss jeweils
@@ -248,7 +248,7 @@ Run: `node --test tests/tokenCrypto.test.js tests/httpValidation.test.js`
 
 Expected: Neue Verträge rot.
 
-- [ ] **Step 2: GCM-Längen explizit prüfen**
+- [x] **Step 2: GCM-Längen explizit prüfen**
 
 Vor `createDecipheriv` Base64 strikt dekodieren und `iv.length === 12`, `tag.length === 16` prüfen. Decipher mit festem Tag-Limit erstellen:
 
@@ -256,11 +256,11 @@ Vor `createDecipheriv` Base64 strikt dekodieren und `iv.length === 12`, `tag.len
 const decipher = createDecipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
 ```
 
-- [ ] **Step 3: Token-Key in Produktion erzwingen**
+- [x] **Step 3: Token-Key in Produktion erzwingen**
 
 `validateProductionRuntimeConfiguration` muss einen fehlenden oder offensichtlichen Platzhalter in `TOKEN_ENCRYPTION_KEY` ablehnen. Der Klartext-Fallback bleibt ausschliesslich für lokale Entwicklung und explizite Legacy-Migration.
 
-- [ ] **Step 4: Sitzungen bei jedem Passwortwechsel widerrufen**
+- [x] **Step 4: Sitzungen bei jedem Passwortwechsel widerrufen**
 
 Nach erfolgreichem Self-Service-Reset und Admin-Reset innerhalb desselben fachlichen Vorgangs:
 
@@ -270,29 +270,29 @@ sessionsRepository.deleteByUserId(targetUserId);
 
 Tests müssen eine vorher gültige Sitzung nach dem Reset mit 401/unauthenticated sehen.
 
-- [ ] **Step 5: Master-Setup bei Zustellfehler fail-closed machen**
+- [x] **Step 5: Master-Setup bei Zustellfehler fail-closed machen**
 
 `masterSetupKeysRepository` erhält `deleteById`. Wird der Versand abgelehnt, wird der provisorische Schlüssel sofort gelöscht und der Fehler aus `ready` weitergereicht. Der direkte Produktionsstart darf vor `app.listen` scheitern.
 
-- [ ] **Step 6: Beispielwerte als Beispielwerte erkennen**
+- [x] **Step 6: Beispielwerte als Beispielwerte erkennen**
 
 `MASTER_SETUP_EMAIL=master@example.org` und `SMTP_HOST=smtp.example.org` dürfen in Produktion nicht als konfigurierte Zustellung gelten.
 
-- [ ] **Step 7: Tests und Semgrep**
+- [x] **Step 7: Tests und Semgrep**
 
 Run:
 
 ```bash
-node --test tests/tokenCrypto.test.js tests/httpValidation.test.js tests/passwordResetSessionRevocation.test.js tests/masterSetupDeliveryFailure.test.js
+node --test tests/tokenCrypto.test.js tests/httpValidation.test.js tests/masterSetupDeliveryFailure.test.js tests/api.test.js
 semgrep scan --config p/security-audit --config p/javascript --error --metrics=off
 ```
 
 Expected: Tests grün; Semgrep 0 blockierende Befunde.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
-git add server/services/tokenCrypto.js server/httpValidation.js server/app.js server/repository/masterSetupKeysRepository.js tests/tokenCrypto.test.js tests/httpValidation.test.js tests/passwordResetSessionRevocation.test.js tests/masterSetupDeliveryFailure.test.js
+git add server/services/tokenCrypto.js server/httpValidation.js server/app.js server/repository/masterSetupKeysRepository.js tests/tokenCrypto.test.js tests/httpValidation.test.js tests/api.test.js tests/masterSetupDeliveryFailure.test.js
 git commit -m "fix(security): GCM validieren und Zugangsdatenwechsel fail-closed machen"
 ```
 

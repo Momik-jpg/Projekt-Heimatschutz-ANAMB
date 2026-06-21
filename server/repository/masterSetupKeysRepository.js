@@ -44,6 +44,10 @@ export function createMasterSetupKeysRepository(db) {
       );
     },
 
+    deleteById(id) {
+      return db.prepare("DELETE FROM master_setup_keys WHERE id = ?").run(id).changes;
+    },
+
     // Aktiver (nicht verbrauchter, nicht abgelaufener) Key zu einem Klartext-Key.
     getActiveByKey(key, now) {
       const row = db

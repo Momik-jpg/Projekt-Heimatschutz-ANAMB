@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createCipheriv, scryptSync } from "node:crypto";
 
 // S5: Quell-Token-Verschlüsselung (AES-256-GCM). Schlüssel vor dem Import setzen.
 process.env.TOKEN_ENCRYPTION_KEY = "test-token-key-32bytes-minimum!!";
@@ -36,4 +37,20 @@ test("manipulierter Ciphertext entschlüsselt nicht (Auth-Tag)", () => {
   const stored = encryptToken("integritaet");
   const tampered = `${stored.slice(0, -4)}AAAA`;
   assert.equal(decryptToken(tampered), "");
+});
+
+test("zu kurzer GCM-Auth-Tag wird verworfen", () => {
+  const stored = encryptToken("integritaet");
+  const [iv, tag, ciphertext] = stored.slice("gcm:".length).split(":");
+  const shortTag = Buffer.from(tag, "base64").subarray(0, 15).toString("base64");
+  assert.equal(decryptToken(`gcm:${iv}:${shortTag}:${ciphertext}`), "");
+});
+
+test("zu kurzer GCM-IV wird verworfen", () => {
+  const key = scryptSync(process.env.TOKEN_ENCRYPTION_KEY, "heimatschutz-token-v1", 32);
+  const iv = Buffer.alloc(11, 7);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const ciphertext = Buffer.concat([cipher.update("integritaet", "utf8"), cipher.final()]);
+  const stored = `gcm:${iv.toString("base64")}:${cipher.getAuthTag().toString("base64")}:${ciphertext.toString("base64")}`;
+  assert.equal(decryptToken(stored), "");
 });

@@ -61,10 +61,20 @@ export function decryptToken(stored) {
   }
 
   try {
-    const [ivB64, tagB64, ctB64] = value.slice(ENC_PREFIX.length).split(":");
-    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivB64, "base64"));
-    decipher.setAuthTag(Buffer.from(tagB64, "base64"));
-    return Buffer.concat([decipher.update(Buffer.from(ctB64, "base64")), decipher.final()]).toString("utf8");
+    const parts = value.slice(ENC_PREFIX.length).split(":");
+    if (parts.length !== 3 || parts.some((part) => !part)) {
+      return "";
+    }
+    const [ivB64, tagB64, ctB64] = parts;
+    const iv = Buffer.from(ivB64, "base64");
+    const tag = Buffer.from(tagB64, "base64");
+    const ciphertext = Buffer.from(ctB64, "base64");
+    if (iv.length !== 12 || tag.length !== 16 || ciphertext.length === 0) {
+      return "";
+    }
+    const decipher = createDecipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
   } catch {
     return "";
   }
