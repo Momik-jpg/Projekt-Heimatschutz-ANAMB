@@ -46,7 +46,9 @@ export const passwordResetKeyLifetimeHours = 2;
 // Hochentropischer Einmal-Key für den Passwort-Reset.
 export function generatePasswordResetKey() {
   const raw = randomBytes(12).toString("hex").toUpperCase();
-  return `HSA-RESET-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
+  const groups = [];
+  for (let index = 0; index < raw.length; index += 4) groups.push(raw.slice(index, index + 4));
+  return `HSA-RESET-${groups.join("-")}`;
 }
 
 export function buildPasswordResetExpiry(issuedAt = new Date()) {
@@ -113,4 +115,3 @@ export function buildImportNotificationEntries(changes, sourceLabel) {
       createdAt
     }));
 }
-

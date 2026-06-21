@@ -14,7 +14,6 @@ import {
   sanitizeExtractedAddress
 } from "./applicationsSyncAddress.js";
 import {
-  addDays,
   addressPlaceholderPattern,
   administrativePermitAttachmentPattern,
   administrativePermitTemplatePattern,
@@ -427,7 +426,7 @@ export async function refineImportedItemData(item, options = {}) {
   }
 
   if (!refined.deadlineDate) {
-    const deadlineDate = extractDeadlineDateFromText(context) || (refined.publicationDate ? addDays(refined.publicationDate, 30) : "");
+    const deadlineDate = extractDeadlineDateFromText(context) || "";
 
     if (deadlineDate) {
       refined.deadlineDate = deadlineDate;

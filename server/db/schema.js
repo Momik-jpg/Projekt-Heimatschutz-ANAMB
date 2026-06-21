@@ -11,17 +11,20 @@ export const schema = `
     source_url TEXT NOT NULL,
     municipality TEXT NOT NULL,
     address TEXT NOT NULL,
+    address_provenance TEXT NOT NULL DEFAULT 'legacy-unknown',
     parcel TEXT NOT NULL DEFAULT '',
     coordinates TEXT NOT NULL DEFAULT '',
     location_precision TEXT NOT NULL DEFAULT '',
     publication_date TEXT NOT NULL,
     deadline_date TEXT NOT NULL,
+    deadline_provenance TEXT NOT NULL DEFAULT 'legacy-unknown',
     project_type TEXT NOT NULL,
     description TEXT NOT NULL,
     protection_status TEXT NOT NULL,
     agis_match TEXT NOT NULL,
     agis_layers TEXT NOT NULL DEFAULT '[]',
     workflow_status TEXT NOT NULL,
+    archived_at TEXT NOT NULL DEFAULT '',
     assignee TEXT NOT NULL DEFAULT '',
     note TEXT NOT NULL DEFAULT '',
     automated_assessment TEXT NOT NULL DEFAULT '',
@@ -265,4 +268,3 @@ export const schema = `
   CREATE INDEX IF NOT EXISTS idx_municipality_source_links_source ON municipality_source_links(source_id, relation_type);
   CREATE INDEX IF NOT EXISTS idx_municipality_quality_assessments_rating ON municipality_quality_assessments(rating);
 `;
-

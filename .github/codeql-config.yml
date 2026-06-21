@@ -1,0 +1,9 @@
+name: Heimatschutz application code
+
+paths:
+  - server
+  - public
+  - scripts
+
+paths-ignore:
+  - public/vendor

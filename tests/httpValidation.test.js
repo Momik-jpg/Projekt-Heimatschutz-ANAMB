@@ -86,13 +86,18 @@ test("validateProductionRuntimeConfiguration", () => {
     /Platzhalter/
   );
   assert.doesNotThrow(() =>
-    validateProductionRuntimeConfiguration({ NODE_ENV: "production", MASTER_ACCOUNT_PASSWORD: "Echt-Sicher-123!" })
+    validateProductionRuntimeConfiguration({
+      NODE_ENV: "production",
+      MASTER_ACCOUNT_PASSWORD: "Echt-Sicher-123!",
+      TOKEN_ENCRYPTION_KEY: "Echter-Token-Key-32-Zeichen-lang!"
+    })
   );
   assert.throws(
     () =>
       validateProductionRuntimeConfiguration({
         NODE_ENV: "production",
         MASTER_ACCOUNT_PASSWORD: "Echt-Sicher-123!",
+        TOKEN_ENCRYPTION_KEY: "Echter-Token-Key-32-Zeichen-lang!",
         DEFAULT_LOGIN_PASSWORD: "bittevordemreleaseaendern123"
       }),
     /DEFAULT_LOGIN_PASSWORD/
@@ -102,8 +107,36 @@ test("validateProductionRuntimeConfiguration", () => {
     validateProductionRuntimeConfiguration({
       NODE_ENV: "production",
       MASTER_SETUP_EMAIL: "master@ag.ch",
-      SMTP_HOST: "smtp.ag.ch"
+      SMTP_HOST: "smtp.ag.ch",
+      TOKEN_ENCRYPTION_KEY: "Echter-Token-Key-32-Zeichen-lang!"
     })
+  );
+  assert.throws(
+    () =>
+      validateProductionRuntimeConfiguration({
+        NODE_ENV: "production",
+        MASTER_ACCOUNT_PASSWORD: "Echt-Sicher-123!"
+      }),
+    /TOKEN_ENCRYPTION_KEY/
+  );
+  assert.throws(
+    () =>
+      validateProductionRuntimeConfiguration({
+        NODE_ENV: "production",
+        MASTER_ACCOUNT_PASSWORD: "Echt-Sicher-123!",
+        TOKEN_ENCRYPTION_KEY: "<als-secret-setzen>"
+      }),
+    /TOKEN_ENCRYPTION_KEY/
+  );
+  assert.throws(
+    () =>
+      validateProductionRuntimeConfiguration({
+        NODE_ENV: "production",
+        MASTER_SETUP_EMAIL: "master@example.org",
+        SMTP_HOST: "smtp.example.org",
+        TOKEN_ENCRYPTION_KEY: "Echter-Token-Key-32-Zeichen-lang!"
+      }),
+    /Beispielwerte/
   );
 });
 

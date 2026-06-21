@@ -1,0 +1,397 @@
+/* =====================================================================
+   Touch-Komfort: grössere Tap-Targets auf Touch-Eingabe (Input-Methode,
+   nicht Bildschirmbreite). Maus/Trackpad behalten die dichte Ansicht.
+   ===================================================================== */
+@media (pointer: coarse), (max-width: 760px) {
+  .icon-btn { width: 44px; height: 44px; }
+  .icon-btn.sm { width: 44px; height: 44px; }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .row-actions { gap: 8px; }
+  .util-link { padding-top: 6px; padding-bottom: 6px; }
+  .tab { padding-top: 11px; padding-bottom: 11px; }
+}
+
+/* Verwaltungs-Rail auf schmalen Screens mitscrollen statt pinnen. Steht am
+   Dateiende, damit es die spätere .admin-rail { position: sticky } überschreibt. */
+@media (max-width: 900px) {
+  .admin-rail { position: static; }
+}
+
+/* Dark-Mode-Tabs stehen am Dateiende, damit sie die späte helle
+   Feinschliff-Regel .tab.active { background: #fff } sicher überschreiben. */
+body.dark .tab {
+  color: var(--ink-700);
+}
+
+body.dark .tab:hover {
+  color: var(--brand-700);
+  background: rgba(86,168,230,.10);
+}
+
+body.dark .tab.active {
+  color: #dceeff;
+  background: rgba(86,168,230,.16);
+  border-bottom-color: var(--brand-700);
+}
+
+body.dark .tab.active .tab-count {
+  background: rgba(86,168,230,.22);
+  color: #eef7ff;
+}
+
+/* Regionale Arbeitsliste und Mail-ähnlicher Lesestatus */
+.region-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--panel-border);
+  background: #fff;
+}
+
+.region-label {
+  padding: 0;
+  margin-right: 3px;
+  color: var(--ink-600);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.region-filter {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid #cbd6df;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: var(--ink-700);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.region-filter:hover {
+  border-color: var(--brand-500);
+  color: var(--brand-700);
+}
+
+.region-filter.active,
+.region-filter[aria-pressed="true"] {
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: #fff;
+}
+
+.region-hint {
+  margin-left: auto;
+  color: var(--ink-500);
+  font-size: 11px;
+}
+
+tbody tr.unread td {
+  background: #f1f8fd;
+}
+
+tbody tr.unread .cell-mun,
+tbody tr.unread .cell-app-title {
+  font-weight: 850;
+}
+
+.unread-dot {
+  display: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 7px 1px 0;
+  border-radius: 50%;
+  background: var(--brand-700);
+  vertical-align: middle;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -64px;
+  z-index: 1000;
+  padding: 10px 16px;
+  border-radius: var(--r-md);
+  background: var(--brand-700);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  transition: top .15s ease;
+}
+.skip-link:focus-visible {
+  top: 12px;
+  outline: 3px solid var(--brand-200);
+  outline-offset: 2px;
+}
+
+.noscript-banner {
+  margin: 0;
+  padding: 14px 20px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-bottom: 1px solid var(--danger-line);
+  font-weight: 600;
+  text-align: center;
+}
+
+tr.unread .unread-dot {
+  display: inline-block;
+}
+
+.cell-app-meta {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink-500);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.older-control-row td {
+  padding: 11px 16px;
+  text-align: center;
+  background: var(--panel-muted) !important;
+}
+
+.show-older {
+  min-height: 34px;
+  padding: 7px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--brand-700);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.show-older:hover {
+  border-color: var(--brand-500);
+  background: var(--brand-soft);
+}
+
+.project-detail-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 8px;
+}
+
+.project-scale {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border: 1px solid #b9c8d5;
+  border-radius: 999px;
+  background: #f3f6f8;
+  color: var(--ink-700);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.project-scale.scale-gross {
+  border-color: #dc9ea4;
+  background: #fff0f1;
+  color: #9f2833;
+}
+
+.project-scale.scale-klein {
+  border-color: #9dc9b2;
+  background: #eef9f3;
+  color: #1f7350;
+}
+
+.project-scale.scale-unbekannt {
+  border-color: #c9d0d6;
+  background: #f5f6f7;
+  color: var(--ink-600);
+}
+
+.source-link {
+  color: var(--brand-700);
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+body.dark .region-filters,
+body.dark .region-filter,
+body.dark .show-older,
+body.dark .project-scale {
+  border-color: var(--panel-border);
+  background: var(--panel-muted);
+  color: var(--ink-800);
+}
+
+body.dark .region-filter.active,
+body.dark .region-filter[aria-pressed="true"] {
+  border-color: var(--brand-500);
+  background: rgba(86,168,230,.22);
+  color: #eef7ff;
+}
+
+body.dark tbody tr.unread td {
+  background: rgba(86,168,230,.10);
+}
+
+@media (max-width: 900px) {
+  .region-hint { width: 100%; margin-left: 0; }
+}
+
+/* Dark-Mode: keine weissen Top-Highlights oder Glas-Kanten auf Controls.
+   Die Oberfläche bleibt flach, dunkel und amtlich; Fokus nutzt weiter den Ring. */
+body.dark .tool-btn,
+body.dark .util-link,
+body.dark .reset-btn,
+body.dark .map-link,
+body.dark .btn.ghost,
+body.dark .icon-btn,
+body.dark .search-mini,
+body.dark .filter-bar input,
+body.dark .filter-bar select,
+body.dark .form-card input,
+body.dark .form-card select,
+body.dark .form-card textarea,
+body.dark .comment-form textarea,
+body.dark .modal-input,
+body.dark .hit,
+body.dark .pill,
+body.dark .count-tag,
+body.dark .nav-item .nav-badge,
+body.dark .tab .tab-count,
+body.dark .run-item,
+body.dark .stat,
+body.dark .band-chip {
+  box-shadow: none;
+}
+
+body.dark .filter-bar input,
+body.dark .filter-bar select,
+body.dark .form-card input,
+body.dark .form-card select,
+body.dark .form-card textarea,
+body.dark .comment-form textarea,
+body.dark .modal-input,
+body.dark .search-mini,
+body.dark .reset-btn,
+body.dark .map-link,
+body.dark .icon-btn,
+body.dark .btn.ghost {
+  border-color: var(--panel-border);
+  background: var(--panel-muted);
+}
+
+body.dark .btn,
+body.dark .modal-btn-confirm {
+  box-shadow: none;
+}
+
+body.dark .tool-btn:hover,
+body.dark .reset-btn:hover,
+body.dark .map-link:hover,
+body.dark .icon-btn:hover,
+body.dark .btn:hover,
+body.dark .modal-btn-confirm:hover {
+  box-shadow: none;
+}
+
+body.dark .filter-bar input:focus,
+body.dark .filter-bar select:focus,
+body.dark .form-card input:focus,
+body.dark .form-card select:focus,
+body.dark .form-card textarea:focus,
+body.dark .comment-form textarea:focus,
+body.dark .modal-input:focus {
+  border-color: var(--brand-500);
+  box-shadow: var(--ring);
+}
+
+body.dark tbody tr.selected td:first-child {
+  box-shadow: inset 4px 0 0 var(--brand-700);
+}
+
+body.dark .rail-item.active {
+  box-shadow: inset 3px 0 0 var(--brand-700);
+}
+
+body.dark .titleband {
+  box-shadow: inset 0 -1px 0 rgba(86,168,230,.16);
+}
+
+body.dark .titleband::after {
+  background: rgba(86,168,230,.12);
+}
+
+body.dark .band-chip {
+  border-color: rgba(86,168,230,.32);
+}
+
+/* Login im Dark-Mode darf keine helle Auth-Fläche behalten. Die Login-Seite
+   nutzt eigene Hintergründe, deshalb steht dieser Override bewusst am Ende. */
+body.dark .auth-shell {
+  background: #0b111c;
+}
+
+body.dark .auth-card {
+  background: var(--panel);
+  border-color: var(--panel-border);
+  box-shadow: 0 30px 70px -32px rgba(0,0,0,.95);
+}
+
+body.dark .auth-copy {
+  background: #0d4f7c;
+}
+
+body.dark .auth-forms {
+  background: var(--panel);
+}
+
+body.dark .auth-form input {
+  background: var(--panel-muted);
+  border-color: var(--panel-border);
+  color: var(--ink-900);
+  box-shadow: none;
+}
+
+body.dark .auth-form input::placeholder {
+  color: var(--ink-500);
+}
+
+body.dark .auth-form input:focus {
+  border-color: var(--brand-500);
+  box-shadow: var(--ring);
+}
+
+body.dark .password-toggle {
+  color: var(--ink-600);
+  box-shadow: none;
+}
+
+body.dark .auth-links button {
+  color: var(--brand-700);
+}

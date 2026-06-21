@@ -1,5 +1,6 @@
 // Baugesuch-Import: Candidate-Helfer (aus applicationsSyncCommon.js aufgeteilt).
 import { createHash, randomBytes } from "node:crypto";
+import { stripMarkupTags } from "../domain/applicationImportNormalization.js";
 import {
   firstNonEmptyValue,
   normalizeArray,
@@ -152,8 +153,7 @@ export function looksLikeMarkupJunk(value) {
 }
 
 export function cleanProjectText(value) {
-  const text = String(value ?? "")
-    .replace(/<[^>]*>/g, " ")
+  const text = stripMarkupTags(value)
     .replace(/&(?:nbsp|amp|lt|gt|quot|#0?39|apos);/gi, " ")
     .replace(/\b[\w-]+\s*=\s*"[^"]*"/g, " ")
     .replace(/\b[\w-]+\s*=\s*'[^']*'/g, " ")
@@ -192,11 +192,18 @@ export function createNormalizedApplication(rawItem, sourceUrl, fallbacks = {}) 
     Boolean(item.ambiguousAddress ?? item.ambiguous_address ?? fallbacks.ambiguousAddress ?? false) || !coordinates;
   const municipality = String(item.municipality ?? item.ort ?? fallbacks.municipality ?? "").trim();
   const parcel = String(item.parcel ?? item.parzelle ?? "").trim();
-  const address = String(item.address ?? item.adresse ?? fallbacks.address ?? "").trim() || (parcel ? `Parzelle ${parcel}` : "");
+  const rawAddress = String(item.address ?? item.adresse ?? fallbacks.address ?? "").trim();
+  const address = rawAddress || (parcel ? `Parzelle ${parcel}` : "");
   const publicationDate = normalizeDate(item.publicationDate ?? item.publication_date ?? item.publishedAt);
   const rawDeadlineDate = normalizeDate(item.deadlineDate ?? item.deadline_date ?? item.fristende);
   const invalidDeadlineDate = isDeadlineBeforePublication(rawDeadlineDate, publicationDate);
   const deadlineDate = invalidDeadlineDate ? "" : rawDeadlineDate;
+  const deadlineProvenance = deadlineDate
+    ? String(item.deadlineProvenance ?? item.deadline_provenance ?? "explicit").trim() || "explicit"
+    : "missing";
+  const addressProvenance =
+    String(item.addressProvenance ?? item.address_provenance ?? "").trim() ||
+    (rawAddress ? "official-field" : "fallback");
   const projectType = cleanProjectText(item.projectType ?? item.project_type ?? item.bauvorhaben) || "Baugesuch";
   const sourceReference =
     String(item.sourceReference ?? item.source_reference ?? item.reference ?? item.id ?? "").trim() ||
@@ -233,10 +240,12 @@ export function createNormalizedApplication(rawItem, sourceUrl, fallbacks = {}) 
     sourceUrl: String(item.sourceUrl ?? item.source_url ?? sourceUrl ?? "").trim() || sourceUrl,
     municipality,
     address,
+    addressProvenance,
     parcel,
     coordinates,
     publicationDate,
     deadlineDate,
+    deadlineProvenance,
     projectType,
     description: cleanProjectText(item.description ?? item.beschreibung ?? fallbacks.description),
     protectionStatus,
@@ -274,4 +283,3 @@ export function normalizeImportedPayload(payload, sourceUrl = "", fallbacks = {}
     .map((item) => createNormalizedApplication(item, sourceUrl, fallbacks))
     .filter(Boolean);
 }
-

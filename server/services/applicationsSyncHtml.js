@@ -12,7 +12,6 @@ import {
   shortenText
 } from "./applicationsSyncAddress.js";
 import {
-  addDays,
   bgReferencePattern,
   createSourcePatternMatcher,
   defaultHtmlExcludePattern,
@@ -155,7 +154,7 @@ export async function buildTabularImportedItems(relevantHtml, source, requestTim
       parcel,
       coordinates,
       publicationDate: range.publicationDate,
-      deadlineDate: range.deadlineDate || (range.publicationDate ? addDays(range.publicationDate, 30) : ""),
+      deadlineDate: range.deadlineDate || "",
       projectType,
       description: shortenText(rowText, 320),
       protectionStatus: coordinates ? "no-hit" : "manual-review",
@@ -265,7 +264,7 @@ export async function buildStructuredPublicationImportedItems(
     const bauplatz = extractStructuredPublicationField(block, "place");
     const blockText = normalizeWhitespace(stripHtml(block));
     const publicationDate = extractPublicationDateFromText(blockText) || pageDefaults.publicationDate || "";
-    const deadlineDate = extractDeadlineDateFromText(blockText) || pageDefaults.deadlineDate || (publicationDate ? addDays(publicationDate, 30) : "");
+    const deadlineDate = extractDeadlineDateFromText(blockText) || pageDefaults.deadlineDate || "";
     const resolvedUrl = extractStructuredPublicationHref(block, source.sourceUrl);
     const includeMatcher = createSourcePatternMatcher(source.includePattern);
     const excludeMatcher = createSourcePatternMatcher(source.excludePattern);
@@ -598,7 +597,7 @@ export async function buildHtmlImportedItems(
       normalizeAddressWithContext(candidateDetails.address, parcel, matchingContextText) ||
       (parcel ? `Parzelle ${parcel}` : "Adresse von Webseite prüfen");
     const publicationDate = candidateDetails.publicationDate;
-    const deadlineDate = candidateDetails.deadlineDate || (publicationDate ? addDays(publicationDate, 30) : "");
+    const deadlineDate = candidateDetails.deadlineDate || "";
     const projectType = normalizeImportedProjectType(
       extractProjectTypeFromText(candidateText, anchorText, address, resolvedUrl),
       resolvedUrl
@@ -748,7 +747,7 @@ export async function buildHtmlImportedItems(
       const deadlineDate =
         extractDeadlineDateFromText(sourcePageText) ||
         sourcePageDefaults.deadlineDate ||
-        (publicationDate ? addDays(publicationDate, 30) : "");
+        "";
       const projectType = normalizeImportedProjectType(
         extractProjectTypeFromText(sourcePageText, "Baugesuch", address, source.sourceUrl),
         source.sourceUrl

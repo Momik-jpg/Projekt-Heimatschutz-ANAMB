@@ -104,7 +104,7 @@ Voraussetzung:
 
 Schriften werden lokal ausgeliefert (`public/fonts/`, eingebunden über
 `public/fonts.css`) – kein Google-Fonts-CDN, damit keine Nutzerdaten an Dritte
-abfliessen. Neu generieren bei Schriftänderungen: `node scripts/fetch-fonts.mjs`.
+abfliessen. Die geprüften Schriftdateien liegen versioniert unter `public/fonts/`.
 
 PowerShell:
 

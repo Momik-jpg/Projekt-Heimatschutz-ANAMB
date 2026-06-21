@@ -48,3 +48,22 @@ test("assertPublicHost laesst oeffentliche Aufloesung zu", async () => {
   const lookupImpl = async () => [{ address: "93.184.216.34", family: 4 }];
   await assert.doesNotReject(() => assertPublicHost("www.example.com", { lookupImpl }));
 });
+
+test("isPrivateOrReservedIp: Nicht-IP -> false, IPv4-gemappte IPv6 -> wie IPv4", () => {
+  assert.equal(isPrivateOrReservedIp("kein-ip"), false);
+  assert.equal(isPrivateOrReservedIp("999.1.1.1"), false);
+  assert.equal(isPrivateOrReservedIp("::ffff:10.0.0.1"), true);
+  assert.equal(isPrivateOrReservedIp("::ffff:8.8.8.8"), false);
+});
+
+test("assertPublicHost: leerer Host und nicht aufloesbarer Host werfen", async () => {
+  await assert.rejects(() => assertPublicHost(""), /leerer Host/);
+  await assert.rejects(() => assertPublicHost("   "), /leerer Host/);
+  const emptyLookup = async () => [];
+  await assert.rejects(() => assertPublicHost("leer.example", { lookupImpl: emptyLookup }), /konnte nicht aufgeloest/);
+});
+
+test("assertPublicHost: einzelnes (nicht-Array) Lookup-Resultat wird akzeptiert", async () => {
+  const singleRecord = async () => ({ address: "93.184.216.34", family: 4 });
+  await assert.doesNotReject(() => assertPublicHost("www.example.com", { lookupImpl: singleRecord }));
+});

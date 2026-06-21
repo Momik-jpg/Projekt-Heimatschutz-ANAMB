@@ -283,7 +283,7 @@ test("server sends security and cache headers for app assets", async (context) =
   });
 
   const healthResponse = await requestJson(testServer.baseUrl, "/health");
-  const scriptResponse = await requestText(testServer.baseUrl, "/app.js");
+  const scriptResponse = await requestText(testServer.baseUrl, "/js/core.js");
   const indexResponse = await requestText(testServer.baseUrl, "/");
 
   assert.equal(healthResponse.headers.get("x-content-type-options"), "nosniff");
@@ -435,6 +435,10 @@ test("master can reset a forgotten password for a team member", async (context) 
     username: "master",
     password: TEST_MASTER_PASSWORD
   });
+  const luciaCookie = await login(testServer.baseUrl, {
+    username: "lucia.vettori",
+    password: "Heimat2026!"
+  });
 
   const usersResponse = await requestJson(testServer.baseUrl, "/api/admin/users", {
     headers: {
@@ -457,6 +461,11 @@ test("master can reset a forgotten password for a team member", async (context) 
   });
 
   assert.equal(resetResponse.status, 200);
+
+  const revokedSession = await requestJson(testServer.baseUrl, "/api/auth/session", {
+    headers: { Cookie: luciaCookie }
+  });
+  assert.equal(revokedSession.payload.authenticated, false);
 
   const oldLoginResponse = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",
@@ -2031,7 +2040,8 @@ test("municipality import hydrates official detail pages and ignores generic arc
   assert.equal(syncResponse.payload.items[0].address, "Parzelle 537");
   assert.equal(syncResponse.payload.items[0].projectType, "Neubau Wintergarten (beheizt) und Terrassendeck");
   assert.equal(syncResponse.payload.items[0].publicationDate, "2025-09-11");
-  assert.equal(syncResponse.payload.items[0].deadlineDate, "2025-10-11");
+  assert.equal(syncResponse.payload.items[0].deadlineDate, "");
+  assert.equal(syncResponse.payload.items[0].deadlineProvenance, "missing");
   assert.equal(syncResponse.payload.items[0].sourceUrl, "https://fischbach.example.org/baubewilligung-bg-2025-026/");
 
   const duplicateCategoryCount = testServer.db
@@ -8005,6 +8015,7 @@ test("responses carry hardened security headers including HSTS", async (context)
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.equal(response.headers.get("x-frame-options"), "DENY");
   assert.equal(response.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+  assert.match(response.headers.get("ratelimit") ?? "", /r=\d+;\s*t=\d+/);
 });
 
 test("large responses are gzip-compressed when the client accepts it", async (context) => {
@@ -8253,6 +8264,10 @@ test("self-service password reset by email works for accounts with an email", as
   testServer.db
     .prepare("UPDATE users SET email = 'lucia@example.test' WHERE username = 'lucia.vettori'")
     .run();
+  const luciaCookie = await login(testServer.baseUrl, {
+    username: "lucia.vettori",
+    password: "Heimat2026!"
+  });
 
   const forgot = await requestJson(testServer.baseUrl, "/api/auth/forgot-password", {
     method: "POST",
@@ -8269,6 +8284,11 @@ test("self-service password reset by email works for accounts with an email", as
     body: JSON.stringify({ key: resetKeys[0].key, password: "NeuLucia_2026!" })
   });
   assert.equal(reset.status, 200);
+
+  const revokedSession = await requestJson(testServer.baseUrl, "/api/auth/session", {
+    headers: { Cookie: luciaCookie }
+  });
+  assert.equal(revokedSession.payload.authenticated, false);
 
   const newLogin = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",

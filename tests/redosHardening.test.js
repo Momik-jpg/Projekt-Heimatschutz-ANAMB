@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { normalizeImportedProjectType } from "../server/services/applicationsSyncPublication.js";
 import { extractAddressFromText } from "../server/services/applicationsSyncAddress.js";
 import { cleanImportedAddress } from "../server/domain/applicationImportNormalization.js";
+import { cleanProjectText } from "../server/services/applicationsSyncCandidate.js";
+import { normalizeSwissGeocodeMunicipalityName } from "../server/services/applicationsSyncGeocode.js";
 
 // Phase C: die 3 vom Audit gemeldeten ReDoS-Kandidaten duerfen auf adversarialen
 // Eingaben nicht katastrophal backtracken. Schwelle grosszuegig (alte Regex haetten
@@ -28,6 +30,14 @@ test("Adress-Strassenmuster terminiert schnell", () => {
 test("cleanImportedAddress box-Muster terminiert schnell", () => {
   const adversarial = `Bahnhofstrasse 1 box ${"box-x ".repeat(80)}`;
   assert.ok(elapsed(() => cleanImportedAddress(adversarial)) < LIMIT_MS);
+});
+
+test("Markup-Bereinigung und Gemeinde-Normalisierung bleiben auf adversarialen Eingaben linear", () => {
+  const markup = `<${"<".repeat(100_000)}Adresse`;
+  const municipality = `${" ".repeat(100_000)}(AG)${" ".repeat(100_000)}`;
+  assert.ok(elapsed(() => cleanImportedAddress(markup)) < LIMIT_MS);
+  assert.ok(elapsed(() => cleanProjectText(markup)) < LIMIT_MS);
+  assert.ok(elapsed(() => normalizeSwissGeocodeMunicipalityName(municipality)) < LIMIT_MS);
 });
 
 test("valide Eingaben bleiben unveraendert (Verhaltensgleichheit)", () => {

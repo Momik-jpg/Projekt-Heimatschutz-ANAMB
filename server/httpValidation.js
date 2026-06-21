@@ -178,7 +178,11 @@ export function validateProductionRuntimeConfiguration(env = process.env) {
   const defaultLoginPassword = normalizeEnvString(env.DEFAULT_LOGIN_PASSWORD);
   const masterSetupEmail = normalizeEnvString(env.MASTER_SETUP_EMAIL);
   const smtpHost = normalizeEnvString(env.SMTP_HOST);
+  const tokenEncryptionKey = normalizeEnvString(env.TOKEN_ENCRYPTION_KEY);
   const emailSetupConfigured = Boolean(masterSetupEmail && smtpHost);
+  const setupUsesExampleValues = [masterSetupEmail.split("@").at(-1), smtpHost]
+    .filter(Boolean)
+    .some((value) => /(^|\.)example\.(?:com|net|org|test)$/i.test(value));
   const errors = [];
 
   if (!masterPassword) {
@@ -193,11 +197,26 @@ export function validateProductionRuntimeConfiguration(env = process.env) {
     errors.push("MASTER_ACCOUNT_PASSWORD verwendet noch einen Platzhalter oder das Standardpasswort.");
   }
 
+  if (emailSetupConfigured && setupUsesExampleValues) {
+    errors.push("MASTER_SETUP_EMAIL oder SMTP_HOST verwendet noch reservierte Beispielwerte.");
+  }
+
   // DEFAULT_LOGIN_PASSWORD ist optional: ohne Wert bleiben die Seed-Teamkonten
   // gesperrt und neue Mitarbeitende registrieren sich per Schlüssel. Wird ein Wert
   // gesetzt, darf er kein Platzhalter sein.
   if (defaultLoginPassword && isPlaceholderPassword(defaultLoginPassword)) {
     errors.push("DEFAULT_LOGIN_PASSWORD verwendet noch einen Platzhalter oder das Standardpasswort.");
+  }
+
+  const normalizedTokenKey = normalizeSecretForComparison(tokenEncryptionKey);
+  if (
+    !tokenEncryptionKey ||
+    tokenEncryptionKey.length < 16 ||
+    normalizedTokenKey.includes("als-secret-setzen") ||
+    normalizedTokenKey.includes("placeholder") ||
+    normalizedTokenKey === "changeme"
+  ) {
+    errors.push("TOKEN_ENCRYPTION_KEY fehlt, ist zu kurz oder verwendet noch einen Platzhalter.");
   }
 
   if (errors.length > 0) {
@@ -468,4 +487,3 @@ export function validateApplicationPatch(payload) {
 
   return { value: sanitized };
 }
-

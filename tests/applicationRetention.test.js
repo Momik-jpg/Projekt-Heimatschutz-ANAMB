@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createDatabase } from "../server/db.js";
 import { createApplicationsRepository } from "../server/repository/applicationsRepository.js";
 
-test("löscht Fälle am Tag nach der Frist vollständig und behält Fälle ohne Frist", () => {
+test("archiviert Fälle nach bestätigter Frist vollständig und behält Team-Daten", () => {
   const directory = mkdtempSync(join(tmpdir(), "heimatschutz-retention-"));
   const db = createDatabase(join(directory, "retention.sqlite"), {
     seedDemoApplications: false
@@ -24,6 +24,8 @@ test("löscht Fälle am Tag nach der Frist vollständig und behält Fälle ohne 
       coordinates: "",
       publicationDate: "2026-06-01",
       deadlineDate,
+      deadlineProvenance: deadlineDate ? "explicit" : "missing",
+      addressProvenance: "official-field",
       projectType: "Umbau",
       description: "Testfall",
       protectionStatus: "protected-zone",
@@ -43,7 +45,7 @@ test("löscht Fälle am Tag nach der Frist vollständig und behält Fälle ohne 
     repository.update("BG-EXPIRED", {
       workflowStatus: "under-review",
       assignee: "Lucia Vettori",
-      note: "Diese Daten müssen trotz Bearbeitung mit dem Fall verschwinden."
+      note: "Diese Daten müssen mit dem archivierten Fall erhalten bleiben."
     });
 
     const userId = db.prepare("SELECT id FROM users WHERE username = 'lucia.vettori'").get().id;
@@ -78,21 +80,20 @@ test("löscht Fälle am Tag nach der Frist vollständig und behält Fälle ohne 
       )
     `).run(userId);
 
-    const removed = repository.pruneExpiredApplications({
+    const archived = repository.archiveExpiredApplications({
       referenceDate: new Date("2026-06-19T12:00:00.000Z")
     });
 
-    assert.equal(removed, 1);
-    assert.equal(repository.getById("BG-EXPIRED"), null);
+    assert.equal(archived, 1);
+    assert.equal(repository.getById("BG-EXPIRED").workflowStatus, "archived");
     assert.ok(repository.getById("BG-DUE-TODAY"));
     assert.ok(repository.getById("BG-NO-DEADLINE"));
-    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM application_comments WHERE application_id = 'BG-EXPIRED'").get().count, 0);
-    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM application_reads WHERE application_id = 'BG-EXPIRED'").get().count, 0);
-    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM import_notifications WHERE application_id = 'BG-EXPIRED'").get().count, 0);
-    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM application_learning_rules WHERE created_from_application_id = 'BG-EXPIRED'").get().count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM application_comments WHERE application_id = 'BG-EXPIRED'").get().count, 1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM application_reads WHERE application_id = 'BG-EXPIRED'").get().count, 1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM import_notifications WHERE application_id = 'BG-EXPIRED'").get().count, 1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM application_learning_rules WHERE created_from_application_id = 'BG-EXPIRED'").get().count, 1);
   } finally {
     db.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });
-

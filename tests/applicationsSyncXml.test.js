@@ -14,10 +14,10 @@ const htmlFetch = async () =>
     headers: { "content-type": "text/html" }
   });
 
-test("buildXmlPageDefaults: Publikationsdatum + Frist (+30 Tage Default)", () => {
+test("buildXmlPageDefaults: Publikationsdatum ohne erfundene Frist", () => {
   const defaults = buildXmlPageDefaults({ publishedAt: "2026-01-01", rawText: "Baugesuch Neubau" });
   assert.ok(defaults.publicationDate, "Publikationsdatum aus publishedAt");
-  assert.ok(defaults.deadlineDate, "Frist als Default +30 Tage");
+  assert.equal(defaults.deadlineDate, "", "ohne amtliche Angabe bleibt die Frist leer");
 
   const leer = buildXmlPageDefaults({ publishedAt: "", rawText: "" });
   assert.equal(leer.publicationDate, "");

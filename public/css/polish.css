@@ -1,0 +1,275 @@
+body.dark {
+  --bg: #0a101a;
+  --panel: #121c2b;
+  --panel-muted: #18263a;
+  --surface-quiet: #162235;
+  --panel-border: #283b57;
+  --line-soft: #213149;
+  --ink-900: #f1f6fb;
+  --ink-800: #dce8f3;
+  --ink-700: #b9ccde;
+  --ink-600: #95acc4;
+  --ink-500: #7f98b2;
+  --brand-50: rgba(86,168,230,.15);
+  --brand-100: rgba(86,168,230,.27);
+  --brand-200: #8fc7ef;
+  --brand-300: #76b9eb;
+  --brand-500: #4ca6e5;
+  --brand-600: #3795d8;
+  --brand-700: #66b8f0;
+  --brand-800: #d1ebff;
+  --brand-900: #e5f4ff;
+  --shadow: 0 20px 54px -42px rgba(0,0,0,.96);
+  --shadow-lg: 0 34px 82px -48px rgba(0,0,0,.96);
+}
+
+body.dark {
+  background:
+    radial-gradient(circle at 18% -10%, rgba(86,168,230,.12), transparent 28rem),
+    linear-gradient(180deg, #0b121e 0, #080e17 28rem, #0a101a 100%);
+}
+
+body.dark::before {
+  background-image:
+    linear-gradient(rgba(115,177,224,.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(115,177,224,.04) 1px, transparent 1px);
+  mask-image: linear-gradient(180deg, rgba(0,0,0,.42), transparent 54%);
+}
+
+body.dark .masthead {
+  background: #111b2a;
+  box-shadow: 0 1px 0 var(--panel-border), 0 18px 48px -44px rgba(0,0,0,1);
+}
+
+body.dark .mast-util,
+body.dark .mast-nav,
+body.dark .panel-head,
+body.dark .adm-card-head,
+body.dark .map-card-head,
+body.dark .team summary {
+  background: linear-gradient(180deg, #142034, #111b2b);
+}
+
+body.dark .brand .word b,
+body.dark .panel-head h2,
+body.dark .adm-card-head h2,
+body.dark .cell-app-title,
+body.dark .cell-mun,
+body.dark .cell-strong,
+body.dark .adm-name,
+body.dark .fact dd,
+body.dark .stat .v,
+body.dark .assessment h3 {
+  color: var(--ink-900);
+}
+
+body.dark .titleband {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(102,184,240,.18), transparent 22rem),
+    linear-gradient(135deg, #0c3657 0%, #09263e 58%, #081928 100%);
+  border-bottom-color: rgba(102,184,240,.18);
+  box-shadow: inset 0 -1px 0 rgba(102,184,240,.16);
+}
+
+body.dark .band-chip {
+  background: rgba(102,184,240,.12);
+  border-color: rgba(102,184,240,.28);
+  color: #e3f2ff;
+}
+
+body.dark .panel,
+body.dark .adm-card,
+body.dark .auth-card {
+  border-color: var(--panel-border);
+  box-shadow: var(--shadow);
+}
+
+body.dark .tabs,
+body.dark .filter-bar,
+body.dark .map-legend,
+body.dark .map-symbol-hint {
+  background: #152238;
+}
+
+body.dark .tab.active,
+body.dark .nav-item.active,
+body.dark .rail-item.active {
+  background: rgba(102,184,240,.14);
+  color: #e0f1ff;
+  border-color: rgba(102,184,240,.34);
+}
+
+body.dark .filter-bar input,
+body.dark .filter-bar select,
+body.dark .form-card input,
+body.dark .form-card select,
+body.dark .form-card textarea,
+body.dark .comment-form textarea,
+body.dark .modal-input,
+body.dark .search-mini,
+body.dark .auth-form input,
+body.dark .reset-btn,
+body.dark .map-link,
+body.dark .tool-btn,
+body.dark .icon-btn,
+body.dark .btn.ghost,
+body.dark .modal-btn-cancel {
+  background: #18263a;
+  border-color: var(--panel-border);
+  box-shadow: none;
+}
+
+body.dark .btn,
+body.dark .modal-btn-confirm {
+  background: linear-gradient(180deg, #4ca6e5, #277fbd);
+  border-color: #277fbd;
+  box-shadow: none;
+}
+
+body.dark thead th,
+body.dark .adm-table thead th {
+  background: linear-gradient(180deg, #18263a, #142033);
+  box-shadow: inset 0 -1px 0 var(--panel-border);
+}
+
+body.dark tbody td,
+body.dark .adm-table tbody td {
+  border-bottom-color: var(--line-soft);
+}
+
+body.dark tbody tr:nth-child(even) td,
+body.dark .adm-table tbody tr:nth-child(even) td {
+  background: rgba(255,255,255,.018);
+}
+
+body.dark tbody tr:hover td,
+body.dark .adm-table tbody tr:hover td {
+  background: rgba(102,184,240,.09);
+}
+
+body.dark tbody tr.selected td {
+  background: rgba(102,184,240,.14);
+}
+
+body.dark .facts,
+body.dark .map-card,
+body.dark .assessment,
+body.dark .timeline-card,
+body.dark .form-card,
+body.dark .team,
+body.dark .comment,
+body.dark .stat,
+body.dark .run-item,
+body.dark .admin-rail {
+  background: #18263a;
+  border-color: var(--panel-border);
+  box-shadow: none;
+}
+
+body.dark .assessment {
+  background: rgba(102,184,240,.11);
+}
+
+body.dark .ai-meta {
+  border-top-color: rgba(143,199,239,.18);
+}
+
+body.dark .ai-check {
+  color: var(--ink-600);
+  background: rgba(18,28,43,.62);
+  border-color: var(--panel-border);
+}
+
+body.dark .ai-check b,
+body.dark .ai-meta-title {
+  color: var(--ink-800);
+}
+
+body.dark .ai-check.warn {
+  background: rgba(214,160,70,.12);
+  border-color: rgba(232,183,101,.28);
+}
+
+body.dark .hit.ok,
+body.dark .badge.ok,
+body.dark .pill.ok {
+  color: #83e7b4;
+  background: rgba(53,180,128,.16);
+  border-color: rgba(87,207,154,.34);
+}
+
+body.dark .hit.warning,
+body.dark .badge.warning,
+body.dark .pill.warn {
+  color: #f0c77d;
+  background: rgba(214,160,70,.16);
+  border-color: rgba(232,183,101,.34);
+}
+
+body.dark .hit.danger,
+body.dark .badge.danger,
+body.dark .pill.off {
+  color: #ffacb4;
+  background: rgba(224,90,98,.16);
+  border-color: rgba(242,138,146,.34);
+}
+
+body.dark .auth-shell {
+  background:
+    radial-gradient(circle at 20% 10%, rgba(86,168,230,.12), transparent 26rem),
+    #08101a;
+}
+
+body.dark .auth-copy {
+  background:
+    radial-gradient(circle at 20% 10%, rgba(255,255,255,.13), transparent 18rem),
+    linear-gradient(145deg, #0d4f7c 0%, #0a3b5f 55%, #071f34 100%);
+}
+
+body.dark .auth-forms,
+body.dark .auth-card {
+  background: var(--panel);
+}
+
+.filter-bar select,
+.form-card select {
+  appearance: auto;
+  -webkit-appearance: auto;
+  padding-right: 11px;
+  background-image: none;
+}
+
+body.dark .table-shell,
+body.dark table {
+  background: #101a28;
+}
+
+body.dark .filter-bar select,
+body.dark .form-card select {
+  background-image: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .001ms !important;
+  }
+}
+
+/* =====================================================================
+   Dark Mode: Leaflet-Kartensteuerung eindunkeln (kein weisses Widget)
+   ===================================================================== */
+body.dark .leaflet-bar a,
+body.dark .leaflet-bar a:link,
+body.dark .leaflet-control-zoom-in,
+body.dark .leaflet-control-zoom-out {
+  background: #16243a;
+  color: #cfe3f5;
+  border-bottom-color: var(--panel-border);
+}
+body.dark .leaflet-bar a:hover { background: #1d2f49; color: #eaf4fd; }
+body.dark .leaflet-bar { border-color: var(--panel-border); }

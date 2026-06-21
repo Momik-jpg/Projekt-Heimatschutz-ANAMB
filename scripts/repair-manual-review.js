@@ -109,13 +109,13 @@ function normalizeText(value) {
 function decodeHtmlEntities(value) {
   return String(value ?? "")
     .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, '"')
     .replace(/&#0?39;/g, "'")
     .replace(/&apos;/gi, "'")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
-    .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)));
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)))
+    .replace(/&amp;/gi, "&");
 }
 
 function htmlToSearchText(html) {
@@ -124,8 +124,8 @@ function htmlToSearchText(html) {
     .map((match) => match[1]);
   const title = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "";
   const bodyText = raw
-    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*[^>]*>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*[^>]*>/gi, " ")
     .replace(/<[^>]+>/g, " ");
 
   return normalizeText(decodeHtmlEntities([title, ...metaDescriptions, bodyText].filter(Boolean).join(" ")));

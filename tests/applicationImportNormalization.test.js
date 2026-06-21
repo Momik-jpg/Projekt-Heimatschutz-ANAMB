@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import {
   cleanImportedAddress,
   extractPublicationDateRange,
-  normalizeImportedDates
+  normalizeImportedDates,
+  stripMarkupTags
 } from "../server/domain/applicationImportNormalization.js";
 
 test("liest Datumsbereiche, wenn nur das Enddatum ein Jahr enthält", () => {
@@ -48,4 +49,21 @@ test("entfernt importierte HTML- und Seitentextreste aus Adressen", () => {
     "Dorfstrasse 24"
   );
   assert.equal(cleanImportedAddress("<strong>Steigstrasse 28</strong>"), "Steigstrasse 28");
+  assert.equal(stripMarkupTags("vor <b>fett</b> nach"), "vor  fett  nach");
+});
+
+test("extractPublicationDateRange: kein Treffer, kein Jahr, Jahreswechsel", () => {
+  assert.deepEqual(extractPublicationDateRange("kein datum hier"), { publicationDate: "", deadlineDate: "" });
+  assert.deepEqual(extractPublicationDateRange("vom 5. Juni bis 6. Juli"), { publicationDate: "", deadlineDate: "" });
+  // Dezember -> Januar: Publikation faellt ins Vorjahr.
+  assert.deepEqual(extractPublicationDateRange("Auflage vom 28. Dezember bis 5. Januar 2026"), {
+    publicationDate: "2025-12-28",
+    deadlineDate: "2026-01-05"
+  });
+});
+
+test("cleanImportedAddress: Entities, alternative Abbruchphrase, Trailing-Zeichen", () => {
+  assert.equal(cleanImportedAddress("Hauptstrasse 5 &amp; Co &nbsp; Anbau"), "Hauptstrasse 5 & Co Anbau");
+  assert.equal(cleanImportedAddress("Seestrasse 9 Einsprachen sind schriftlich einzureichen"), "Seestrasse 9");
+  assert.equal(cleanImportedAddress("Bergweg 3 ,;:"), "Bergweg 3");
 });

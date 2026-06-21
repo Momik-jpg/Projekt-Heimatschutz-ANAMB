@@ -118,7 +118,7 @@ export const garbledProjectTypePattern = /^(?:[._-]*\d{2,})+[._-]*$/;
 export const garbledStructuredTextPattern =
   /\b(name-sort|datum-sort|data-page-length|_kategorieid|_thumbnail|customerid=|readspeaker|sind sie sicher, dass sie diesen eintrag löschen möchten|cms cms)\b/i;
 
-export const unreliableProxyUrlPattern = /readspeaker\.com\/cgi-bin\/rsent/i;
+export const unreliableProxyUrlPattern = /^https?:\/\/(?:[^/]+\.)?readspeaker\.com\/cgi-bin\/rsent(?:[/?#]|$)/i;
 
 export const streetLikeAddressPattern =
   /(?:strasse|strasse|weg|gasse|platz|allee|ring|rain|hof|matt|halde|park|dorf|steig|quai|ufer|matte|acker|feld|weid|zelg|zelgli|hubel|hueb|huebel|büel|bühl)\b/i;
@@ -198,4 +198,3 @@ export const germanMonthNumberMap = new Map([
   ["november", "11"],
   ["dezember", "12"]
 ]);
-
