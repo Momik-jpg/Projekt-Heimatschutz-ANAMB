@@ -16,7 +16,6 @@ const EXEMPT = new Set([
   // Bekannte Uebergroessen – TODO splitten (Allowlist verkleinern):
   "public/app.js",
   "server/app.js",
-  "server/httpSupport.js",
   "server/services/applicationsSyncDiscovery.js"
 ]);
 
