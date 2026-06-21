@@ -6,7 +6,6 @@ import {
   shortenText
 } from "./applicationsSyncAddress.js";
 import {
-  addDays,
   decodeHtmlEntities,
   fetchWithTimeout,
   mapWithConcurrency,
@@ -150,6 +149,24 @@ export function deriveAmtsblattMunicipality(stelle, location) {
   return "";
 }
 
+function extractAmtsblattStreet(location) {
+  const normalized = normalizeWhitespace(location).slice(0, 500);
+  const marker = /\b(?:Bauplatz|Standort|Objektadresse)\s*:\s*/i.exec(normalized);
+  let addressText = marker ? normalized.slice(marker.index + marker[0].length) : normalized;
+  const stop = /\s+(?:Bauherrschaft|Bauvorhaben|Bauprojekt|Parzellen?|Publikationsdatum|Einsprachefrist)\s*:/i.exec(addressText);
+  if (stop) {
+    addressText = addressText.slice(0, stop.index);
+  }
+
+  const segments = addressText
+    .replace(/\([^)]*\)/g, " ")
+    .split(",")
+    .map((value) => normalizeWhitespace(value))
+    .filter(Boolean);
+  const streetSegment = segments.find((segment) => streetLikeAddressPattern.test(segment));
+  return streetSegment ? streetSegment.replace(/\bParz(?:elle)?\.?\s*\d+.*$/i, "").trim() : "";
+}
+
 export function parseAmtsblattEntries(html) {
   const blocks = String(html ?? "").split("publication-list__item--publication");
   const entries = [];
@@ -212,15 +229,7 @@ export async function buildAmtsblattItemFromEntry(entry, origin, baseUrl, geocod
   // Parzelle aus der Ortsangabe oder – als robuster Fallback – aus dem Detailtext.
   const parcel = (location.match(amtsblattParcelPattern) ?? [])[1] ?? entry.parcel ?? "";
   // Strasse = Bauplatz ohne Klammern/Parzellenangabe und ohne nachgestellten Ort.
-  const street = (() => {
-    const segments = location
-      .replace(/\([^)]*\)/g, " ")
-      .split(",")
-      .map((value) => normalizeWhitespace(value))
-      .filter(Boolean);
-    const streetSegment = segments.find((segment) => streetLikeAddressPattern.test(segment));
-    return streetSegment ? streetSegment.replace(/\bParz(?:elle)?\.?\s*\d+.*$/i, "").trim() : "";
-  })();
+  const street = extractAmtsblattStreet(location);
   const address =
     normalizeImportedMunicipalityAddress(street, parcel) ||
     (parcel ? `Parzelle ${parcel}` : "Adresse aus Amtsblatt prüfen");
@@ -231,8 +240,9 @@ export async function buildAmtsblattItemFromEntry(entry, origin, baseUrl, geocod
       ? normalizedProjectType
       : shortenText(projectTypeRaw, 120) || "Baugesuch";
   const publicationDate = entry.publicationDate || extractPublicationDateFromText(entry.bodyText) || "";
-  const deadlineDate =
-    extractDeadlineDateFromText(entry.bodyText) || (publicationDate ? addDays(publicationDate, 30) : "");
+  const deadlineDate = extractDeadlineDateFromText(entry.bodyText) || "";
+  const deadlineProvenance = deadlineDate ? "explicit" : "missing";
+  const addressProvenance = street ? "official-field" : "fallback";
 
   let coordinates = extractSwissCoordinatesFromText(location);
   let locationPrecision = coordinates ? "precise" : "";
@@ -265,15 +275,20 @@ export async function buildAmtsblattItemFromEntry(entry, origin, baseUrl, geocod
     locationPrecision,
     publicationDate,
     deadlineDate,
+    deadlineProvenance,
+    addressProvenance,
     projectType,
     description: shortenText(entry.bodyText, 320),
     protectionStatus: ambiguousAddress ? "manual-review" : "no-hit",
     agisMatch: ambiguousAddress ? "Noch nicht eindeutig zugeordnet" : "Kein Schutztreffer",
     agisLayers: [],
     workflowStatus: "new",
-    automatedAssessment: ambiguousAddress
-      ? "Baugesuch aus dem amtlichen Amtsblatt importiert. Standort noch nicht eindeutig geokodiert."
-      : "Baugesuch aus dem amtlichen Amtsblatt importiert und automatisch geokodiert.",
+    automatedAssessment: [
+      ambiguousAddress
+        ? "Baugesuch aus dem amtlichen Amtsblatt importiert. Standort noch nicht eindeutig geokodiert."
+        : "Baugesuch aus dem amtlichen Amtsblatt importiert und automatisch geokodiert.",
+      deadlineDate ? "" : "Frist fehlt in der amtlichen Quelle und muss manuell geprüft werden."
+    ].filter(Boolean).join(" "),
     ambiguousAddress: ambiguousAddress ? 1 : 0
   };
 }

@@ -2031,7 +2031,8 @@ test("municipality import hydrates official detail pages and ignores generic arc
   assert.equal(syncResponse.payload.items[0].address, "Parzelle 537");
   assert.equal(syncResponse.payload.items[0].projectType, "Neubau Wintergarten (beheizt) und Terrassendeck");
   assert.equal(syncResponse.payload.items[0].publicationDate, "2025-09-11");
-  assert.equal(syncResponse.payload.items[0].deadlineDate, "2025-10-11");
+  assert.equal(syncResponse.payload.items[0].deadlineDate, "");
+  assert.equal(syncResponse.payload.items[0].deadlineProvenance, "missing");
   assert.equal(syncResponse.payload.items[0].sourceUrl, "https://fischbach.example.org/baubewilligung-bg-2025-026/");
 
   const duplicateCategoryCount = testServer.db

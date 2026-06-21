@@ -8,7 +8,6 @@ import {
   shortenText
 } from "./applicationsSyncAddress.js";
 import {
-  addDays,
   createSourcePatternMatcher,
   defaultHtmlKeywordsPattern,
   extractFeedEntriesFromXml,
@@ -52,7 +51,7 @@ export function buildXmlPageDefaults(entry) {
   const publicationDate = normalizeDate(entry.publishedAt) || extractPublicationDateFromText(entry.rawText);
   return {
     publicationDate,
-    deadlineDate: extractDeadlineDateFromText(entry.rawText) || (publicationDate ? addDays(publicationDate, 30) : "")
+    deadlineDate: extractDeadlineDateFromText(entry.rawText) || ""
   };
 }
 
@@ -220,7 +219,7 @@ export async function buildXmlFeedImportedItems(
     }
 
     const publicationDate = candidateDetails.publicationDate || candidateDefaults.publicationDate || "";
-    const deadlineDate = candidateDetails.deadlineDate || candidateDefaults.deadlineDate || (publicationDate ? addDays(publicationDate, 30) : "");
+    const deadlineDate = candidateDetails.deadlineDate || candidateDefaults.deadlineDate || "";
     const projectType = normalizeImportedProjectType(
       extractProjectTypeFromText(candidateText, entry.title || "Baugesuch", address, resolvedUrl),
       resolvedUrl
@@ -346,7 +345,7 @@ export async function buildXmlSitemapImportedItems(
     const deadlineDate =
       extractDeadlineDateFromText(candidateText) ||
       candidateDefaults.deadlineDate ||
-      (publicationDate ? addDays(publicationDate, 30) : "");
+      "";
     const projectType = normalizeImportedProjectType(
       extractProjectTypeFromText(candidateText, "Baugesuch", address, resolvedUrl),
       resolvedUrl

@@ -52,3 +52,14 @@ test("buildPdfImportedItems: gueltiges Baugesuch-PDF -> ein Item (ohne Geocoder 
     assert.deepEqual(result.items, []);
   }
 });
+
+test("buildPdfImportedItems erfindet ohne amtliche Angabe keine Frist", async () => {
+  const pdfText =
+    "Baugesuch. Bauvorhaben: Neubau Einfamilienhaus. " +
+    "Standort: Hauptstrasse 15, 5400 Baden. Publikation: 01.02.2026.";
+  const result = await buildPdfImportedItems(source, pdfFetch, 5000, null, async () => pdfText);
+
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].publicationDate, "2026-02-01");
+  assert.equal(result.items[0].deadlineDate, "");
+});

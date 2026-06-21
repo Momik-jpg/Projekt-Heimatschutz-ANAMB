@@ -73,7 +73,7 @@ test("alte unbekannte Fristen werden nicht automatisch archiviert", () => {
   try {
     const repository = createApplicationsRepository(db);
     repository.importItems(
-      [{ ...importedItem("BG-LEGACY"), deadlineProvenance: undefined, addressProvenance: undefined }],
+      [{ ...importedItem("BG-LEGACY"), deadlineProvenance: "legacy-unknown", addressProvenance: "legacy-unknown" }],
       "2026-06-01T08:00:00.000Z"
     );
 

@@ -170,13 +170,19 @@ function buildImportedRecord(item, syncedAt) {
     sourceUrl: item.sourceUrl,
     municipality: item.municipality,
     address: cleanImportedAddress(item.address),
-    addressProvenance: normalizeProvenance(item.addressProvenance, addressProvenances),
+    addressProvenance: normalizeProvenance(
+      item.addressProvenance ?? (item.address ? "official-field" : "fallback"),
+      addressProvenances
+    ),
     parcel: item.parcel ?? "",
     coordinates: item.coordinates ?? "",
     locationPrecision: item.locationPrecision ?? "",
     publicationDate: dates.publicationDate,
     deadlineDate: dates.deadlineDate,
-    deadlineProvenance: normalizeProvenance(item.deadlineProvenance, deadlineProvenances),
+    deadlineProvenance: normalizeProvenance(
+      item.deadlineProvenance ?? (dates.deadlineDate ? "explicit" : "missing"),
+      deadlineProvenances
+    ),
     projectType: item.projectType,
     description: item.description,
     protectionStatus: item.protectionStatus,

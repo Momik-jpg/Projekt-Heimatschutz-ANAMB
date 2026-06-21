@@ -162,11 +162,11 @@ git commit -m "fix(data): Fristablauf archivieren und Backups vor Löschpfaden s
 - Create: `tests/amtsblattLiveFixture.test.js`
 - Create: `scripts/diagnose-inferred-deadlines.js`
 
-- [ ] **Step 1: Regressionsfixture aus dem aktuellen Amtsblatt anonymisiert speichern**
+- [x] **Step 1: Regressionsfixture aus dem aktuellen Amtsblatt anonymisiert speichern**
 
 Die Fixture muss die aktuell fehlerhafte Struktur mit `Bauvorhaben`, `Bauplatz`, Publikationsdatum und fehlender expliziter Frist abbilden. Keine Netzwerkanfrage im normalen Testlauf.
 
-- [ ] **Step 2: Rote Tests für nicht belegte Fristen schreiben**
+- [x] **Step 2: Rote Tests für nicht belegte Fristen schreiben**
 
 Nach dem Parsen der Fixture müssen diese konkreten Assertions gelten:
 
@@ -181,7 +181,7 @@ Run: `node --test tests/amtsblattLiveFixture.test.js`
 
 Expected: Beide Tests rot.
 
-- [ ] **Step 3: Pauschalen +30-Tage-Fallback entfernen**
+- [x] **Step 3: Pauschalen +30-Tage-Fallback entfernen**
 
 In `applicationsSyncAmtsblatt.js` ersetzen:
 
@@ -191,7 +191,7 @@ const deadlineDate = extractDeadlineDateFromText(entry.bodyText) || "";
 
 Kein anderer Parser darf eine fehlende amtliche Frist als bekannte Frist ausgeben.
 
-- [ ] **Step 4: Provenienz im Datenmodell ergänzen**
+- [x] **Step 4: Provenienz im Datenmodell ergänzen**
 
 Mindestens diese Werte verwenden:
 
@@ -202,21 +202,21 @@ address_provenance: official-field | geocoder | fallback | legacy-unknown
 
 Automatische Löschung darf nur `explicit` verwenden. `derived-rule` ist nur zulässig, wenn eine konkrete, dokumentierte Rechts- oder Quellenregel existiert und getestet ist.
 
-- [ ] **Step 5: Adressparser an Feldgrenzen statt freiem Gesamttext ausrichten**
+- [x] **Step 5: Adressparser an Feldgrenzen statt freiem Gesamttext ausrichten**
 
 `Bauplatz:`/`Standort:` als Start und das nächste bekannte Label als Ende verwenden. Projekttext vor dem Label wird verworfen.
 
-- [ ] **Step 6: Bestehende Datensätze nur diagnostizieren, nicht blind mutieren**
+- [x] **Step 6: Bestehende Datensätze nur diagnostizieren, nicht blind mutieren**
 
 `scripts/diagnose-inferred-deadlines.js` listet Amtsblatt-Fälle mit exakt +30 Tagen, Quellreferenz, Team-Berührung und Backup-Status. Standard ist Dry-Run. Eine spätere Reparatur braucht einen separaten `--apply`-Schritt und ein verifiziertes Backup.
 
-- [ ] **Step 7: Testen**
+- [x] **Step 7: Testen**
 
 Run: `node --test tests/amtsblattLiveFixture.test.js tests/api.test.js tests/applicationImportNormalization.test.js`
 
 Expected: Fixture, Parser und API-Verträge grün.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add server/services/applicationsSyncAmtsblatt.js server/services/applicationsSyncCandidate.js server/domain/applicationImportNormalization.js server/db/schema.js server/db/migrations.js server/repository/applicationsRepository.js tests/api.test.js tests/amtsblattLiveFixture.test.js scripts/diagnose-inferred-deadlines.js

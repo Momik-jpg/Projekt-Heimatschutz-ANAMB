@@ -7,7 +7,6 @@ import {
   shortenText
 } from "./applicationsSyncAddress.js";
 import {
-  addDays,
   extractPdfTextFromBuffer,
   houseNumberAddressPattern,
   normalizeWhitespace,
@@ -112,7 +111,7 @@ export async function buildPdfImportedItems(
   const deadlineDate =
     extractDeadlineDateFromText(candidateText) ||
     candidateDefaults.deadlineDate ||
-    (publicationDate ? addDays(publicationDate, 30) : "");
+    "";
   const projectType = normalizeImportedProjectType(
     extractProjectTypeFromText(candidateText, "Baugesuch", address, source.sourceUrl),
     source.sourceUrl
