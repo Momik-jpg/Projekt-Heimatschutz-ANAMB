@@ -69,7 +69,7 @@ test("Detail: Bauvorhaben-Feld zeigt sauberen Text (Regressionsschutz)", async (
   await page.route("**/api/agis/features**", (route) => route.abort());
 
   const firstRow = page.locator("#tbody tr[data-id]").first();
-  await firstRow.click();
+  await firstRow.locator("[data-open-application]").click();
   await expect(page.locator("#detailBody")).toBeVisible();
   await expect(firstRow).not.toHaveClass(/unread/);
 
@@ -86,7 +86,7 @@ test("Detail: Bauvorhaben-Feld zeigt sauberen Text (Regressionsschutz)", async (
 });
 
 test("Mobile: Arbeitsliste bleibt ohne horizontales Scrollen bedienbar", async ({ page }) => {
-  await page.setViewportSize({ width: 500, height: 844 });
+  await page.setViewportSize({ width: 390, height: 844 });
   await loginAsMaster(page);
   await revealOlderRowsIfNeeded(page);
 

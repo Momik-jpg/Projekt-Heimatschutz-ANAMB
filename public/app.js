@@ -67,6 +67,8 @@ const mapState = {
   instance: null,
   marker: null,
   overlayGroup: null,
+  tileLayer: null,
+  externalTilesAllowed: false,
   projectionReady: false,
   requestToken: 0
 };
@@ -155,6 +157,8 @@ function collectElements() {
     sourceLink: $("#sourceLink"),
     agisLink: $("#agisLink"),
     mapStatus: $("#mapStatus"),
+    mapPrivacy: $("#mapPrivacy"),
+    loadExternalMap: $("#loadExternalMap"),
     detailMap: $("#detailMap"),
     mapFallback: $("#mapFallback"),
     mapLegend: $("#mapLegend"),
@@ -806,12 +810,12 @@ function renderTable() {
         item.isRead ? "" : "unread",
         due.cls === "due-over" ? "urg-over" : due.cls === "due-soon" ? "urg-soon" : ""
       ].filter(Boolean).join(" ");
-      return `<tr tabindex="0" data-id="${escapeHtml(item.id)}" class="${classes}">
+      return `<tr data-id="${escapeHtml(item.id)}" class="${classes}">
         <td><span class="unread-dot" aria-hidden="true"></span>${item.isRead ? "" : '<span class="sr-only">Ungelesen: </span>'}<span class="cell-mun">${escapeHtml(item.municipality || "-")}</span><span class="cell-mun-sub">${escapeHtml(item.region || item.source || "Baugesuch")}</span></td>
-        <td><span class="cell-app-title">${escapeHtml(itemTitle(item))}</span><span class="cell-app-sub">${escapeHtml(readableAddress(item))}</span><span class="cell-app-meta">Publiziert ${escapeHtml(formatDate(item.publicationDate))} · ${escapeHtml(scaleLabel(item.projectScale))}</span></td>
+        <td><button class="application-open" type="button" data-open-application="${escapeHtml(item.id)}" aria-label="Fall ${escapeHtml(item.id)}, ${escapeHtml(item.municipality || "-")}, ${escapeHtml(itemTitle(item))} öffnen"><span class="cell-app-title">${escapeHtml(itemTitle(item))}</span><span class="cell-app-sub">${escapeHtml(readableAddress(item))}</span><span class="cell-app-meta">Publiziert ${escapeHtml(formatDate(item.publicationDate))} · ${escapeHtml(scaleLabel(item.projectScale))}</span></button></td>
         <td><span class="hit ${protection.cls}">${escapeHtml(protection.label)}</span></td>
         <td><span class="cell-due">${escapeHtml(formatDate(item.deadlineDate))}</span><span class="cell-due-meta ${due.cls}">${escapeHtml(due.txt)}</span></td>
-        <td><span class="cell-status-wrap"><span class="wf ${workflow.cls}">${escapeHtml(workflow.label)}</span><span class="row-go"><svg class="row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span></td>
+        <td><span class="cell-status-wrap"><span class="wf ${workflow.cls}">${escapeHtml(workflow.label)}</span><span class="row-go"><svg class="row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span></td>
       </tr>`;
     })
     .join("");
@@ -867,31 +871,34 @@ function isWeakDisplayAddress(value) {
 function dataQualityChecks(item) {
   const address = readableAddress(item);
   const hasCoordinates = Boolean(parseSwissCoordinates(item.coordinates));
-  const hasParcel = Boolean(normalizeText(item.parcel));
   const addressIsWeak = isWeakDisplayAddress(address);
-  const addressIsCoveredByParcel = addressIsWeak && hasParcel && hasCoordinates;
-  const addressOk = !addressIsWeak || addressIsCoveredByParcel;
+  const addressProvenance = normalizeText(item.addressProvenance);
+  const addressOk = !item.ambiguousAddress && !addressIsWeak && ["official-field", "geocoder"].includes(addressProvenance);
+  const locationOk = hasCoordinates && item.locationPrecision === "precise";
+  const deadlineOk = Boolean(item.deadlineDate) && item.deadlineProvenance === "explicit";
+  const sourceUrl = normalizeText(item.sourceUrl);
+  const sourceOk = /^https?:\/\/[^\s]+$/i.test(sourceUrl) && Boolean(normalizeText(item.sourceReference));
 
   return [
     {
       label: "Adresse",
       ok: addressOk,
-      detail: addressOk ? (addressIsCoveredByParcel ? "über Parzelle" : "ok") : "prüfen"
-    },
-    {
-      label: "Parzelle",
-      ok: hasParcel,
-      detail: item.parcel || "fehlt"
+      detail: addressOk ? "amtlich belegt" : addressIsWeak ? "unvollständig" : "Herkunft unbestätigt"
     },
     {
       label: "Standort",
-      ok: hasCoordinates,
-      detail: hasCoordinates ? "verortet" : "prüfen"
+      ok: locationOk,
+      detail: locationOk ? "präzise verortet" : hasCoordinates ? "Genauigkeit unbestätigt" : "fehlt"
     },
     {
       label: "Frist",
-      ok: Boolean(item.deadlineDate),
-      detail: item.deadlineDate ? formatDate(item.deadlineDate) : "fehlt"
+      ok: deadlineOk,
+      detail: deadlineOk ? formatDate(item.deadlineDate) : item.deadlineDate ? "unbestätigt" : "fehlt"
+    },
+    {
+      label: "Originalquelle",
+      ok: sourceOk,
+      detail: sourceOk ? "verlinkt" : "nicht belastbar verlinkt"
     }
   ];
 }
@@ -912,7 +919,7 @@ function currentAssessmentText(item, checks = dataQualityChecks(item)) {
     text = text.replaceAll("KI-Datenprüfung: Frist fehlt weiterhin - bitte von Hand prüfen.", "");
   }
 
-  return normalizeText(text);
+  return normalizeText(text.replaceAll("KI-Datenprüfung", "Automatische Datenprüfung"));
 }
 
 function renderAiMeta(item) {
@@ -920,18 +927,18 @@ function renderAiMeta(item) {
 
   const checks = dataQualityChecks(item);
   const needsReview = checks.some((check) => !check.ok) || item.protectionStatus === "manual-review";
-  const summary =
-    currentAssessmentText(item, checks) ||
-    (needsReview
-      ? "KI-Datenprüfung: Einzelne Angaben brauchen noch eine kurze manuelle Prüfung."
-      : "KI-Datenprüfung: Die wichtigsten Importdaten sind vollständig.");
+  const assessment = currentAssessmentText(item, checks);
+  const missingFacts = checks.filter((check) => !check.ok).map((check) => `${check.label}: ${check.detail}`).join("; ");
+  const summary = needsReview
+    ? `Nicht vollständig belegt. ${missingFacts || "Fachliche Zuordnung manuell prüfen."}${assessment ? ` Hinweis: ${assessment}` : ""}`
+    : "Frist, Adresse, Standort und Originalquelle sind nachvollziehbar belegt.";
 
   el.aiMeta.classList.remove("hidden");
   el.aiMeta.classList.toggle("warn", needsReview);
   el.aiMeta.innerHTML = `
     <div class="ai-meta-head">
-      <span class="ai-meta-title">KI-Datenprüfung</span>
-      <span class="ai-meta-state ${needsReview ? "warn" : "ok"}">${needsReview ? "Von Hand prüfen" : "Vollständig"}</span>
+      <span class="ai-meta-title">Automatische Datenprüfung</span>
+      <span class="ai-meta-state ${needsReview ? "warn" : "ok"}">${needsReview ? "Prüfen" : "Geprüft"}</span>
     </div>
     <p class="ai-meta-summary">${escapeHtml(summary)}</p>
     <div class="ai-checks">
@@ -1104,10 +1111,6 @@ function ensureMap() {
     scrollWheelZoom: false
   });
   window.L.control.zoom({ position: "bottomright" }).addTo(mapState.instance);
-  window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap"
-  }).addTo(mapState.instance);
   mapState.marker = window.L.marker([47.3925, 8.0442], {
     icon: createLocationMarkerIcon(),
     title: "Standort des Baugesuchs",
@@ -1116,6 +1119,19 @@ function ensureMap() {
   }).addTo(mapState.instance);
   mapState.overlayGroup = window.L.featureGroup().addTo(mapState.instance);
   return mapState.instance;
+}
+
+function enableExternalMapTiles() {
+  const map = ensureMap();
+  if (!map || !window.L) return;
+  mapState.externalTilesAllowed = true;
+  if (!mapState.tileLayer) {
+    mapState.tileLayer = window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap"
+    }).addTo(map);
+  }
+  el.mapPrivacy?.classList.add("hidden");
 }
 
 function createLocationMarkerIcon() {
@@ -1307,6 +1323,7 @@ async function requestOfficialMapFeatures(coordinates) {
 
 function showMapFallback(message, status) {
   el.mapStatus.textContent = status;
+  el.mapPrivacy?.classList.add("hidden");
   el.detailMap?.classList.add("hidden");
   if (el.mapFallback) {
     el.mapFallback.textContent = message;
@@ -1363,7 +1380,8 @@ async function updateMap(item) {
   }
 
   const latLng = [position.latitude, position.longitude];
-  el.mapStatus.textContent = `Standort wird angezeigt · ${formatSwissCoordinates(parsedCoordinates)}`;
+  el.mapStatus.textContent = `Lokale Darstellung · ${formatSwissCoordinates(parsedCoordinates)}`;
+  el.mapPrivacy?.classList.toggle("hidden", mapState.externalTilesAllowed);
   el.mapFallback?.classList.add("hidden");
   el.detailMap?.classList.remove("hidden");
   mapState.marker.setIcon(createLocationMarkerIcon());
@@ -1374,7 +1392,7 @@ async function updateMap(item) {
   if (el.mapLegend) el.mapLegend.innerHTML = "";
   el.mapSymbolHint?.classList.add("hidden");
   if (el.mapSymbolHint) el.mapSymbolHint.textContent = "";
-  el.mapStatus.textContent = "AGIS-Treffer werden geladen";
+  el.mapStatus.textContent = "Amtliche AGIS-Hinweise werden geladen";
 
   try {
     const officialFeatures = await requestOfficialMapFeatures(parsedCoordinates);
@@ -2063,14 +2081,13 @@ function wireEvents() {
       renderTable();
       return;
     }
+    const openButton = event.target.closest("[data-open-application]");
+    if (openButton) {
+      selectItem(openButton.dataset.openApplication);
+      return;
+    }
     const row = event.target.closest("tr[data-id]");
     if (row) selectItem(row.dataset.id);
-  });
-  el.tbody.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      const row = event.target.closest("tr[data-id]");
-      if (row) selectItem(row.dataset.id);
-    }
   });
   $$("th.sortable").forEach((th) => {
     th.addEventListener("click", () => {
@@ -2163,6 +2180,7 @@ function wireEvents() {
   });
 
   el.nextOpen.addEventListener("click", nextOpen);
+  el.loadExternalMap?.addEventListener("click", enableExternalMapTiles);
   el.printBtn.addEventListener("click", () => {
     const item = state.items.find((entry) => entry.id === state.selectedId);
     if (!item) return;

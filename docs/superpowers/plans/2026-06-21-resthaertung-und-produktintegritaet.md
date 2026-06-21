@@ -374,33 +374,33 @@ git commit -m "ci: alle Qualitätschecks erzwingen und Scanner merge-blockierend
 - Modify: `tests/e2e/smoke.spec.js`
 - Create: `tests/e2e/dataQuality.spec.js`
 
-- [ ] **Step 1: Irreführende KI-Bezeichnung als roten E2E-Vertrag festhalten**
+- [x] **Step 1: Irreführende KI-Bezeichnung als roten E2E-Vertrag festhalten**
 
 Ein Datensatz mit fehlender oder unbestätigter Frist darf nicht „Vollständig“ anzeigen. Da keine KI beteiligt ist, muss der Titel „Automatische Datenprüfung“ lauten.
 
-- [ ] **Step 2: Vollständigkeit aus Provenienz ableiten**
+- [x] **Step 2: Vollständigkeit aus Provenienz ableiten**
 
 „Geprüft“ nur bei expliziter Frist, sauberer amtlicher Adresse, belastbarer Standortpräzision und erreichbarer Originalquelle. Sonst konkrete Warnung statt generischem Häkchen.
 
-- [ ] **Step 3: Interaktive Tabellenzeilen semantisch bedienbar machen**
+- [x] **Step 3: Interaktive Tabellenzeilen semantisch bedienbar machen**
 
 Zeilen brauchen eine echte Schaltfläche oder einen Link als primäre Aktion. Tastatur, Fokusname und Enter/Space müssen im Browser-Test belegt sein.
 
-- [ ] **Step 4: Drittbibliotheken selbst hosten und pinnen**
+- [x] **Step 4: Drittbibliotheken selbst hosten und pinnen**
 
 Leaflet und Proj4 nicht von `unpkg.com`/`cdnjs.cloudflare.com` laden. Versionierte lokale Assets mit Lizenzhinweisen verwenden und die CSP entsprechend verkleinern.
 
-- [ ] **Step 5: Externe Kartenkacheln nicht automatisch laden**
+- [x] **Step 5: Externe Kartenkacheln nicht automatisch laden**
 
 Der genaue Standort darf erst nach einer sichtbaren Aktion „Externe Karte laden“ an einen Tile-Provider übertragen werden. Der Hinweis nennt den Drittanbieter. Ohne Einwilligung bleibt eine lokale Standortdarstellung/AGIS-Verlinkung sichtbar.
 
-- [ ] **Step 6: Browser prüfen**
+- [x] **Step 6: Browser prüfen**
 
 Run: `npm run test:e2e`
 
 Zusätzlich mit Chrome DevTools prüfen: 390 px, Tastaturnavigation, 0 Konsolenfehler, vor Kartenfreigabe keine Requests an `tile.openstreetmap.org`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add public/app.js public/index.html public/redesign.css server/httpSecurity.js tests/e2e/smoke.spec.js tests/e2e/dataQuality.spec.js

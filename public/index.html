@@ -7,7 +7,7 @@
   <title>Heimatschutz Aargau - Arbeitsplatz</title>
   <link rel="icon" href="wappen.svg" type="image/svg+xml">
   <link rel="stylesheet" href="fonts.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="redesign.css">
 </head>
 <body>
@@ -299,6 +299,13 @@
               <div><p class="ttl">Standort</p><p id="mapStatus" class="st">Standort wird angezeigt</p></div>
               <a id="agisLink" class="map-link" href="https://www.ag.ch/app/agisviewer4/v1/agisviewer.html" target="_blank" rel="noreferrer">AGIS öffnen</a>
             </div>
+            <div id="mapPrivacy" class="map-privacy hidden">
+              <div>
+                <strong>Lokale Standortdarstellung</strong>
+                <p>Die Markierung und amtlichen AGIS-Hinweise werden ohne Kartenkacheln angezeigt. Erst beim Laden der externen Karte erhält OpenStreetMap den ungefähren Kartenausschnitt.</p>
+              </div>
+              <button id="loadExternalMap" class="btn ghost" type="button">Externe Karte laden</button>
+            </div>
             <section id="detailMap" class="detail-map" aria-label="Standort auf Karte"></section>
             <p id="mapFallback" class="map-fallback hidden">Für dieses Gesuch ist noch kein genauer Standort vorhanden.</p>
             <fieldset id="mapLegend" class="map-legend hidden" aria-label="Kartenlegende"></fieldset>
@@ -485,8 +492,8 @@
     <div class="pa-foot"><span id="paFoot">Heimatschutz Aargau</span><span>Bearbeitung: Lucia Vettori, Kantonale Denkmalpflege</span></div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js" integrity="sha384-BIsA8GBrihzaRmijjpqTCihj8D5Vox3hyBFg9sJiTGAEOv6KusZ8QOCKbTFEAfhm" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+  <script src="vendor/proj4/proj4.js"></script>
+  <script src="vendor/leaflet/leaflet.js"></script>
   <script src="app.js"></script>
 
 </body>

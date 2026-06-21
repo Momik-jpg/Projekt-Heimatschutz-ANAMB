@@ -45,6 +45,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
-    "@playwright/test": "^1.60.0"
+    "@playwright/test": "^1.60.0",
+    "leaflet": "1.9.4",
+    "proj4": "2.11.0"
   }
 }
