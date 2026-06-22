@@ -260,11 +260,6 @@ function renderComments() {
 
 function renderDetail() {
   const item = state.items.find((entry) => entry.id === state.selectedId) ?? null;
-  // Druck-Button nur aktiv, wenn ein Fall geöffnet ist - sonst täte er stumm nichts.
-  if (el.printBtn) {
-    el.printBtn.disabled = !item;
-    el.printBtn.title = item ? "Fall drucken / als PDF" : "Zum Drucken zuerst einen Fall öffnen";
-  }
   if (!item) {
     el.detailEmpty.classList.remove("hidden");
     el.detailBody.classList.add("hidden");
@@ -616,23 +611,6 @@ function nextOpen() {
   selectItem(next.id);
   const row = $(`#tbody tr[data-id="${CSS.escape(next.id)}"]`);
   row?.scrollIntoView({ block: "center" });
-}
-
-function fillPrintArea(item) {
-  const due = dueMeta(item);
-  el.paId.textContent = item.id;
-  el.paTitle.textContent = itemTitle(item);
-  el.paSub.textContent = `${item.municipality || "-"} · ${readableAddress(item)}`;
-  el.paMun.textContent = item.municipality || "-";
-  el.paAddr.textContent = readableAddress(item);
-  el.paParcel.textContent = item.parcel || "-";
-  el.paPub.textContent = formatDate(item.publicationDate);
-  el.paDue.textContent = `${formatDate(item.deadlineDate)} · ${due.txt}`;
-  el.paAgis.textContent = item.agisMatch || protectionMeta(item).label;
-  el.paProject.textContent = readableProject(item);
-  el.paRec.textContent = recommendationText(item);
-  el.paSource.textContent = `${item.source || "unbekannt"}${item.sourceReference ? ` · ${item.sourceReference}` : ""}`;
-  el.paFoot.textContent = "Heimatschutz Aargau";
 }
 
 function switchView(view) {

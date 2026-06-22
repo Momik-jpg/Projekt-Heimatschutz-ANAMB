@@ -176,7 +176,6 @@ function collectElements() {
     saveBtn: $("#saveBtn"),
     clearBtn: $("#clearBtn"),
     nextOpen: $("#nextOpen"),
-    printBtn: $("#printBtn"),
     commentCount: $("#commentCount"),
     commentsList: $("#commentsList"),
     commentInput: $("#commentInput"),
@@ -186,21 +185,7 @@ function collectElements() {
     runImport: $("#runImport"),
     runList: $("#runList"),
     keysBody: $("#keysBody"),
-    toast: $("#toast"),
-    printArea: $("#printArea"),
-    paId: $("#paId"),
-    paTitle: $("#paTitle"),
-    paSub: $("#paSub"),
-    paMun: $("#paMun"),
-    paAddr: $("#paAddr"),
-    paParcel: $("#paParcel"),
-    paPub: $("#paPub"),
-    paDue: $("#paDue"),
-    paAgis: $("#paAgis"),
-    paProject: $("#paProject"),
-    paRec: $("#paRec"),
-    paSource: $("#paSource"),
-    paFoot: $("#paFoot")
+    toast: $("#toast")
   });
 }
 

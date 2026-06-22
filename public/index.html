@@ -265,9 +265,6 @@
           </div>
           <div class="detail-status-row">
             <span id="detailStatusBadge" class="detail-badge-slot">Keine Auswahl</span>
-            <button id="printBtn" class="icon-btn sm" type="button" title="Fall drucken / als PDF">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
             <button id="nextOpen" class="btn ghost detail-next-btn" type="button">Nächstes offenes →</button>
           </div>
         </div>
@@ -472,33 +469,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-  <!-- Druckansicht (nur beim Drucken sichtbar) -->
-  <div class="print-area" id="printArea">
-    <div class="pa-head">
-      <img src="wappen.svg" alt="Wappen Kanton Aargau">
-      <div class="pa-org"><b>Kanton Aargau · Kantonale Denkmalpflege</b><span>Heimatschutz Aargau: Prüfbericht Baugesuch</span></div>
-      <div class="pa-id" id="paId">-</div>
-    </div>
-    <h2 class="pa-title" id="paTitle">-</h2>
-    <p class="pa-sub" id="paSub">-</p>
-    <dl class="pa-grid">
-      <div class="pa-f"><dt>Gemeinde</dt><dd id="paMun">-</dd></div>
-      <div class="pa-f"><dt>Adresse</dt><dd id="paAddr">-</dd></div>
-      <div class="pa-f"><dt>Parzelle</dt><dd id="paParcel">-</dd></div>
-      <div class="pa-f"><dt>Publiziert</dt><dd id="paPub">-</dd></div>
-      <div class="pa-f"><dt>Fristende</dt><dd id="paDue">-</dd></div>
-      <div class="pa-f"><dt>AGIS-Treffer</dt><dd id="paAgis">-</dd></div>
-      <div class="pa-f wide"><dt>Bauvorhaben</dt><dd id="paProject">-</dd></div>
-    </dl>
-    <div class="pa-block">
-      <h5>Einschätzung der Denkmalpflege</h5>
-      <p id="paRec">-</p>
-      <h5>Quelle</h5>
-      <p id="paSource">-</p>
-    </div>
-    <div class="pa-foot"><span id="paFoot">Heimatschutz Aargau</span><span>Bearbeitung: Lucia Vettori, Kantonale Denkmalpflege</span></div>
-  </div>
 
   <script src="vendor/proj4/proj4.js"></script>
   <script src="vendor/leaflet/leaflet.js"></script>
