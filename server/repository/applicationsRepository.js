@@ -206,11 +206,34 @@ function toDateOnly(value = new Date()) {
   return safeDate.toISOString().slice(0, 10);
 }
 
+const AMTSBLATT_SOURCE = "Amtsblatt Aargau";
+const DUPLICATE_DATE_WINDOW_DAYS = 60;
+
+// Zwei Publikationsdaten gelten als "gleicher Zeitraum", wenn sie nah beieinander
+// liegen. Fehlt ein Datum, wird nicht ausgeschlossen (im Zweifel als Dublette).
+function datesWithinWindow(first, second, days) {
+  if (!first || !second) return true;
+  const a = new Date(first).getTime();
+  const b = new Date(second).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return true;
+  return Math.abs(a - b) <= days * 24 * 60 * 60 * 1000;
+}
+
 export function createApplicationsRepository(db) {
   const findBySourceReferenceStatement = db.prepare(`
     SELECT id
     FROM applications
     WHERE source_reference = ?
+  `);
+  // Inhaltsbasierte Dublettenerkennung gegen die massgebliche Amtsblatt-Quelle:
+  // derselbe Fall, gleiche Gemeinde + Parzelle, aber anderes source_reference.
+  const findDuplicateParcelStatement = db.prepare(`
+    SELECT publication_date
+    FROM applications
+    WHERE source = ?
+      AND lower(trim(municipality)) = lower(trim(?))
+      AND trim(parcel) = trim(?)
+      AND trim(parcel) <> ''
   `);
   const insertStatement = db.prepare(`
     INSERT INTO applications (
@@ -383,6 +406,7 @@ export function createApplicationsRepository(db) {
       const changes = [];
       let importedCount = 0;
       let updatedCount = 0;
+      let skippedDuplicateCount = 0;
 
       db.exec("BEGIN");
 
@@ -390,6 +414,24 @@ export function createApplicationsRepository(db) {
         for (const item of items) {
           const next = buildImportedRecord(item, syncedAt);
           const existing = findBySourceReferenceStatement.get(next.sourceReference);
+
+          if (!existing && next.source !== AMTSBLATT_SOURCE && String(next.parcel ?? "").trim()) {
+            const amtsblattMatches = findDuplicateParcelStatement.all(
+              AMTSBLATT_SOURCE,
+              next.municipality,
+              next.parcel
+            );
+            const isDuplicateOfAmtsblatt = amtsblattMatches.some((row) =>
+              datesWithinWindow(row.publication_date, next.publicationDate, DUPLICATE_DATE_WINDOW_DAYS)
+            );
+
+            if (isDuplicateOfAmtsblatt) {
+              // Derselbe Fall liegt bereits als amtlicher Amtsblatt-Datensatz vor:
+              // keine Gemeinde-Dublette anlegen (Amtsblatt-Daten haben Vorrang).
+              skippedDuplicateCount += 1;
+              continue;
+            }
+          }
 
           if (existing) {
             updateImportedStatement.run(
@@ -472,6 +514,7 @@ export function createApplicationsRepository(db) {
       return {
         importedCount,
         updatedCount,
+        skippedDuplicates: skippedDuplicateCount,
         items: importedItems,
         changes
       };
