@@ -39,7 +39,7 @@ jobs:
         with:
           category: "/language:javascript-typescript"
           output: codeql-results
-          upload: always
+          upload: never
           upload-database: false
 
       - name: Store CodeQL SARIF
