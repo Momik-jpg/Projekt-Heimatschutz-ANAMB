@@ -22,9 +22,11 @@ jobs:
           persist-credentials: false
 
       - name: Verify pinned rules
+        # Der Semgrep-Container nutzt BusyBox; dessen sha256sum kennt nur -c
+        # (nicht die GNU-Langoption --check). -c funktioniert in BusyBox und GNU.
         run: |
-          echo "709e9ec14480d1187b17a0cbfb3237b7afc1c36566c26648cff1aa8c2bf93dde  .semgrep/security-audit.yaml" | sha256sum --check
-          echo "fa5888d2be3e985444cbd5a7aa64d9f98b351bdaee578076698a65996a16ddfc  .semgrep/javascript.yaml" | sha256sum --check
+          echo "709e9ec14480d1187b17a0cbfb3237b7afc1c36566c26648cff1aa8c2bf93dde  .semgrep/security-audit.yaml" | sha256sum -c
+          echo "fa5888d2be3e985444cbd5a7aa64d9f98b351bdaee578076698a65996a16ddfc  .semgrep/javascript.yaml" | sha256sum -c
 
       # --error: bricht bei Funden ab. Parserfehler werden als echte Fehler
       # behandelt. Der lokale Snapshot benötigt weder Registry noch Login.
