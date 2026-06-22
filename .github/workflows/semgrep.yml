@@ -21,7 +21,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Verify pinned rules
+        run: |
+          echo "709e9ec14480d1187b17a0cbfb3237b7afc1c36566c26648cff1aa8c2bf93dde  .semgrep/security-audit.yaml" | sha256sum --check
+          echo "fa5888d2be3e985444cbd5a7aa64d9f98b351bdaee578076698a65996a16ddfc  .semgrep/javascript.yaml" | sha256sum --check
+
       # --error: bricht bei Funden ab. Parserfehler werden als echte Fehler
-      # behandelt (kein "gruen trotz Parserfehler"). Regeln offline, kein Login.
+      # behandelt. Der lokale Snapshot benötigt weder Registry noch Login.
       - name: Run Semgrep
-        run: semgrep scan --config p/security-audit --config p/javascript --error --metrics=off
+        run: semgrep scan --config .semgrep/security-audit.yaml --config .semgrep/javascript.yaml --error --metrics=off

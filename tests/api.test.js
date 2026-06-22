@@ -56,6 +56,7 @@ function createTestServer(options = {}) {
     backupDir: options.backupDir,
     backupRetention: options.backupRetention,
     csrfProtection: options.csrfProtection,
+    healthInstanceId: options.healthInstanceId,
     // Seed-Passwörter stehen nicht mehr im Repository, daher liefert der Test-Harness
     // sie über Optionen. Einzelne Tests können sie überschreiben (z. B. weglassen,
     // um den Master-Setup-Key-Flow zu testen). Eine gesetzte Umgebungsvariable hat
@@ -284,6 +285,19 @@ test("health endpoint is available at /health and /api/health", async (context) 
   assert.equal(apiHealthResponse.status, 200);
   assert.equal(healthResponse.payload.status, "ok");
   assert.deepEqual(healthResponse.payload, apiHealthResponse.payload);
+});
+
+test("health endpoint kennzeichnet eine konfigurierte E2E-Instanz", async (context) => {
+  const testServer = createTestServer({ healthInstanceId: "e2e-instance-123" });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const healthResponse = await requestJson(testServer.baseUrl, "/health");
+
+  assert.equal(healthResponse.headers.get("x-e2e-instance-id"), "e2e-instance-123");
 });
 
 test("server sends security and cache headers for app assets", async (context) => {

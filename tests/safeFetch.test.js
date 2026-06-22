@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isPrivateOrReservedIp, assertPublicHost } from "../server/services/safeFetch.js";
+import { Agent, fetch as undiciFetch } from "undici";
+import { createPublicLookup, isPrivateOrReservedIp, assertPublicHost } from "../server/services/safeFetch.js";
+
+function runLookup(lookup, hostname, options = {}) {
+  return new Promise((resolve, reject) => {
+    lookup(hostname, options, (error, address, family) => {
+      if (error) reject(error);
+      else resolve({ address, family });
+    });
+  });
+}
 
 // S1: SSRF-Schutz. IP-Klassifikation deterministisch, Host-Check mit injiziertem
 // DNS-Lookup (kein echtes Netzwerk noetig).
@@ -66,4 +76,52 @@ test("assertPublicHost: leerer Host und nicht aufloesbarer Host werfen", async (
 test("assertPublicHost: einzelnes (nicht-Array) Lookup-Resultat wird akzeptiert", async () => {
   const singleRecord = async () => ({ address: "93.184.216.34", family: 4 });
   await assert.doesNotReject(() => assertPublicHost("www.example.com", { lookupImpl: singleRecord }));
+});
+
+test("createPublicLookup blockiert DNS-Rebinding beim tatsächlichen Verbindungsaufbau", async () => {
+  let lookupCount = 0;
+  const lookupImpl = async () => {
+    lookupCount += 1;
+    return lookupCount === 1
+      ? [{ address: "93.184.216.34", family: 4 }]
+      : [{ address: "127.0.0.1", family: 4 }];
+  };
+
+  await assert.doesNotReject(() => assertPublicHost("rebinding.example", { lookupImpl }));
+  const connectionLookup = createPublicLookup({ lookupImpl });
+
+  await assert.rejects(() => runLookup(connectionLookup, "rebinding.example"), /private\/reservierte IP 127\.0\.0\.1/);
+});
+
+test("createPublicLookup liefert öffentliche Adressen im Node-DNS-Format", async () => {
+  const lookup = createPublicLookup({
+    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }]
+  });
+
+  assert.deepEqual(await runLookup(lookup, "www.example.com"), {
+    address: "93.184.216.34",
+    family: 4
+  });
+});
+
+test("Undici verwendet den geschützten Lookup für den tatsächlichen Socket", async () => {
+  const dispatcher = new Agent({
+    connect: {
+      lookup: createPublicLookup({
+        lookupImpl: async () => [{ address: "127.0.0.1", family: 4 }]
+      })
+    }
+  });
+
+  try {
+    await assert.rejects(
+      () => undiciFetch("http://rebinding.example", { dispatcher, signal: AbortSignal.timeout(500) }),
+      (error) => {
+        assert.match(error.cause?.message ?? "", /private\/reservierte IP 127\.0\.0\.1/);
+        return true;
+      }
+    );
+  } finally {
+    await dispatcher.close();
+  }
 });

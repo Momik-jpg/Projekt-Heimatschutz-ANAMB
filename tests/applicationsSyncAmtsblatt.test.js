@@ -120,6 +120,7 @@ test("buildAmtsblattItemFromEntry: mit Geocoding -> no-hit und Koordinaten", asy
       JSON.stringify({ results: [{ attrs: { label: "Hauptstrasse 12 5000 Aarau", x: 2645000, y: 1249000, origin: "address" } }] }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
+  geo.skipSsrfValidation = true;
   const item = await buildAmtsblattItemFromEntry(
     { stelle: "Gemeinde Aarau", location: "Hauptstrasse 12", bauvorhaben: "Neubau", title: "x", publicationDate: "2026-06-01", bodyText: "Frist bis 15.07.2026", detailPath: "/e/9" },
     "https://amtsblatt.ag.ch",

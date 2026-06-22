@@ -1,5 +1,6 @@
 // Baugesuch-Import: Net-Helfer (aus applicationsSyncCommon.js aufgeteilt).
-import { assertPublicHost } from "./safeFetch.js";
+import { fetch as undiciFetch } from "undici";
+import { assertPublicHost, ssrfSafeDispatcher } from "./safeFetch.js";
 import {
   defaultMaxResponseBytes,
   defaultMunicipalitySourceConcurrency,
@@ -85,6 +86,10 @@ export async function fetchWithTimeout(fetchImpl, resource, options = {}, timeou
     ...restOptions
   } = options;
   const enforceSsrf = enforceSsrfOption !== false && fetchImpl?.skipSsrfValidation !== true;
+  const usesNodeFetch = fetchImpl === globalThis.fetch;
+  const supportsSsrfDispatcher =
+    usesNodeFetch || fetchImpl === undiciFetch || fetchImpl?.supportsSsrfDispatcher === true;
+  const protectedFetchImpl = usesNodeFetch ? undiciFetch : fetchImpl;
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), normalizedTimeout);
 
@@ -95,7 +100,8 @@ export async function fetchWithTimeout(fetchImpl, resource, options = {}, timeou
         ...defaultRemoteRequestHeaders,
         ...optionHeaders
       },
-      signal: controller.signal
+      signal: controller.signal,
+      ...(enforceSsrf ? { dispatcher: ssrfSafeDispatcher } : {})
     };
 
     let response;
@@ -105,7 +111,12 @@ export async function fetchWithTimeout(fetchImpl, resource, options = {}, timeou
       let currentUrl = String(resource);
       for (let hop = 0; ; hop += 1) {
         await assertPublicHost(new URL(currentUrl).hostname);
-        response = await fetchImpl(currentUrl, { ...baseOptions, redirect: "manual" });
+        if (!supportsSsrfDispatcher) {
+          throw new Error(
+            "SSRF-Schutz: Fetch-Implementierung unterstützt keinen verbindungsgebundenen DNS-Lookup."
+          );
+        }
+        response = await protectedFetchImpl(currentUrl, { ...baseOptions, redirect: "manual" });
 
         const location = response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
         if (location && hop < maxRedirects) {

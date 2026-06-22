@@ -70,17 +70,10 @@ export const csrfProtectedMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export function getRequestHosts(request) {
   const hosts = new Set();
+  const effectiveHost = request.host ?? request.headers?.host;
 
-  if (request.headers.host) {
-    hosts.add(String(request.headers.host).toLowerCase());
-  }
-
-  const forwardedHost = request.headers["x-forwarded-host"];
-
-  if (forwardedHost) {
-    for (const host of String(forwardedHost).split(",")) {
-      hosts.add(host.trim().toLowerCase());
-    }
+  if (effectiveHost) {
+    hosts.add(String(effectiveHost).trim().toLowerCase());
   }
 
   return hosts;

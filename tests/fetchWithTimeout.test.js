@@ -38,3 +38,26 @@ test("fetchWithTimeout erzwingt SSRF-Schutz auch bei injiziertem Fetch", async (
     /SSRF/
   );
 });
+
+test("fetchWithTimeout verwendet den verbindungsgebundenen SSRF-Dispatcher", async () => {
+  const dispatchers = [];
+  const mockFetch = async (_resource, options) => {
+    dispatchers.push(options.dispatcher);
+    return new Response("ok", { status: 200 });
+  };
+  mockFetch.supportsSsrfDispatcher = true;
+
+  await fetchWithTimeout(mockFetch, "http://93.184.216.34/data", { maxResponseBytes: 1000 });
+
+  assert.equal(dispatchers.length, 1);
+  assert.ok(dispatchers[0], "geschützter Request muss einen Dispatcher erhalten");
+});
+
+test("fetchWithTimeout lehnt Fetch-Implementierungen ohne sicheren Dispatcher fail-closed ab", async () => {
+  const incompatibleFetch = async () => new Response("unsicher", { status: 200 });
+
+  await assert.rejects(
+    () => fetchWithTimeout(incompatibleFetch, "http://93.184.216.34/data", { maxResponseBytes: 1000 }),
+    /verbindungsgebundenen DNS-Lookup/
+  );
+});

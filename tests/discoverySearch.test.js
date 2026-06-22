@@ -74,6 +74,7 @@ test("buildDiscoverySearchRequestsFromOpenSearchLinks: laedt OSD und baut Reques
   const html = '<link rel="search" type="application/opensearchdescription+xml" href="/osd.xml">';
   const osdXml = '<OpenSearchDescription><Url type="text/html" template="https://gemeinde.ch/s?q={searchTerms}"/></OpenSearchDescription>';
   const fetchImpl = async () => new Response(osdXml, { status: 200, headers: { "content-type": "application/xml" } });
+  fetchImpl.skipSsrfValidation = true;
   const requests = await buildDiscoverySearchRequestsFromOpenSearchLinks(html, "https://gemeinde.ch/start", fetchImpl, 1000);
   assert.ok(requests.length > 0);
   assert.ok(requests.every((r) => r.url.startsWith("https://gemeinde.ch/s?q=")));
@@ -84,6 +85,7 @@ test("buildDiscoverySearchRequestsFromOpenSearchLinks: Fehler beim OSD-Laden -> 
   const fetchImpl = async () => {
     throw new Error("OSD weg");
   };
+  fetchImpl.skipSsrfValidation = true;
   assert.deepEqual(await buildDiscoverySearchRequestsFromOpenSearchLinks(html, "https://gemeinde.ch/start", fetchImpl, 1000), []);
 });
 
@@ -91,6 +93,7 @@ test("collectDiscoveryCandidatesFromSiteSearch: sammelt Treffer aus Suchergebnis
   const candidates = new Map();
   const fetchImpl = async () =>
     new Response('<a href="/baugesuche">Baugesuche Publikation</a>', { status: 200, headers: { "content-type": "text/html" } });
+  fetchImpl.skipSsrfValidation = true;
   await collectDiscoveryCandidatesFromSiteSearch("https://gemeinde.ch/", fetchImpl, 1000, candidates);
   assert.ok(candidates.size >= 1);
 

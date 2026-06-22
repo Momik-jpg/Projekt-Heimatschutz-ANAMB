@@ -41,7 +41,8 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
     "nodemailer": "^9.0.1",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "undici": "8.5.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

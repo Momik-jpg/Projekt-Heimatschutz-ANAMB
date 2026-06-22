@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
-import { E2E_PORT, E2E_WEB_SERVER_ENV } from "../../playwright.config.js";
+import { E2E_WEB_SERVER_ENV } from "../../playwright.config.js";
+import { findAvailablePort, waitForExpectedServer } from "./runnerSupport.mjs";
 
-const serverUrl = `http://127.0.0.1:${E2E_PORT}`;
 const isWindows = process.platform === "win32";
 
 function pipePrefixed(stream, prefix) {
@@ -17,24 +18,7 @@ function pipePrefixed(stream, prefix) {
   });
 }
 
-async function waitForServer(timeoutMs = 30000) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const response = await fetch(`${serverUrl}/health`);
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // Server ist noch nicht bereit.
-    }
-    await delay(250);
-  }
-  throw new Error(`E2E-Server wurde nicht innert ${timeoutMs}ms bereit.`);
-}
-
-async function runChild(command, args, options) {
-  const child = spawn(command, args, options);
+async function waitForChild(child) {
   const result = await Promise.race([
     once(child, "exit").then(([code, signal]) => ({ code, signal })),
     once(child, "error").then(([error]) => {
@@ -43,6 +27,14 @@ async function runChild(command, args, options) {
   ]);
   const { code, signal } = result;
   return { code, signal };
+}
+
+function runNodeChild(args, options) {
+  return waitForChild(spawn(process.execPath, args, options));
+}
+
+function forceKillWindowsProcess(pid) {
+  return waitForChild(spawn("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" }));
 }
 
 async function stopProcessTree(child) {
@@ -55,7 +47,7 @@ async function stopProcessTree(child) {
     const exited = once(child, "exit").then(() => true);
     const timedOut = delay(5000).then(() => false);
     if (!(await Promise.race([exited, timedOut]))) {
-      await runChild("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" }).catch(() => {});
+      await forceKillWindowsProcess(child.pid).catch(() => {});
     }
     return;
   }
@@ -77,12 +69,17 @@ async function stopProcessTree(child) {
   }
 }
 
+const port = await findAvailablePort();
+const instanceId = randomUUID();
+const serverUrl = `http://127.0.0.1:${port}`;
 const server = spawn(process.execPath, ["server/app.js"], {
   cwd: process.cwd(),
   detached: !isWindows,
   env: {
     ...process.env,
-    ...E2E_WEB_SERVER_ENV
+    ...E2E_WEB_SERVER_ENV,
+    PORT: String(port),
+    E2E_INSTANCE_ID: instanceId
   },
   stdio: ["ignore", "pipe", "pipe"]
 });
@@ -91,12 +88,14 @@ pipePrefixed(server.stdout, "[E2E server]");
 pipePrefixed(server.stderr, "[E2E server]");
 
 try {
-  await waitForServer();
-  const result = await runChild(process.execPath, ["node_modules/playwright/cli.js", "test"], {
+  await waitForExpectedServer({ child: server, serverUrl, instanceId });
+  const result = await runNodeChild(["node_modules/playwright/cli.js", "test"], {
     cwd: process.cwd(),
     env: {
       ...process.env,
-      PLAYWRIGHT_SKIP_WEB_SERVER: "true"
+      PLAYWRIGHT_SKIP_WEB_SERVER: "true",
+      E2E_PORT: String(port),
+      E2E_INSTANCE_ID: instanceId
     },
     stdio: "inherit"
   });

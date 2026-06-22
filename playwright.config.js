@@ -3,10 +3,11 @@ import { defineConfig } from "@playwright/test";
 // Frontend-Smoke-Tests: startet die App mit Demo-Daten und lokalem Master-Login,
 // ohne Netz-/Hintergrundjobs. Deckt die Lücke, dass die node:test-Suite nur den
 // Server prüft (der Bauvorhaben-Bug war genau deshalb ungetestet).
-export const E2E_PORT = 3214;
+export const E2E_PORT = Number.parseInt(process.env.E2E_PORT ?? "3214", 10);
 export const E2E_WEB_SERVER_ENV = {
   NODE_ENV: "test",
   PORT: String(E2E_PORT),
+  E2E_INSTANCE_ID: process.env.E2E_INSTANCE_ID ?? "playwright-managed-server",
   DATABASE_PATH: "./data/e2e.sqlite",
   SEED_DEMO_APPLICATIONS: "true",
   MASTER_ACCOUNT_PASSWORD: "E2ETestMaster123!",

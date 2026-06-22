@@ -15,6 +15,7 @@ function pdfFetch() {
     headers: { "content-type": "application/pdf" }
   });
 }
+pdfFetch.skipSsrfValidation = true;
 
 test("buildPdfImportedItems: kein extrahierter Text -> keine Items", async () => {
   const result = await buildPdfImportedItems(source, pdfFetch, 5000, null, async () => "");

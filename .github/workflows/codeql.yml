@@ -16,7 +16,6 @@ jobs:
     name: Analyze (JavaScript)
     runs-on: ubuntu-latest
     permissions:
-      security-events: write
       actions: read
       contents: read
     steps:
@@ -39,6 +38,8 @@ jobs:
         with:
           category: "/language:javascript-typescript"
           output: codeql-results
+          # Das private Repository hat derzeit kein GitHub Advanced Security.
+          # Deshalb bleibt SARIF ein Artifact und wird unten lokal ausgewertet.
           upload: never
           upload-database: false
 
