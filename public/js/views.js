@@ -134,8 +134,8 @@ function sortableValue(item, key) {
   return String(item[key] ?? "").toLowerCase();
 }
 
-function visibleItems() {
-  return state.items
+function visibleItems(referenceDate = new Date()) {
+  return activeItems(referenceDate)
     .filter((item) => matchesTab(item) && matchesFilters(item))
     .slice()
     .sort((a, b) => {
@@ -155,18 +155,29 @@ function publicationAgeDays(item, referenceDate = new Date()) {
   return Math.floor((today.getTime() - published.getTime()) / 86400000);
 }
 
-function updateTabCounts() {
-  const count = (fn) => state.items.filter(fn).length;
+function isActiveApplication(item, referenceDate = new Date()) {
+  if (item.workflowStatus === "archived" || item.archivedAt) return false;
+  if (!objectionDeadline(item)) return false;
+  return publicationAgeDays(item, referenceDate) <= 31;
+}
+
+function activeItems(referenceDate = new Date()) {
+  return state.items.filter((item) => isActiveApplication(item, referenceDate));
+}
+
+function updateTabCounts(referenceDate = new Date()) {
+  const items = activeItems(referenceDate);
+  const count = (fn) => items.filter(fn).length;
   const setCount = (key, value) => {
     const node = $(`[data-count="${key}"]`);
     if (node) node.textContent = String(value);
   };
-  setCount("all", state.items.length);
+  setCount("all", items.length);
   setCount(
     "important",
     count((item) => ["combined-hit", "protected-point", "protected-zone"].includes(item.protectionStatus))
   );
-  el.navWorkCount.textContent = String(state.items.length);
+  el.navWorkCount.textContent = String(items.length);
 }
 
 function renderMunicipalityOptions() {
