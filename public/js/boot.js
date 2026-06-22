@@ -325,12 +325,6 @@ function wireEvents() {
 
   el.nextOpen.addEventListener("click", nextOpen);
   el.loadExternalMap?.addEventListener("click", enableExternalMapTiles);
-  el.printBtn.addEventListener("click", () => {
-    const item = state.items.find((entry) => entry.id === state.selectedId);
-    if (!item) return;
-    fillPrintArea(item);
-    window.print();
-  });
 
   el.themeToggle.addEventListener("click", () => {
     applyThemePreference(!document.body.classList.contains("dark"));
