@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createDatabase } from "../server/db.js";
 import { createApplicationsRepository } from "../server/repository/applicationsRepository.js";
 
-test("archiviert Fälle nach bestätigter Frist vollständig und behält Team-Daten", () => {
+test("archiviert Fälle 31 Tage nach Publikation und behält Team-Daten", () => {
   const directory = mkdtempSync(join(tmpdir(), "heimatschutz-retention-"));
   const db = createDatabase(join(directory, "retention.sqlite"), {
     seedDemoApplications: false
@@ -14,7 +14,7 @@ test("archiviert Fälle nach bestätigter Frist vollständig und behält Team-Da
 
   try {
     const repository = createApplicationsRepository(db);
-    const baseItem = (id, deadlineDate) => ({
+    const baseItem = (id, publicationDate, deadlineDate = "") => ({
       id,
       source: "Gemeinde-Webseite",
       sourceReference: id,
@@ -22,7 +22,7 @@ test("archiviert Fälle nach bestätigter Frist vollständig und behält Team-Da
       municipality: "Aarau",
       address: "Teststrasse 1",
       coordinates: "",
-      publicationDate: "2026-06-01",
+      publicationDate,
       deadlineDate,
       deadlineProvenance: deadlineDate ? "explicit" : "missing",
       addressProvenance: "official-field",
@@ -36,9 +36,9 @@ test("archiviert Fälle nach bestätigter Frist vollständig und behält Team-Da
 
     repository.importItems(
       [
-        baseItem("BG-EXPIRED", "2026-06-18"),
-        baseItem("BG-DUE-TODAY", "2026-06-19"),
-        baseItem("BG-NO-DEADLINE", "")
+        baseItem("BG-EXPIRED", "2026-05-01", "2026-05-14"),
+        baseItem("BG-RECENT", "2026-06-10"),
+        baseItem("BG-NO-PUB", "")
       ],
       "2026-06-01T08:00:00.000Z"
     );
@@ -86,8 +86,8 @@ test("archiviert Fälle nach bestätigter Frist vollständig und behält Team-Da
 
     assert.equal(archived, 1);
     assert.equal(repository.getById("BG-EXPIRED").workflowStatus, "archived");
-    assert.ok(repository.getById("BG-DUE-TODAY"));
-    assert.ok(repository.getById("BG-NO-DEADLINE"));
+    assert.equal(repository.getById("BG-RECENT").workflowStatus, "new");
+    assert.equal(repository.getById("BG-NO-PUB").workflowStatus, "new");
     assert.equal(db.prepare("SELECT COUNT(*) AS count FROM application_comments WHERE application_id = 'BG-EXPIRED'").get().count, 1);
     assert.equal(db.prepare("SELECT COUNT(*) AS count FROM application_reads WHERE application_id = 'BG-EXPIRED'").get().count, 1);
     assert.equal(db.prepare("SELECT COUNT(*) AS count FROM import_notifications WHERE application_id = 'BG-EXPIRED'").get().count, 1);

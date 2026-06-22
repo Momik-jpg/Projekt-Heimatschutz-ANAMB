@@ -186,6 +186,8 @@ async function updateMap(item) {
   mapState.marker.setIcon(createLocationMarkerIcon());
   mapState.marker.setLatLng(latLng).bindPopup(`<strong>${escapeHtml(item.municipality)}</strong><br>${escapeHtml(item.address)}`);
   map.setView(latLng, 17, { animate: false });
+  // Externe Kartenkacheln direkt beim Öffnen laden (kein manueller Klick nötig).
+  enableExternalMapTiles();
   clearMapOverlays();
   el.mapLegend?.classList.add("hidden");
   if (el.mapLegend) el.mapLegend.innerHTML = "";
@@ -279,7 +281,7 @@ function renderDetail() {
   el.fAddr.textContent = readableAddress(item);
   el.fParcel.textContent = item.parcel || "-";
   el.fPub.textContent = formatDate(item.publicationDate);
-  el.fDue.innerHTML = `${escapeHtml(formatDate(item.deadlineDate))} <span class="cell-due-meta cell-due-meta-inline ${due.cls}">· ${escapeHtml(due.txt)}</span>`;
+  el.fDue.innerHTML = `${escapeHtml(formatDate(objectionDeadline(item)))} <span class="cell-due-meta cell-due-meta-inline ${due.cls}">· ${escapeHtml(due.txt)}</span>`;
   el.fAgis.textContent = item.agisMatch || protection.label;
   el.fProject.textContent = readableProject(item);
   el.projectScale.textContent = ({ klein: "Klein", mittel: "Mittel", gross: "Gross", unbekannt: "Unbekannt" })[item.projectScale] || "Unbekannt";
