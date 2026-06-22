@@ -6,6 +6,7 @@ import {
   getRequestHosts,
   isCompressibleContentType,
   isSecureRequest,
+  resolveTrustProxySetting,
   setStaticAssetHeaders
 } from "../server/httpSecurity.js";
 
@@ -37,15 +38,31 @@ test("isSecureRequest: secure-Flag oder x-forwarded-proto", () => {
   assert.equal(isSecureRequest({ secure: false, headers: {} }), false);
 });
 
-test("getRequestHosts: host + x-forwarded-host", () => {
+test("getRequestHosts: ignoriert rohen x-forwarded-host ohne Express-Proxy-Vertrauen", () => {
   const hosts = getRequestHosts({ headers: { host: "App.CH", "x-forwarded-host": "proxy.ch, edge.ch" } });
   assert.ok(hosts.has("app.ch"));
-  assert.ok(hosts.has("proxy.ch"));
-  assert.ok(hosts.has("edge.ch"));
+  assert.equal(hosts.has("proxy.ch"), false);
+  assert.equal(hosts.has("edge.ch"), false);
+
+  const trustedProxyHosts = getRequestHosts({
+    host: "Proxy.CH",
+    headers: { host: "internal:3000", "x-forwarded-host": "Proxy.CH" }
+  });
+  assert.deepEqual([...trustedProxyHosts], ["proxy.ch"]);
   assert.equal(getRequestHosts({ headers: {} }).size, 0);
 });
 
-test("createCsrfOriginGuard: GET durch, gleiche Herkunft durch, fremde/ungueltige blockiert", () => {
+test("resolveTrustProxySetting: konservative Defaults und explizite Proxy-Konfiguration", () => {
+  assert.equal(resolveTrustProxySetting(), false);
+  assert.equal(resolveTrustProxySetting(""), false);
+  assert.equal(resolveTrustProxySetting("false"), false);
+  assert.equal(resolveTrustProxySetting("0"), false);
+  assert.equal(resolveTrustProxySetting("true"), true);
+  assert.equal(resolveTrustProxySetting("1"), 1);
+  assert.equal(resolveTrustProxySetting("loopback"), "loopback");
+});
+
+test("createCsrfOriginGuard: GET durch, gleiche Herkunft durch, fehlende/fremde/ungueltige blockiert", () => {
   const guard = createCsrfOriginGuard({ enabled: true });
 
   let nexted = 0;
@@ -55,11 +72,14 @@ test("createCsrfOriginGuard: GET durch, gleiche Herkunft durch, fremde/ungueltig
 
   // GET -> immer durch
   guard({ method: "GET", headers: {} }, mockResponse(), next);
-  // POST ohne Origin/Referer -> durch (Server-zu-Server)
-  guard({ method: "POST", headers: {} }, mockResponse(), next);
   // POST gleiche Herkunft -> durch
   guard({ method: "POST", headers: { origin: "https://app.ch", host: "app.ch" } }, mockResponse(), next);
-  assert.equal(nexted, 3);
+  assert.equal(nexted, 2);
+
+  // POST ohne Origin/Referer -> 403
+  const missingSource = mockResponse();
+  guard({ method: "POST", headers: { host: "app.ch" } }, missingSource, next);
+  assert.equal(missingSource.statusCode, 403);
 
   // POST fremde Herkunft -> 403
   const foreign = mockResponse();
@@ -70,6 +90,27 @@ test("createCsrfOriginGuard: GET durch, gleiche Herkunft durch, fremde/ungueltig
   const invalid = mockResponse();
   guard({ method: "POST", headers: { origin: "kein-url", host: "app.ch" } }, invalid, next);
   assert.equal(invalid.statusCode, 403);
+
+  // Direkte Clients dürfen X-Forwarded-Host nicht als CSRF-Ausnahme spoofen.
+  const spoofedForwardedHost = mockResponse();
+  guard(
+    { method: "POST", headers: { origin: "https://proxy.ch", host: "app.ch", "x-forwarded-host": "proxy.ch" } },
+    spoofedForwardedHost,
+    next
+  );
+  assert.equal(spoofedForwardedHost.statusCode, 403);
+
+  // Express setzt request.host auf den Forwarded-Host, wenn die direkte Proxy-IP vertraut ist.
+  guard(
+    {
+      method: "POST",
+      host: "proxy.ch",
+      headers: { origin: "https://proxy.ch", host: "internal:3000", "x-forwarded-host": "proxy.ch" }
+    },
+    mockResponse(),
+    next
+  );
+  assert.equal(nexted, 3);
 
   // deaktiviert -> durch
   let disabledNext = 0;

@@ -37,7 +37,7 @@ test("GET /api/admin/sync-settings gibt den Token nicht zurueck (nur sourceToken
 
     const loginRes = await fetch(`${ctx.baseUrl}/api/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Origin: ctx.baseUrl },
       body: JSON.stringify({ username: "master", password: MASTER_PW })
     });
     assert.equal(loginRes.status, 200);

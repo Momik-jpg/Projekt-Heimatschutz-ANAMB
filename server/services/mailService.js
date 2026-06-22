@@ -5,26 +5,30 @@ function normalize(value) {
   return String(value ?? "").trim();
 }
 
+export function resolveMailConfig(base = {}, env = process.env) {
+  const port = Number(base.port ?? env.SMTP_PORT ?? 587);
+  const secureRaw = base.secure ?? env.SMTP_SECURE;
+  const secure =
+    secureRaw === undefined || secureRaw === null || secureRaw === ""
+      ? port === 465
+      : secureRaw === true || normalize(secureRaw).toLowerCase() === "true";
+  const user = normalize(base.user ?? env.SMTP_USER);
+  const from = normalize(base.from ?? env.SMTP_FROM ?? user);
+
+  return {
+    host: normalize(base.host ?? env.SMTP_HOST),
+    port,
+    secure,
+    user,
+    password: normalize(base.password ?? env.SMTP_PASSWORD),
+    from
+  };
+}
+
 export function createMailService({ getConfig, logger = console } = {}) {
   function readConfig() {
     const base = typeof getConfig === "function" ? getConfig() ?? {} : {};
-    const port = Number(base.port ?? process.env.SMTP_PORT ?? 587);
-    const secureRaw = base.secure ?? process.env.SMTP_SECURE;
-    const secure =
-      secureRaw === undefined || secureRaw === null || secureRaw === ""
-        ? port === 465
-        : secureRaw === true || normalize(secureRaw).toLowerCase() === "true";
-
-    const user = normalize(base.user ?? process.env.SMTP_USER);
-
-    return {
-      host: normalize(base.host ?? process.env.SMTP_HOST),
-      port,
-      secure,
-      user,
-      password: normalize(base.password ?? process.env.SMTP_PASSWORD),
-      from: normalize(base.from ?? process.env.SMTP_FROM ?? process.env.SMTP_USER)
-    };
+    return resolveMailConfig(base);
   }
 
   return {

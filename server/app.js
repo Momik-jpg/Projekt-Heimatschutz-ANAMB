@@ -29,6 +29,7 @@ import { createMailService } from "./services/mailService.js";
 import { createMaintenanceService } from "./services/maintenanceService.js";
 import { decryptToken } from "./services/tokenCrypto.js";
 import { sanitizeForLog } from "./logSafe.js";
+import { createGracefulShutdown } from "./gracefulShutdown.js";
 
 import {
   publicDir,
@@ -45,6 +46,7 @@ import {
   createCompressionMiddleware,
   createLoginRateLimiter,
   verifyTurnstileToken,
+  resolveTrustProxySetting,
   resolveCurrentUser,
   handleHealthCheck,
   buildImportNotificationEntries
@@ -65,6 +67,9 @@ export function createApp(options = {}) {
   );
   const normalizedSyncSourceToken = normalizeEnvString(
     options.syncSourceToken ?? process.env.SYNC_SOURCE_TOKEN ?? ""
+  );
+  const healthInstanceId = normalizeEnvString(
+    options.healthInstanceId ?? (process.env.NODE_ENV === "test" ? process.env.E2E_INSTANCE_ID : "")
   );
   const masterAccountPassword = normalizeEnvString(
     options.masterAccountPassword ?? process.env.MASTER_ACCOUNT_PASSWORD ?? ""
@@ -382,7 +387,7 @@ export function createApp(options = {}) {
   const app = express();
 
   app.disable("x-powered-by");
-  app.set("trust proxy", 1);
+  app.set("trust proxy", resolveTrustProxySetting(options.trustProxy ?? process.env.TRUST_PROXY));
   app.use(rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 1200,
@@ -404,8 +409,14 @@ export function createApp(options = {}) {
   app.use("/api", createCsrfOriginGuard({ enabled: options.csrfProtection !== false }));
 
   const healthDatabasePath = options.dbPath ?? getDefaultDbPath();
-  app.get("/health", (_request, response) => handleHealthCheck(_request, response, healthDatabasePath));
-  app.get("/api/health", (_request, response) => handleHealthCheck(_request, response, healthDatabasePath));
+  const healthHandler = (request, response) => {
+    if (healthInstanceId) {
+      response.setHeader("X-E2E-Instance-Id", healthInstanceId);
+    }
+    handleHealthCheck(request, response, healthDatabasePath);
+  };
+  app.get("/health", healthHandler);
+  app.get("/api/health", healthHandler);
 
   // Hinweis: Der frühere oeffentliche Endpoint GET /api/auth/users wurde entfernt
   // (S6). Er lieferte ohne Anmeldung interne User-IDs, Anzeigenamen und Rollen und
@@ -452,7 +463,7 @@ const routeContext = {
 
   registerAuthRoutes(app, routeContext);
 
-    app.use("/api", (request, response, next) => {
+  app.use("/api", (request, response, next) => {
     if (request.path === "/health" || request.path.startsWith("/auth/")) {
       next();
       return;
@@ -470,11 +481,11 @@ const routeContext = {
     next();
   });
 
-registerAdminRoutes(app, routeContext);
+  registerAdminRoutes(app, routeContext);
   registerApplicationRoutes(app, routeContext);
   registerSyncRoutes(app, routeContext);
 
-    app.use(express.static(publicDir, {
+  app.use(express.static(publicDir, {
     etag: true,
     lastModified: true,
     setHeaders: setStaticAssetHeaders
@@ -529,7 +540,7 @@ if (isDirectRun) {
   const effectiveSyncSourceUrl =
     configuredSyncSourceUrl || (defaultAmtsblattDisabled ? "" : defaultCantonSyncSourceUrl);
 
-  const { app, ready } = createApp({
+  const { app, db, ready, stopBackgroundJobs } = createApp({
     agisAssessmentEnabled: true,
     agisRefreshOnStart: process.env.AGIS_REFRESH_ON_START !== "false",
     syncSourceUrl: effectiveSyncSourceUrl
@@ -537,7 +548,16 @@ if (isDirectRun) {
 
   await ready;
 
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`Heimatschutz Aargau läuft auf Port ${port}.`);
   });
+
+  const shutdown = createGracefulShutdown({
+    server,
+    stopBackgroundJobs,
+    closeDatabase: () => db.close()
+  });
+
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 }

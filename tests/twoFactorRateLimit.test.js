@@ -32,7 +32,7 @@ function boot() {
 async function post(baseUrl, path, body, cookie) {
   return fetch(`${baseUrl}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}) },
+    headers: { "Content-Type": "application/json", Origin: baseUrl, ...(cookie ? { Cookie: cookie } : {}) },
     body: JSON.stringify(body ?? {})
   });
 }

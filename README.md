@@ -38,7 +38,7 @@ Allgemeine News-, Event- oder Social-Media-Seiten sollen nicht als produktive Ha
 - Manueller JSON-Import für offizielle Exportdateien
 - Automatischer Sync über offizielle Gemeindequellen
 - Auto-Discovery: Ist nur die offizielle Gemeinde-Webseite bekannt, sucht der Sync die Baugesuch-/Publikationsseite selbstständig (Link-Analyse, gängige Publikationspfade und der kantonale Anzeiger als Fallback) und wertet sie aus
-- SSRF-Schutz: Auto-Discovery folgt nur öffentlichen http(s)-Adressen auf derselben Domain und blockiert interne/lokale Netzwerkadressen
+- SSRF-Schutz: Auto-Discovery folgt nur öffentlichen http(s)-Adressen auf derselben Domain; DNS-Adressen werden bei der Vorprüfung und nochmals beim tatsächlichen Socket-Aufbau validiert
 - Optionaler Wochen-Sync über HTML-, XML-/RSS-/Sitemap-, JSON-, direkte PDF- und ArcGIS-/AGIS-Quellen
 - Robuste Auto-Erkennung von XML-/RSS-/Sitemap- und ArcGIS-/JSON-Quellen anhand der URL, falls ein Quellentyp einmal falsch als HTML gepflegt wurde
 - HTML-Import kann zusätzlich eingebettete `iframe`-Publikationen und strukturierte `JSON-LD`-/`itemprop`-Seitendaten auswerten
@@ -130,6 +130,9 @@ DATABASE_PATH=/data/heimatschutz.sqlite
 NODE_ENV=production
 PORT=3000
 
+# Direktbetrieb ohne Reverse Proxy (sicherer Default):
+TRUST_PROXY=false
+
 # Master-Konto: entweder direkt ein Passwort als Hosting-Secret setzen ...
 MASTER_ACCOUNT_PASSWORD=<als-secret-setzen>
 # ... oder MASTER_ACCOUNT_PASSWORD leer lassen und die E-Mail-Einrichtung nutzen:
@@ -149,6 +152,26 @@ Hinweis: Es sind keine Standardpasswörter im Code hinterlegt. In Produktion
 (`NODE_ENV=production`) bricht der Start ab, wenn weder `MASTER_ACCOUNT_PASSWORD`
 gesetzt noch die E-Mail-Einrichtung (`MASTER_SETUP_EMAIL` + `SMTP_HOST`)
 konfiguriert ist.
+
+### Reverse Proxy und Rate-Limiting
+
+`TRUST_PROXY` steuert, welchen Reverse Proxies Express bei Client-IP, Protokoll
+und Host vertraut. Die Einstellung wirkt direkt auf Rate-Limiting, sichere
+Cookies und die CSRF-Herkunftsprüfung.
+
+- Direkt erreichbare App ohne Proxy: Variable weglassen oder
+  `TRUST_PROXY=false` setzen.
+- Ein vorgeschalteter, nicht umgehbarer Proxy: `TRUST_PROXY=1`.
+- Nginx auf demselben Host: vorzugsweise `TRUST_PROXY=loopback`.
+- Mehrere Proxy-Hops wie Cloudflare plus Nginx: nur die tatsächlich kontrollierte
+  Hop-Zahl oder konkrete Proxy-Netze eintragen. `TRUST_PROXY=true` ist nur sicher,
+  wenn die App ausschliesslich über Proxies erreichbar ist, die eingehende
+  `X-Forwarded-*`-Header zuverlässig überschreiben.
+
+Eine falsche oder fehlende Proxy-Konfiguration kann alle Benutzer unter derselben
+Proxy-IP zusammenfassen und dadurch gemeinsam ins Rate-Limit laufen lassen. Eine
+zu breite Konfiguration erlaubt Clients dagegen, weitergeleitete IP-, Host- oder
+Protokollwerte zu spoofen.
 
 ### Master-Konto per E-Mail einrichten (Setup-Schlüssel)
 
@@ -196,6 +219,16 @@ Pflicht:
 - persistentes Datenverzeichnis an `/data`
 - `DATABASE_PATH=/data/heimatschutz.sqlite`
 - Master-Konto eingerichtet: entweder ein sicherer Wert für `MASTER_ACCOUNT_PASSWORD` oder die E-Mail-Einrichtung (`MASTER_SETUP_EMAIL` + `SMTP_*`)
+
+### Security-Scans
+
+Semgrep läuft mit einem lokal versionierten und per SHA-256 geprüften Regelsatz.
+CodeQL speichert SARIF als CI-Artifact und erzwingt Befunde über das lokale Gate
+`scripts/check-codeql-sarif.js`. Weil für dieses private Repository derzeit kein
+GitHub Advanced Security aktiviert ist, erscheinen die Resultate nicht in GitHub
+Code Scanning und besitzen dort keine Alerts-Historie. Für diese Integration muss
+GitHub Advanced Security in den Repository-Einstellungen aktiviert und
+`upload: never` im CodeQL-Workflow anschliessend entfernt werden.
 
 ## Dokumentation
 

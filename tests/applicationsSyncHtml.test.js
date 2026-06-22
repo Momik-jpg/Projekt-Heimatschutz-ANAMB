@@ -91,11 +91,13 @@ test("buildStructuredPublicationImportedItems: Block ohne Geocoding -> manual-re
 });
 
 function geocodeMock() {
-  return async () =>
+  const fetchImpl = async () =>
     new Response(
       JSON.stringify({ results: [{ attrs: { label: "Hauptstrasse 12 5000 Aarau", x: 2645000, y: 1249000, origin: "address" } }] }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
+  fetchImpl.skipSsrfValidation = true;
+  return fetchImpl;
 }
 
 test("buildTabularImportedItems: mit Geocoding -> no-hit und Koordinaten", async () => {

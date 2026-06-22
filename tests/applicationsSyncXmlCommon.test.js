@@ -74,6 +74,7 @@ test("resolveSitemapUrls: Tiefenlimit + verschachteltes Laden", async () => {
 
   // depth 0: verschachtelte Sitemap wird geladen
   const mockFetch = async () => new Response("<urlset><url><loc>https://x.ch/deep</loc></url></urlset>", { status: 200 });
+  mockFetch.skipSsrfValidation = true;
   const urls = await resolveSitemapUrls(index, source, mockFetch, 5000);
   assert.deepEqual(urls, ["https://x.ch/deep"]);
 });

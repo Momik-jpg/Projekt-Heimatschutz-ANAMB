@@ -70,25 +70,37 @@ export const csrfProtectedMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export function getRequestHosts(request) {
   const hosts = new Set();
+  const effectiveHost = request.host ?? request.headers?.host;
 
-  if (request.headers.host) {
-    hosts.add(String(request.headers.host).toLowerCase());
-  }
-
-  const forwardedHost = request.headers["x-forwarded-host"];
-
-  if (forwardedHost) {
-    for (const host of String(forwardedHost).split(",")) {
-      hosts.add(host.trim().toLowerCase());
-    }
+  if (effectiveHost) {
+    hosts.add(String(effectiveHost).trim().toLowerCase());
   }
 
   return hosts;
 }
 
+export function resolveTrustProxySetting(value = false) {
+  if (value === true) return true;
+  if (value === false || value === null || value === undefined) return false;
+  if (typeof value === "number") return value > 0 ? value : false;
+
+  const rawValue = String(value).trim();
+  if (!rawValue) return false;
+
+  const normalizedValue = rawValue.toLowerCase();
+  if (["false", "0", "off", "no"].includes(normalizedValue)) return false;
+  if (["true", "on", "yes"].includes(normalizedValue)) return true;
+
+  const numericValue = Number(normalizedValue);
+  if (Number.isInteger(numericValue)) {
+    return numericValue > 0 ? numericValue : false;
+  }
+
+  return rawValue;
+}
+
 // CSRF-Schutz: Zusammen mit dem SameSite=Lax-Session-Cookie wird jede ändernde
-// Anfrage abgewiesen, deren Origin/Referer nicht zum eigenen Host gehoert. Fehlt
-// Origin UND Referer (Nicht-Browser-Clients, Server-zu-Server), wird durchgelassen.
+// Anfrage abgewiesen, deren Origin/Referer fehlt oder nicht zum eigenen Host gehoert.
 export function createCsrfOriginGuard({ enabled = true } = {}) {
   return function csrfOriginGuard(request, response, next) {
     if (!enabled || !csrfProtectedMethods.has(request.method)) {
@@ -99,7 +111,7 @@ export function createCsrfOriginGuard({ enabled = true } = {}) {
     const source = request.headers.origin || request.headers.referer;
 
     if (!source) {
-      next();
+      response.status(403).json({ error: "Anfrage ohne Herkunft wurde blockiert." });
       return;
     }
 

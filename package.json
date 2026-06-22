@@ -11,7 +11,7 @@
     "lint:all": "npm run lint",
     "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=94",
     "pretest:e2e": "node tests/e2e/clean-db.mjs",
-    "test:e2e": "playwright test",
+    "test:e2e": "node tests/e2e/run-playwright.mjs",
     "diagnose:manual-review": "node scripts/diagnose-manual-review.js",
     "repair:manual-review": "node scripts/repair-manual-review.js",
     "audit:municipality-sources": "node scripts/audit-municipality-sources.js"
@@ -41,7 +41,8 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
     "nodemailer": "^9.0.1",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "undici": "8.5.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

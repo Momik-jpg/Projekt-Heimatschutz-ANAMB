@@ -1,8 +1,8 @@
-// SSRF-Schutz fuer ausgehende Requests: klassifiziert IPs und prueft Hostnamen
-// per DNS gegen private/reservierte Bereiche. Bewusst ohne Netzwerk testbar
-// (reine IP-Funktion + injizierbarer DNS-Lookup).
+// SSRF-Schutz fuer ausgehende Requests: klassifiziert IPs und validiert auch
+// den DNS-Lookup, den Undici fuer den tatsaechlichen Socket verwendet.
 import net from "node:net";
 import { lookup as dnsLookup } from "node:dns/promises";
+import { Agent } from "undici";
 
 function ipv4ToInt(ip) {
   const parts = ip.split(".").map((p) => Number(p));
@@ -70,6 +70,27 @@ export function isPrivateOrReservedIp(ip) {
   return false;
 }
 
+function validatePublicRecords(host, records) {
+  const addresses = Array.isArray(records) ? records : [records];
+  if (addresses.length === 0) {
+    throw new Error(`SSRF-Schutz: Host ${host} konnte nicht aufgeloest werden.`);
+  }
+
+  return addresses.map((record) => {
+    const address = typeof record === "string" ? record : record?.address;
+    const family = typeof record === "string" ? net.isIP(record) : Number(record?.family ?? net.isIP(address));
+
+    if (!address || !net.isIP(address)) {
+      throw new Error(`SSRF-Schutz: Host ${host} lieferte keine gueltige Ziel-IP.`);
+    }
+    if (isPrivateOrReservedIp(address)) {
+      throw new Error(`SSRF-Schutz: Host ${host} loest auf private/reservierte IP ${address} auf.`);
+    }
+
+    return { address, family };
+  });
+}
+
 /**
  * Wirft, wenn der Host (IP-Literal oder per DNS aufgeloest) auf eine private/
  * reservierte Adresse zeigt. lookupImpl ist fuer Tests injizierbar.
@@ -89,15 +110,28 @@ export async function assertPublicHost(hostname, { lookupImpl = dnsLookup } = {}
   }
 
   const records = await lookupImpl(host, { all: true });
-  const addresses = Array.isArray(records) ? records : [records];
-  if (addresses.length === 0) {
-    throw new Error(`SSRF-Schutz: Host ${host} konnte nicht aufgeloest werden.`);
-  }
-
-  for (const record of addresses) {
-    const address = typeof record === "string" ? record : record?.address;
-    if (address && isPrivateOrReservedIp(address)) {
-      throw new Error(`SSRF-Schutz: Host ${host} loest auf private/reservierte IP ${address} auf.`);
-    }
-  }
+  validatePublicRecords(host, records);
 }
+
+export function createPublicLookup({ lookupImpl = dnsLookup } = {}) {
+  return function publicLookup(hostname, options, callback) {
+    const lookupOptions = typeof options === "object" && options !== null ? options : { family: options };
+
+    Promise.resolve(lookupImpl(hostname, { ...lookupOptions, all: true, verbatim: true }))
+      .then((records) => {
+        const addresses = validatePublicRecords(hostname, records);
+        if (lookupOptions.all) {
+          callback(null, addresses);
+          return;
+        }
+        callback(null, addresses[0].address, addresses[0].family);
+      })
+      .catch((error) => callback(error));
+  };
+}
+
+export const ssrfSafeDispatcher = new Agent({
+  connect: {
+    lookup: createPublicLookup()
+  }
+});

@@ -21,17 +21,26 @@ import { generateTotp } from "../server/services/totp.js";
 const TEST_MASTER_PASSWORD = process.env.TEST_MASTER_PASSWORD ?? "Test-Master-Pw-1!";
 const TEST_TEAM_PASSWORD = process.env.TEST_TEAM_PASSWORD ?? "Heimat2026!";
 
+function markMockFetch(fetchImpl) {
+  if (typeof fetchImpl !== "function") {
+    return fetchImpl;
+  }
+
+  fetchImpl.skipSsrfValidation = true;
+  return fetchImpl;
+}
+
 function createTestServer(options = {}) {
   const directory = options.directory ?? mkdtempSync(join(tmpdir(), "heimatschutz-aargau-"));
   const dbPath = options.dbPath ?? join(directory, "test.sqlite");
   const { app, db, maintenanceService, stopBackgroundJobs, ready } = createApp({
     dbPath,
-    agisFetchImpl: options.agisFetchImpl,
+    agisFetchImpl: markMockFetch(options.agisFetchImpl),
     agisAssessmentEnabled: options.agisAssessmentEnabled ?? false,
     agisRefreshOnStart: options.agisRefreshOnStart ?? false,
     seedDemoApplications: options.seedDemoApplications ?? true,
-    syncFetchImpl: options.syncFetchImpl,
-    geocodeFetchImpl: options.geocodeFetchImpl,
+    syncFetchImpl: markMockFetch(options.syncFetchImpl),
+    geocodeFetchImpl: markMockFetch(options.geocodeFetchImpl),
     pdfTextExtractImpl: options.pdfTextExtractImpl,
     geocodeEnabled: options.geocodeEnabled ?? false,
     syncSourceUrl: options.syncSourceUrl,
@@ -47,6 +56,7 @@ function createTestServer(options = {}) {
     backupDir: options.backupDir,
     backupRetention: options.backupRetention,
     csrfProtection: options.csrfProtection,
+    healthInstanceId: options.healthInstanceId,
     // Seed-Passwörter stehen nicht mehr im Repository, daher liefert der Test-Harness
     // sie über Optionen. Einzelne Tests können sie überschreiben (z. B. weglassen,
     // um den Master-Setup-Key-Flow zu testen). Eine gesetzte Umgebungsvariable hat
@@ -138,10 +148,15 @@ async function waitFor(assertion, options = {}) {
 }
 
 async function requestJson(baseUrl, path, options = {}) {
-  const { headers, ...fetchOptions } = options;
+  const { headers = {}, includeOrigin = true, ...fetchOptions } = options;
+  const method = String(fetchOptions.method ?? "GET").toUpperCase();
+  const hasOriginHeader = Object.keys(headers).some((key) => key.toLowerCase() === "origin");
+  const originHeader =
+    includeOrigin && method !== "GET" && method !== "HEAD" && !hasOriginHeader ? { Origin: baseUrl } : {};
   const response = await fetch(`${baseUrl}${path}`, {
     headers: {
       "Content-Type": "application/json",
+      ...originHeader,
       ...headers
     },
     ...fetchOptions
@@ -270,6 +285,19 @@ test("health endpoint is available at /health and /api/health", async (context) 
   assert.equal(apiHealthResponse.status, 200);
   assert.equal(healthResponse.payload.status, "ok");
   assert.deepEqual(healthResponse.payload, apiHealthResponse.payload);
+});
+
+test("health endpoint kennzeichnet eine konfigurierte E2E-Instanz", async (context) => {
+  const testServer = createTestServer({ healthInstanceId: "e2e-instance-123" });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const healthResponse = await requestJson(testServer.baseUrl, "/health");
+
+  assert.equal(healthResponse.headers.get("x-e2e-instance-id"), "e2e-instance-123");
 });
 
 test("server sends security and cache headers for app assets", async (context) => {
@@ -8378,12 +8406,14 @@ test("cross-origin state-changing requests are blocked by the CSRF guard", async
   });
   assert.equal(allowed.status, 200);
 
-  // Ohne Origin/Referer (z. B. Server-zu-Server) -> erlaubt.
+  // Ohne Origin/Referer -> blockiert, damit state-changing Session-APIs nicht
+  // auf fehlende Browser-Herkunftssignale vertrauen.
   const noOrigin = await requestJson(testServer.baseUrl, "/api/auth/login", {
     method: "POST",
+    includeOrigin: false,
     body: JSON.stringify({ username: "lucia.vettori", password: "Heimat2026!" })
   });
-  assert.equal(noOrigin.status, 200);
+  assert.equal(noOrigin.status, 403);
 });
 
 test("audit log records master actions and is only readable by the master", async (context) => {

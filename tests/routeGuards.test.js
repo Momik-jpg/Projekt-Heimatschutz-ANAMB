@@ -43,10 +43,13 @@ function stopServer(handle) {
 }
 
 async function req(baseUrl, path, { cookie, method = "GET", body } = {}) {
+  const normalizedMethod = String(method).toUpperCase();
+  const originHeader = normalizedMethod === "GET" || normalizedMethod === "HEAD" ? {} : { Origin: baseUrl };
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
+      ...originHeader,
       ...(cookie ? { Cookie: cookie } : {})
     },
     body: body === undefined ? undefined : JSON.stringify(body)
@@ -63,7 +66,7 @@ async function req(baseUrl, path, { cookie, method = "GET", body } = {}) {
 async function login(baseUrl, creds) {
   const response = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Origin: baseUrl },
     body: JSON.stringify(creds)
   });
   assert.equal(response.status, 200, "Login muss gelingen");

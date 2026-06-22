@@ -41,22 +41,30 @@ export async function checkCodeqlSarif(inputPath) {
   return findings;
 }
 
-async function main() {
-  const inputPath = process.argv[2];
+function formatCodeqlFinding(finding) {
+  const location = finding.locations?.[0]?.physicalLocation;
+  const file = location?.artifactLocation?.uri ?? "unbekannte Datei";
+  const line = location?.region?.startLine ?? "?";
+  return `${finding.level ?? "warning"}: ${finding.ruleId ?? "CodeQL"} in ${file}:${line}`;
+}
+
+export async function runCodeqlSarifGate(inputPath, { stdout = console.log, stderr = console.error } = {}) {
   if (!inputPath) throw new Error("Pfad zur CodeQL-SARIF-Datei oder zum Ergebnisverzeichnis fehlt.");
 
   const findings = await checkCodeqlSarif(inputPath);
   if (findings.length > 0) {
     for (const finding of findings) {
-      const location = finding.locations?.[0]?.physicalLocation;
-      const file = location?.artifactLocation?.uri ?? "unbekannte Datei";
-      const line = location?.region?.startLine ?? "?";
-      console.error(`${finding.level ?? "warning"}: ${finding.ruleId ?? "CodeQL"} in ${file}:${line}`);
+      stderr(formatCodeqlFinding(finding));
     }
     throw new Error(`CodeQL meldet ${findings.length} nicht unterdrückte Befunde.`);
   }
 
-  console.log("CodeQL-Gate: 0 nicht unterdrückte Befunde.");
+  stdout("CodeQL-Gate: 0 nicht unterdrückte Befunde.");
+  return findings;
+}
+
+async function main() {
+  await runCodeqlSarifGate(process.argv[2]);
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : "";
