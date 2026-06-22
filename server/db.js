@@ -48,6 +48,35 @@ const defaultSeedDemoApplications =
  * @param {string} [dbPath]
  * @param {CreateDatabaseOptions} [options]
  */
+// Demo-Daten sollen immer aktuell wirken: die statischen Seed-Publikationsdaten
+// werden so verschoben, dass der neueste Fall etwa zwei Tage alt ist. Sonst
+// altern die festen Daten aus dem 31-Tage-Fenster der aktiven Liste heraus und
+// die Demo-/E2E-Liste wäre leer. Die relative Reihenfolge bleibt erhalten.
+function shiftSeedDatesToRecent(applications, referenceDate = new Date()) {
+  const day = 24 * 60 * 60 * 1000;
+  const toTime = (value) => {
+    const time = new Date(value).getTime();
+    return Number.isNaN(time) ? null : time;
+  };
+  const times = applications.map((item) => toTime(item.publicationDate)).filter((time) => time !== null);
+  if (times.length === 0) return applications;
+
+  const newest = Math.max(...times);
+  const target = referenceDate.getTime() - 2 * day;
+  const shiftDays = Math.round((target - newest) / day);
+  if (shiftDays === 0) return applications;
+
+  const shift = (value) => {
+    const time = toTime(value);
+    return time === null ? value : new Date(time + shiftDays * day).toISOString().slice(0, 10);
+  };
+  return applications.map((item) => ({
+    ...item,
+    publicationDate: shift(item.publicationDate),
+    deadlineDate: shift(item.deadlineDate)
+  }));
+}
+
 export function createDatabase(dbPath = defaultDbPath, options = {}) {
   const databaseOptions = /** @type {Record<string, unknown>} */ (options);
   const seedDemoApplications = databaseOptions.seedDemoApplications ?? defaultSeedDemoApplications;
@@ -313,7 +342,7 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
     db.exec("BEGIN");
 
     try {
-      insertSeedRecords(db, seedApplications, "2026-03-20T07:00:00.000Z");
+      insertSeedRecords(db, shiftSeedDatesToRecent(seedApplications), "2026-03-20T07:00:00.000Z");
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
