@@ -7,7 +7,7 @@ import { createDatabase } from "../server/db.js";
 import { createApplicationsRepository } from "../server/repository/applicationsRepository.js";
 import { createMaintenanceService } from "../server/services/maintenanceService.js";
 
-function importedItem(id, deadlineProvenance = "explicit") {
+function importedItem(id, { deadlineProvenance = "explicit", publicationDate = "2026-05-01", deadlineDate = "2026-05-14" } = {}) {
   return {
     id,
     source: "Amtsblatt Aargau",
@@ -17,8 +17,8 @@ function importedItem(id, deadlineProvenance = "explicit") {
     address: "Teststrasse 1",
     coordinates: "2645000,1249000",
     locationPrecision: "precise",
-    publicationDate: "2026-06-01",
-    deadlineDate: "2026-06-18",
+    publicationDate,
+    deadlineDate,
     deadlineProvenance,
     addressProvenance: "official-field",
     projectType: "Umbau",
@@ -42,7 +42,7 @@ test("bestehende Datenbank erhält konservative Provenienzspalten", () => {
   }
 });
 
-test("bestätigte abgelaufene Fälle werden mit Team-Daten archiviert statt gelöscht", () => {
+test("Fälle 31 Tage nach Publikation werden mit Team-Daten archiviert statt gelöscht", () => {
   const db = createDatabase(":memory:", { seedDemoApplications: false });
   try {
     const repository = createApplicationsRepository(db);
@@ -68,19 +68,18 @@ test("bestätigte abgelaufene Fälle werden mit Team-Daten archiviert statt gel�
   }
 });
 
-test("alte unbekannte Fristen werden nicht automatisch archiviert", () => {
+test("Fälle ohne Publikationsdatum werden nicht automatisch archiviert", () => {
   const db = createDatabase(":memory:", { seedDemoApplications: false });
   try {
     const repository = createApplicationsRepository(db);
     repository.importItems(
-      [{ ...importedItem("BG-LEGACY"), deadlineProvenance: "legacy-unknown", addressProvenance: "legacy-unknown" }],
+      [importedItem("BG-NO-PUB", { publicationDate: "", deadlineDate: "", deadlineProvenance: "missing" })],
       "2026-06-01T08:00:00.000Z"
     );
 
     assert.equal(repository.archiveExpiredApplications({ referenceDate: new Date("2026-06-19T12:00:00.000Z") }), 0);
-    const item = repository.getById("BG-LEGACY");
+    const item = repository.getById("BG-NO-PUB");
     assert.equal(item.workflowStatus, "new");
-    assert.equal(item.deadlineProvenance, "legacy-unknown");
   } finally {
     db.close();
   }

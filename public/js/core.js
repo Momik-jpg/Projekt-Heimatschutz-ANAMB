@@ -247,6 +247,22 @@ function daysUntil(value) {
   return Math.ceil((target.getTime() - today.getTime()) / 86400000);
 }
 
+// Massgebliche Einsprachefrist: 14 Tage ab Publikation. Im Kanton Aargau ist
+// eine Einsprache nach diesem Fenster praktisch nicht mehr möglich, darum gilt
+// diese aus dem Publikationsdatum abgeleitete Frist immer - auch wenn das
+// Amtsblatt einen anderen (längeren) Auflagezeitraum nennt. Ohne
+// Publikationsdatum bleibt sie leer ("Frist fehlt").
+const OBJECTION_PERIOD_DAYS = 14;
+
+function objectionDeadline(item) {
+  const publication = item?.publicationDate;
+  if (!publication) return "";
+  const date = new Date(publication);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setUTCDate(date.getUTCDate() + OBJECTION_PERIOD_DAYS);
+  return date.toISOString().slice(0, 10);
+}
+
 function formatDueRelative(days) {
   if (days < 0) {
     const overdueDays = Math.abs(days);

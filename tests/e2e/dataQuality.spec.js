@@ -41,17 +41,16 @@ test("Fallzeilen haben eine tastaturbedienbare primäre Aktion", async ({ page }
   await expect(page.locator("#detailBody")).toBeVisible();
 });
 
-test("Kartenbibliotheken sind lokal und OSM-Kacheln laden erst nach Einwilligung", async ({ page }) => {
+test("Kartenbibliotheken sind lokal und OSM-Kacheln laden automatisch beim Öffnen", async ({ page }) => {
   const requestedUrls = [];
   page.on("request", (request) => requestedUrls.push(request.url()));
   await loginAndRevealApplications(page);
 
   await page.locator("#tbody [data-open-application]").first().click();
-  await expect(page.locator("#loadExternalMap")).toBeVisible();
-  expect(requestedUrls.some((url) => /unpkg\.com|cdnjs\.cloudflare\.com/.test(url))).toBe(false);
-  expect(requestedUrls.some((url) => /tile\.openstreetmap\.org/.test(url))).toBe(false);
 
-  await page.route("https://*.tile.openstreetmap.org/**", (route) => route.abort());
-  await page.locator("#loadExternalMap").click();
+  // Kartenbibliotheken (Leaflet/proj4) werden lokal ausgeliefert, nicht von einem CDN.
+  expect(requestedUrls.some((url) => /unpkg\.com|cdnjs\.cloudflare\.com/.test(url))).toBe(false);
+
+  // OSM-Kacheln laden automatisch beim Öffnen eines Falls (kein manueller Klick nötig).
   await expect.poll(() => requestedUrls.some((url) => /tile\.openstreetmap\.org/.test(url))).toBe(true);
 });

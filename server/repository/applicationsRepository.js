@@ -519,8 +519,11 @@ export function createApplicationsRepository(db) {
       }
     },
 
-    // Nur ausdrücklich belegte Fristen dürfen einen automatischen Statuswechsel
-    // auslösen. Der vollständige Fall und alle Team-Daten bleiben erhalten.
+    // Fälle werden 31 Tage nach der Publikation automatisch archiviert. Die
+    // 14-Tage-Einsprachefrist ist dann längst abgelaufen; die zusätzliche
+    // Pufferzeit hält Fälle noch sichtbar, bevor sie aus der aktiven Liste
+    // verschwinden. Ein Publikationsdatum ist erforderlich. Der vollständige
+    // Fall und alle Team-Daten bleiben erhalten (nur Statuswechsel).
     archiveExpiredApplications({ referenceDate = new Date() } = {}) {
       const date = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
 
@@ -535,10 +538,9 @@ export function createApplicationsRepository(db) {
         SET workflow_status = 'archived',
             archived_at = ?,
             updated_at = ?
-        WHERE IFNULL(deadline_date, '') <> ''
-          AND deadline_provenance = 'explicit'
+        WHERE IFNULL(publication_date, '') <> ''
           AND workflow_status NOT IN ('cleared', 'archived')
-          AND date(deadline_date) < date(?)
+          AND date(publication_date, '+31 days') < date(?)
       `).run(archivedAt, archivedAt, referenceDateOnly);
       return result.changes ?? 0;
     },

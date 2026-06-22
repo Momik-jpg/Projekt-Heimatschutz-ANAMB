@@ -85,7 +85,7 @@ function readableAddress(item) {
 
 function dueMeta(item) {
   const workflow = item.workflowStatus;
-  const days = daysUntil(item.deadlineDate);
+  const days = daysUntil(objectionDeadline(item));
   if (workflow === "cleared" || workflow === "archived") return { cls: "due-ok", txt: "abgeschlossen", days };
   if (!Number.isFinite(days)) return { cls: "due-soon", txt: "Frist fehlt", days };
   if (days <= 0) return { cls: "due-over", txt: formatDueRelative(days), days };
@@ -97,7 +97,7 @@ function _isOverdue(item) {
   // Überfällig = offener Fall mit Frist in der Vergangenheit.
   // Abgeschlossene/archivierte Fälle gelten nicht als überfällig.
   if (item.workflowStatus === "cleared" || item.workflowStatus === "archived") return false;
-  const days = daysUntil(item.deadlineDate);
+  const days = daysUntil(objectionDeadline(item));
   return Number.isFinite(days) && days < 0;
 }
 
@@ -213,7 +213,7 @@ function renderTable() {
         <td><span class="unread-dot" aria-hidden="true"></span>${item.isRead ? "" : '<span class="sr-only">Ungelesen: </span>'}<span class="cell-mun">${escapeHtml(item.municipality || "-")}</span><span class="cell-mun-sub">${escapeHtml(item.region || item.source || "Baugesuch")}</span></td>
         <td><button class="application-open" type="button" data-open-application="${escapeHtml(item.id)}" aria-label="Fall ${escapeHtml(item.id)}, ${escapeHtml(item.municipality || "-")}, ${escapeHtml(itemTitle(item))} öffnen"><span class="cell-app-title">${escapeHtml(itemTitle(item))}</span><span class="cell-app-sub">${escapeHtml(readableAddress(item))}</span><span class="cell-app-meta">Publiziert ${escapeHtml(formatDate(item.publicationDate))} · ${escapeHtml(scaleLabel(item.projectScale))}</span></button></td>
         <td><span class="hit ${protection.cls}">${escapeHtml(protection.label)}</span></td>
-        <td><span class="cell-due">${escapeHtml(formatDate(item.deadlineDate))}</span><span class="cell-due-meta ${due.cls}">${escapeHtml(due.txt)}</span></td>
+        <td><span class="cell-due">${escapeHtml(formatDate(objectionDeadline(item)))}</span><span class="cell-due-meta ${due.cls}">${escapeHtml(due.txt)}</span></td>
         <td><span class="cell-status-wrap"><span class="wf ${workflow.cls}">${escapeHtml(workflow.label)}</span><span class="row-go"><svg class="row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span></td>
       </tr>`;
     })

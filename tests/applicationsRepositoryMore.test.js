@@ -16,6 +16,7 @@ function makeItem({
   address = "Hauptstrasse 15",
   projectType = "Neubau",
   protectionStatus = "no-hit",
+  publicationDate = "2026-01-01",
   deadlineDate,
   workflowStatus,
   ambiguousAddress
@@ -28,7 +29,7 @@ function makeItem({
       municipality,
       address,
       coordinates: "2660000,1240000",
-      publicationDate: "2026-01-01",
+      publicationDate,
       deadlineDate,
       projectType,
       protectionStatus,
@@ -95,18 +96,18 @@ test("pruneUntouchedMunicipalityImports: leere Quelle, Keep-Liste, Schutz berüh
   );
 });
 
-test("archiveExpiredApplications: ungültiges Datum, bestätigte Frist, ohne Frist bleibt", () => {
+test("archiveExpiredApplications: ungültiges Datum, alte Publikation archiviert, ohne Publikation bleibt", () => {
   const repo = setup();
   assert.equal(repo.archiveExpiredApplications({ referenceDate: "kein-datum" }), 0);
 
   repo.importItems([
-    { ...makeItem({ ref: "ALT", deadlineDate: "2026-03-01" }), deadlineProvenance: "explicit" },
-    { ...makeItem({ ref: "OHNE" }), deadlineProvenance: "missing" }
+    makeItem({ ref: "ALT", publicationDate: "2026-01-01" }),
+    makeItem({ ref: "OHNE-PUB", publicationDate: "" })
   ]);
   const archived = repo.archiveExpiredApplications({ referenceDate: new Date("2026-06-21") });
   assert.equal(archived, 1);
   assert.equal(repo.list().find((item) => item.sourceReference === "ALT").workflowStatus, "archived");
-  assert.equal(repo.list().find((item) => item.sourceReference === "OHNE").workflowStatus, "new");
+  assert.equal(repo.list().find((item) => item.sourceReference === "OHNE-PUB").workflowStatus, "new");
 });
 
 test("getDashboard: Kennzahlen, Quellen, dringende Fälle, ambiguousAddress", () => {
