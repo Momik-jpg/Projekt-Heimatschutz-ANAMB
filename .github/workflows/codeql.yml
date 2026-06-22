@@ -26,7 +26,7 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        uses: github/codeql-action/init@411bbbe57033eedfc1a82d68c01345aa96c737d7 # v4
         with:
           config-file: ./.github/codeql-config.yml
           languages: javascript-typescript
@@ -35,11 +35,11 @@ jobs:
 
       - name: Perform CodeQL Analysis
         id: codeql-analysis
-        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        uses: github/codeql-action/analyze@411bbbe57033eedfc1a82d68c01345aa96c737d7 # v4
         with:
           category: "/language:javascript-typescript"
           output: codeql-results
-          upload: never
+          upload: always
           upload-database: false
 
       - name: Store CodeQL SARIF
@@ -52,4 +52,6 @@ jobs:
           retention-days: 14
 
       - name: Enforce CodeQL findings
-        run: node scripts/check-codeql-sarif.js "${{ steps.codeql-analysis.outputs.sarif-output }}"
+        env:
+          CODEQL_SARIF_OUTPUT: ${{ steps.codeql-analysis.outputs.sarif-output }}
+        run: node scripts/check-codeql-sarif.js "$CODEQL_SARIF_OUTPUT"

@@ -6,6 +6,7 @@ import {
   getRequestHosts,
   isCompressibleContentType,
   isSecureRequest,
+  resolveTrustProxySetting,
   setStaticAssetHeaders
 } from "../server/httpSecurity.js";
 
@@ -45,7 +46,17 @@ test("getRequestHosts: host + x-forwarded-host", () => {
   assert.equal(getRequestHosts({ headers: {} }).size, 0);
 });
 
-test("createCsrfOriginGuard: GET durch, gleiche Herkunft durch, fremde/ungueltige blockiert", () => {
+test("resolveTrustProxySetting: konservative Defaults und explizite Proxy-Konfiguration", () => {
+  assert.equal(resolveTrustProxySetting(), false);
+  assert.equal(resolveTrustProxySetting(""), false);
+  assert.equal(resolveTrustProxySetting("false"), false);
+  assert.equal(resolveTrustProxySetting("0"), false);
+  assert.equal(resolveTrustProxySetting("true"), true);
+  assert.equal(resolveTrustProxySetting("1"), 1);
+  assert.equal(resolveTrustProxySetting("loopback"), "loopback");
+});
+
+test("createCsrfOriginGuard: GET durch, gleiche Herkunft durch, fehlende/fremde/ungueltige blockiert", () => {
   const guard = createCsrfOriginGuard({ enabled: true });
 
   let nexted = 0;
@@ -55,11 +66,14 @@ test("createCsrfOriginGuard: GET durch, gleiche Herkunft durch, fremde/ungueltig
 
   // GET -> immer durch
   guard({ method: "GET", headers: {} }, mockResponse(), next);
-  // POST ohne Origin/Referer -> durch (Server-zu-Server)
-  guard({ method: "POST", headers: {} }, mockResponse(), next);
   // POST gleiche Herkunft -> durch
   guard({ method: "POST", headers: { origin: "https://app.ch", host: "app.ch" } }, mockResponse(), next);
-  assert.equal(nexted, 3);
+  assert.equal(nexted, 2);
+
+  // POST ohne Origin/Referer -> 403
+  const missingSource = mockResponse();
+  guard({ method: "POST", headers: { host: "app.ch" } }, missingSource, next);
+  assert.equal(missingSource.statusCode, 403);
 
   // POST fremde Herkunft -> 403
   const foreign = mockResponse();

@@ -45,6 +45,7 @@ import {
   createCompressionMiddleware,
   createLoginRateLimiter,
   verifyTurnstileToken,
+  resolveTrustProxySetting,
   resolveCurrentUser,
   handleHealthCheck,
   buildImportNotificationEntries
@@ -382,7 +383,7 @@ export function createApp(options = {}) {
   const app = express();
 
   app.disable("x-powered-by");
-  app.set("trust proxy", 1);
+  app.set("trust proxy", resolveTrustProxySetting(options.trustProxy ?? process.env.TRUST_PROXY));
   app.use(rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 1200,
@@ -452,7 +453,7 @@ const routeContext = {
 
   registerAuthRoutes(app, routeContext);
 
-    app.use("/api", (request, response, next) => {
+  app.use("/api", (request, response, next) => {
     if (request.path === "/health" || request.path.startsWith("/auth/")) {
       next();
       return;
@@ -470,11 +471,11 @@ const routeContext = {
     next();
   });
 
-registerAdminRoutes(app, routeContext);
+  registerAdminRoutes(app, routeContext);
   registerApplicationRoutes(app, routeContext);
   registerSyncRoutes(app, routeContext);
 
-    app.use(express.static(publicDir, {
+  app.use(express.static(publicDir, {
     etag: true,
     lastModified: true,
     setHeaders: setStaticAssetHeaders
@@ -529,7 +530,7 @@ if (isDirectRun) {
   const effectiveSyncSourceUrl =
     configuredSyncSourceUrl || (defaultAmtsblattDisabled ? "" : defaultCantonSyncSourceUrl);
 
-  const { app, ready } = createApp({
+  const { app, db, ready, stopBackgroundJobs } = createApp({
     agisAssessmentEnabled: true,
     agisRefreshOnStart: process.env.AGIS_REFRESH_ON_START !== "false",
     syncSourceUrl: effectiveSyncSourceUrl
@@ -537,7 +538,33 @@ if (isDirectRun) {
 
   await ready;
 
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`Heimatschutz Aargau läuft auf Port ${port}.`);
   });
+
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    stopBackgroundJobs();
+    server.closeIdleConnections?.();
+    server.closeAllConnections?.();
+    server.close(() => {
+      db.close();
+      process.exit(0);
+    });
+    setTimeout(() => {
+      try {
+        db.close();
+      } catch {
+        // Bereits geschlossen.
+      }
+      process.exit(0);
+    }, 1000).unref();
+  };
+
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 }

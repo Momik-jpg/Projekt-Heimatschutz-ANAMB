@@ -40,7 +40,7 @@ jobs:
       - name: Run end-to-end tests
         run: npm run test:e2e
 
-      # Sicherheitsprüfung der Abhängigkeiten. Bricht den Build bei
-      # hohen/kritischen Schwachstellen ab; reine Audit-Infos blockieren nicht.
+      # Sicherheitsprüfung der Abhängigkeiten. Bricht den Build ab moderaten
+      # Schwachstellen ab; reine Audit-Infos blockieren nicht.
       - name: Security audit
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=moderate

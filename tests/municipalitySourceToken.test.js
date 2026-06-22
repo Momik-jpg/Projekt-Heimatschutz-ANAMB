@@ -66,7 +66,7 @@ test("GET /api/admin/municipality-sources schwaerzt den Token", async () => {
 
     const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Origin: baseUrl },
       body: JSON.stringify({ username: "master", password: MASTER_PW })
     });
     const cookie = loginRes.headers.get("set-cookie").split(";")[0];

@@ -77,10 +77,14 @@ export async function fetchWithTimeout(fetchImpl, resource, options = {}, timeou
     Number.isFinite(options.maxResponseBytes) && options.maxResponseBytes > 0
       ? options.maxResponseBytes
       : defaultMaxResponseBytes;
-  // SSRF nur fuer echte Netzwerk-Requests erzwingen; injizierte Mock-Fetches
-  // (Tests) verwenden fiktive Hosts und werden nicht per DNS geprueft.
-  const enforceSsrf = fetchImpl === globalThis.fetch;
-  const { maxResponseBytes: _ignored, signal: _ignoredSignal, headers: optionHeaders, ...restOptions } = options;
+  const {
+    maxResponseBytes: _ignored,
+    signal: _ignoredSignal,
+    headers: optionHeaders,
+    enforceSsrf: enforceSsrfOption,
+    ...restOptions
+  } = options;
+  const enforceSsrf = enforceSsrfOption !== false && fetchImpl?.skipSsrfValidation !== true;
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), normalizedTimeout);
 
@@ -307,4 +311,3 @@ export function resolveHttpUrlReference(value, baseUrl, { skipFragmentOnly = tru
     return null;
   }
 }
-
