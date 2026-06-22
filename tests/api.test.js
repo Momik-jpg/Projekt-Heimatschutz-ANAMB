@@ -1139,8 +1139,9 @@ test("master can list seeded municipality sources for all Aargau municipalities"
   assert.equal(jonenSource?.enabled, false);
   assert.equal(jonenSource?.sourceUrl, "https://www.jonen.ch");
   assert.equal(muriSource?.enabled, true);
-  assert.equal(rinikenSource?.enabled, false);
-  assert.match(rinikenSource?.notes ?? "", /einzelne publikation/i);
+  assert.equal(rinikenSource?.enabled, true);
+  assert.equal(rinikenSource?.sourceUrl, "https://www.riniken.ch/amtliche-publikationen/");
+  assert.match(rinikenSource?.notes ?? "", /Baugesuchseite/i);
   assert.equal(zuzgenSource?.sourceType, "html");
   assert.equal(zuzgenSource?.enabled, false);
   assert.match(zuzgenSource?.notes ?? "", /eBau-Seite/i);

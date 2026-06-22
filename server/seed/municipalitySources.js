@@ -350,7 +350,7 @@ const municipalitySourcePrefills = {
   "Reitnau": ["partial", "https://www.reitnau.ch", "", ""],
   "Remetschwil": ["digital", "https://www.remetschwil.ch", "https://www.remetschwil.ch/aktuelles/amtliche-publikationen/", "Amtliche Publikationen"],
   "Remigen": ["partial", "https://www.remigen.ch", "", "9.3.2026 Öffentliche Auflagen ... alle Informationen zu den Baugesuchen finden sie hier"],
-  "Riniken": ["digital", "https://www.riniken.ch", "https://www.riniken.ch/2026/03/13/baugesuch-oeffentliche-auflagen/", "Baugesuch, öffentliche Auflagen"],
+  "Riniken": ["digital", "https://www.riniken.ch", "https://www.riniken.ch/amtliche-publikationen/", "Baugesuch, öffentliche Auflagen"],
   "Rothrist": ["digital", "https://www.rothrist.ch/", "https://www.rothrist.ch/_rtr/baugesuche", "Publikation Baugesuche"],
   "Rottenschwil": ["digital", "https://rottenschwil.ch", "https://amtsblatt.ag.ch/publikationen/", "Amtsblatt Aargau Baugesuche"],
   "Rudolfstetten-Friedlisberg": ["digital", "http://www.rudolfstetten.ch", "http://www.rudolfstetten.ch/baugesuche", "Baugesuche"],
