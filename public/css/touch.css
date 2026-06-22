@@ -239,13 +239,20 @@ tr.unread .unread-dot {
   text-underline-offset: 2px;
 }
 
-body.dark .region-filters,
 body.dark .region-filter,
 body.dark .show-older,
 body.dark .project-scale {
   border-color: var(--panel-border);
   background: var(--panel-muted);
   color: var(--ink-800);
+}
+
+/* Der REGION-Container ist nur ein Layout-Wrapper und blendet sich in das
+   Panel ein. Ohne diese Regel bekäme er im Dark Mode --panel-muted und würde
+   als abgesetztes, helleres Band ("Cap") über den Filtern erscheinen. Im
+   Light Mode ist sein Hintergrund ebenfalls die Panelfarbe (#fff). */
+body.dark .region-filters {
+  background: var(--panel);
 }
 
 body.dark .region-filter.active,
