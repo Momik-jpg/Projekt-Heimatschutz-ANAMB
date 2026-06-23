@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createDatabase } from "../server/db.js";
 import { createApplicationsRepository } from "../server/repository/applicationsRepository.js";
+import { importQueue } from "../server/seed/applications.js";
 import { createNormalizedApplication } from "../server/services/applicationsSyncCandidate.js";
 
 function setup() {
@@ -169,4 +170,21 @@ test("simulateSync: importiert nächsten Fall aus der Warteschlange", () => {
   assert.equal(result.importedCount, 1);
   assert.ok(result.item);
   assert.ok(result.remainingQueue >= 0);
+});
+
+test("simulateSync: meldet leeren Lauf, wenn die Warteschlange vollständig importiert ist", () => {
+  const repo = setup();
+  repo.importItems(importQueue);
+
+  const result = repo.simulateSync();
+
+  assert.deepEqual(result, {
+    imported: false,
+    importedCount: 0,
+    updatedCount: 0,
+    item: null,
+    items: [],
+    changes: [],
+    remainingQueue: 0
+  });
 });

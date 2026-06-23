@@ -109,3 +109,12 @@ test("operative Quelle der Fallback-Gemeinden zeigt aufs Amtsblatt und ist aktiv
   }
   assert.deepEqual(abweichend, [], "Operative Quelle dieser Fallback-Gemeinden ist nicht das aktivierte Amtsblatt");
 });
+
+test("Besenbüren nutzt keine geschützte Gemeinde-Primärquelle mehr", () => {
+  assert.ok(amtsblattFallbackMunicipalities.has("Besenbüren"));
+  assert.equal(primarySourceNameFor("Besenbüren"), "Amtsblatt Aargau");
+
+  const source = new Map(aargauMunicipalitySources.map((entry) => [entry.municipality, entry])).get("Besenbüren");
+  assert.equal(source?.sourceUrl, "https://amtsblatt.ag.ch/publikationen/");
+  assert.doesNotMatch(source?.sourceUrl ?? "", /besenbueren\.ch/i);
+});
