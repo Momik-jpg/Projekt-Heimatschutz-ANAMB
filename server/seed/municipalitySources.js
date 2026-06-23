@@ -411,6 +411,38 @@ const municipalitySourcePrefills = {
   "Zuzgen": ["digital", "https://www.zuzgen.ch", "https://ebauportal.ag.ch/", "eBau Aargau"],
 };
 
+// 2026-06-23: Live-Prüfung ALLER A-/B-/C-Gemeinden (Abruf der echten Gemeinde-
+// Websites + Auto-Discovery mit der Sync-Pipeline) ergab für die folgenden
+// Gemeinden keine automatisch nutzbare eigene Baugesuchseite (HTTP-Fehler, nur
+// Homepage, leere/themenfremde Seite oder erfolglose Discovery). Das Amtsblatt
+// Aargau ist die massgebliche kantonale Quelle; ein Scan der Rubrik "Bau- und
+// Rodungsgesuche" fand einen Grossteil dieser Gemeinden aktuell aktiv, für die
+// übrigen bleibt es der belegte Fallback. Darum wird ihre Gemeindequelle
+// deterministisch auf das Amtsblatt gesetzt; die offizielle Gemeindewebsite
+// bleibt als officialWebsite erhalten, das eBau-Portal als Zusatzquelle.
+const amtsblattFallbackMunicipalities = new Set([
+  "Aristau", "Auw", "Beinwil am See", "Besenbüren", "Biberstein", "Birr",
+  "Birrhard", "Birrwil", "Boswil", "Bottenwil", "Densbüren", "Dietwil",
+  "Dürrenäsch", "Eggenwil", "Egliswil", "Erlinsbach", "Fisibach", "Freienwil",
+  "Gansingen", "Geltwil", "Gontenschwil", "Hirschthal", "Hunzenschwil",
+  "Kirchleerau", "Künten", "Leimbach", "Lengnau", "Leuggern", "Leutwil",
+  "Lupfig", "Mandach", "Mellikon", "Mönthal", "Mühlau", "Mülligen", "Mumpf",
+  "Oberhof", "Oberlunkhofen", "Oberrüti", "Obersiggenthal", "Reinach",
+  "Schneisingen", "Schupfart", "Sins", "Sisseln", "Staufen", "Stein", "Tägerig",
+  "Tegerfelden", "Teufenthal", "Thalheim", "Waltenschwil", "Widen", "Wittnau",
+  "Wölflinswil", "Zeihen", "Zetzwil", "Zuzgen"
+]);
+
+for (const municipality of amtsblattFallbackMunicipalities) {
+  const previousWebsite = municipalitySourcePrefills[municipality]?.[1] ?? "";
+  municipalitySourcePrefills[municipality] = [
+    "digital",
+    previousWebsite,
+    "https://amtsblatt.ag.ch/publikationen/",
+    "Amtsblatt Aargau Baugesuche"
+  ];
+}
+
 const htmlBuildingIncludePattern = "baugesuch|baugesuche|baubewilligung|baupublikation|auflage|einsprachfrist";
 const htmlPublicationExcludePattern =
   "einbürger|einbürger|gemeindeversammlung|abstimmung|wahlen|submission|diverses|bestattung|fahrplan|verkehrsverbund|zvv|stadtbibliothek|wohnraumstrategie|foerderprogramm|förderprogramm|altlasten|zertifizierung|veranstaltung|agenda|newsletter|archiv|asyl|reglement|downloads|formulare|mitarbeiter|nebenamtlich";

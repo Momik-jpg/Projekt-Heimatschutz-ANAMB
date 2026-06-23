@@ -1143,9 +1143,11 @@ test("master can list seeded municipality sources for all Aargau municipalities"
   assert.equal(aarauSource?.enabled, true);
   assert.ok(merenschwandSource?.sourceUrl.includes("/aktuelles/"));
   assert.equal(merenschwandSource?.enabled, true);
-  assert.equal(auwSource?.sourceUrl, "https://www.auw.ch/gemeinde/aktuelles.html/402");
+  // Auws eigene "Aktuelles"-Seite lieferte im Live-Check keine Baugesuche;
+  // Gemeindequelle wurde aufs Amtsblatt gesetzt (siehe amtsblattFallbackMunicipalities).
+  assert.equal(auwSource?.sourceUrl, "https://amtsblatt.ag.ch/publikationen/");
   assert.equal(auwSource?.enabled, true);
-  assert.match(auwSource?.notes ?? "", /Baugesuchseite/i);
+  assert.match(auwSource?.notes ?? "", /Amtsblatt/i);
   assert.equal(jonenSource?.enabled, true);
   assert.equal(jonenSource?.sourceUrl, "https://www.jonen.ch");
   assert.equal(muriSource?.enabled, true);
@@ -1153,9 +1155,11 @@ test("master can list seeded municipality sources for all Aargau municipalities"
   assert.equal(rinikenSource?.sourceUrl, "https://www.riniken.ch/amtliche-publikationen/");
   assert.match(rinikenSource?.notes ?? "", /Baugesuchseite/i);
   assert.equal(zuzgenSource?.sourceType, "html");
-  assert.equal(zuzgenSource?.sourceUrl, "https://www.zuzgen.ch");
+  // Zuzgens Gemeindequelle wurde aufs Amtsblatt gesetzt (eigene Quelle ist nur
+  // das login-geschuetzte eBau-Portal); siehe amtsblattFallbackMunicipalities.
+  assert.equal(zuzgenSource?.sourceUrl, "https://amtsblatt.ag.ch/publikationen/");
   assert.equal(zuzgenSource?.enabled, true);
-  assert.match(zuzgenSource?.notes ?? "", /eBau-Seite/i);
+  assert.match(zuzgenSource?.notes ?? "", /Amtsblatt/i);
   assert.equal(response.payload.summary.totalCount, response.payload.items.length);
 });
 
@@ -1262,7 +1266,12 @@ test("municipality source catalog exposes coverage report, ratings and shared so
   assert.equal(moerikenCatalogItem.rating, "A");
   assert.equal(moerikenCatalogItem.primarySourceName, "Möriken-Wildegg: direkte Baugesuchseite");
   assert.ok(zuzgenCatalogItem);
-  assert.equal(zuzgenCatalogItem.primarySourceName, "Zuzgen: offizielle Gemeindewebsite");
+  // Zuzgens eigene Quelle ist nur das login-geschuetzte eBau-Portal; die
+  // Gemeindequelle wurde deshalb aufs Amtsblatt gesetzt (siehe
+  // amtsblattFallbackMunicipalities in municipalitySources.js). Das eBau-Portal
+  // bleibt als Zusatzquelle erhalten.
+  assert.equal(zuzgenCatalogItem.primarySourceName, "Amtsblatt Aargau");
+  assert.equal(zuzgenCatalogItem.primaryDirectUrl, "https://amtsblatt.ag.ch/publikationen/");
   assert.ok(zuzgenCatalogItem.supplementalSources.some((source) => source.name === "eBau Aargau"));
 });
 
@@ -1377,7 +1386,9 @@ test("auto-managed municipality sources are refreshed to safer official defaults
     `)
     .get();
 
-  assert.equal(auwSource.source_url, "https://www.auw.ch/gemeinde/aktuelles.html/402");
+  // Auw ist auto-managed und wird auf den neuen Seed-Default refresht: die
+  // Gemeindequelle wurde aufs Amtsblatt gesetzt (amtsblattFallbackMunicipalities).
+  assert.equal(auwSource.source_url, "https://amtsblatt.ag.ch/publikationen/");
   assert.equal(auwSource.enabled, 1);
   assert.match(auwSource.notes, /Baugesuchseite/i);
 
