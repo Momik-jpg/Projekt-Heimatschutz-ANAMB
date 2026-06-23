@@ -432,7 +432,7 @@ function wireEvents() {
           title: "Konto sperren?",
           eyebrow: "Zugangsverwaltung",
           facts: [
-            { label: "Person", value: entry?.displayName || "Unbekannt" },
+            { label: "Person", value: entry?.displayName || "Ohne Namen" },
             { label: "Benutzername", value: entry?.username || "-" },
             { label: "Rolle", value: entry?.role || "-" }
           ],
@@ -464,7 +464,7 @@ function wireEvents() {
           title: "Konto löschen?",
           eyebrow: "Zugangsverwaltung",
           facts: [
-            { label: "Person", value: entry?.displayName || "Unbekannt" },
+            { label: "Person", value: entry?.displayName || "Ohne Namen" },
             { label: "Benutzername", value: entry?.username || "-" },
             { label: "Rolle", value: entry?.role || "-" }
           ],

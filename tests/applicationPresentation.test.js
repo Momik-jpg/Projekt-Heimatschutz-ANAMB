@@ -11,7 +11,7 @@ test("ordnet repräsentative Gemeinden den vier Regionen zu", () => {
   assert.equal(getApplicationRegion("Rheinfelden"), "Fricktal");
   assert.equal(getApplicationRegion("Wettingen"), "Baden");
   assert.equal(getApplicationRegion("Muri"), "Freiamt");
-  assert.equal(getApplicationRegion("Unbekannt"), "");
+  assert.equal(getApplicationRegion("Nicht erfasst"), "");
 });
 
 test("ordnet jede bekannte Aargauer Gemeinde einer Region zu", () => {
@@ -24,5 +24,5 @@ test("klassifiziert grosse vor mittleren und kleinen Vorhaben", () => {
   assert.equal(classifyProjectScale({ projectType: "Umbau MFH Pestalozzistrasse" }), "gross");
   assert.equal(classifyProjectScale({ projectType: "Anbau Einfamilienhaus" }), "mittel");
   assert.equal(classifyProjectScale({ projectType: "Neue Wärmepumpe" }), "klein");
-  assert.equal(classifyProjectScale({ projectType: "Baugesuch" }), "unbekannt");
+  assert.equal(classifyProjectScale({ projectType: "Baugesuch" }), "nicht-klassiert");
 });

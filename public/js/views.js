@@ -156,6 +156,15 @@ function publicationAgeDays(item, referenceDate = new Date()) {
 }
 
 function isActiveApplication(item, referenceDate = new Date()) {
+  const inactiveReconciliationStatuses = new Set([
+    "missing-publication",
+    "conflict-review",
+    "ambiguous-review",
+    "import-review",
+    "unclear",
+    "ambiguous"
+  ]);
+  if (inactiveReconciliationStatuses.has(String(item.reconciliationStatus ?? ""))) return false;
   if (item.workflowStatus === "archived" || item.archivedAt) return false;
   if (!objectionDeadline(item)) return false;
   return publicationAgeDays(item, referenceDate) <= 31;
@@ -209,19 +218,26 @@ function renderTable() {
 
   const recentRows = rows.filter((item) => publicationAgeDays(item) <= 14);
   const olderRows = rows.filter((item) => publicationAgeDays(item) > 14);
-  const scaleLabel = (scale) => ({ klein: "Klein", mittel: "Mittel", gross: "Gross", unbekannt: "Unbekannt" })[scale] || "Unbekannt";
+  const scaleLabel = (scale) => {
+    if (scale === "klein") return "Klein";
+    if (scale === "mittel") return "Mittel";
+    if (scale === "gross") return "Gross";
+    return "Nicht klassiert";
+  };
   const renderRows = (items) => items
     .map((item) => {
       const protection = protectionMeta(item);
       const workflow = workflowMeta(item);
       const due = dueMeta(item);
+      const reconciliation = reconciliationMeta(item);
+      const sourceContext = [item.region || item.source || "Baugesuch", reconciliation.short].filter(Boolean).join(" · ");
       const classes = [
         item.id === state.selectedId ? "selected" : "",
         item.isRead ? "" : "unread",
         due.cls === "due-over" ? "urg-over" : due.cls === "due-soon" ? "urg-soon" : ""
       ].filter(Boolean).join(" ");
       return `<tr data-id="${escapeHtml(item.id)}" class="${classes}">
-        <td><span class="unread-dot" aria-hidden="true"></span>${item.isRead ? "" : '<span class="sr-only">Ungelesen: </span>'}<span class="cell-mun">${escapeHtml(item.municipality || "-")}</span><span class="cell-mun-sub">${escapeHtml(item.region || item.source || "Baugesuch")}</span></td>
+        <td><span class="unread-dot" aria-hidden="true"></span>${item.isRead ? "" : '<span class="sr-only">Ungelesen: </span>'}<span class="cell-mun">${escapeHtml(item.municipality || "-")}</span><span class="cell-mun-sub">${escapeHtml(sourceContext)}</span></td>
         <td><button class="application-open" type="button" data-open-application="${escapeHtml(item.id)}" aria-label="Fall ${escapeHtml(item.id)}, ${escapeHtml(item.municipality || "-")}, ${escapeHtml(itemTitle(item))} öffnen"><span class="cell-app-title">${escapeHtml(itemTitle(item))}</span><span class="cell-app-sub">${escapeHtml(readableAddress(item))}</span><span class="cell-app-meta">Publiziert ${escapeHtml(formatDate(item.publicationDate))} · ${escapeHtml(scaleLabel(item.projectScale))}</span></button></td>
         <td><span class="hit ${protection.cls}">${escapeHtml(protection.label)}</span></td>
         <td><span class="cell-due">${escapeHtml(formatDate(objectionDeadline(item)))}</span><span class="cell-due-meta ${due.cls}">${escapeHtml(due.txt)}</span></td>
@@ -286,7 +302,7 @@ function dataQualityChecks(item) {
   const addressOk = !item.ambiguousAddress && !addressIsWeak && ["official-field", "geocoder"].includes(addressProvenance);
   const locationOk = hasCoordinates && item.locationPrecision === "precise";
   const deadlineOk = Boolean(item.deadlineDate) && item.deadlineProvenance === "explicit";
-  const sourceUrl = normalizeText(item.sourceUrl);
+  const sourceUrl = normalizeText(item.municipalitySourceUrl || item.sourceUrl);
   const sourceOk = /^https?:\/\/[^\s]+$/i.test(sourceUrl) && Boolean(normalizeText(item.sourceReference));
 
   return [
@@ -306,7 +322,7 @@ function dataQualityChecks(item) {
       detail: deadlineOk ? formatDate(item.deadlineDate) : item.deadlineDate ? "unbestätigt" : "fehlt"
     },
     {
-      label: "Originalquelle",
+      label: "Gemeindequelle",
       ok: sourceOk,
       detail: sourceOk ? "verlinkt" : "nicht belastbar verlinkt"
     }
@@ -341,7 +357,7 @@ function renderAiMeta(item) {
   const missingFacts = checks.filter((check) => !check.ok).map((check) => `${check.label}: ${check.detail}`).join("; ");
   const summary = needsReview
     ? `Nicht vollständig belegt. ${missingFacts || "Fachliche Zuordnung manuell prüfen."}${assessment ? ` Hinweis: ${assessment}` : ""}`
-    : "Frist, Adresse, Standort und Originalquelle sind nachvollziehbar belegt.";
+    : "Frist, Adresse, Standort und Gemeindequelle sind nachvollziehbar belegt.";
 
   el.aiMeta.classList.remove("hidden");
   el.aiMeta.classList.toggle("warn", needsReview);

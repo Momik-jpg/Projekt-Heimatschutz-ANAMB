@@ -243,6 +243,82 @@ th.sort-desc .sort-ind { opacity: 1; color: var(--brand-700); transform: rotate(
 /* =====================================================================
    Aktivitäts-Timeline (Detail)
    ===================================================================== */
+.source-evidence-card {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-md);
+  background: #fff;
+  padding: 15px 16px;
+}
+.source-evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.source-evidence-head .ttl {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  color: var(--ink-500);
+}
+.source-evidence-list {
+  display: grid;
+  gap: 10px;
+}
+.source-evidence-row {
+  display: grid;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface-quiet);
+}
+.source-evidence-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.source-evidence-main strong {
+  font-size: 0.86rem;
+  color: var(--ink-900);
+}
+.source-evidence-main span {
+  min-width: 0;
+  color: var(--ink-500);
+  font-size: 0.74rem;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.source-evidence-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+.source-evidence-facts dt {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--ink-400);
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+.source-evidence-facts dd {
+  margin: 2px 0 0;
+  color: var(--ink-800);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+.source-evidence-link {
+  justify-self: start;
+  color: var(--brand-700);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.source-evidence-link:hover { text-decoration: underline; }
 .timeline-card { border: 1px solid var(--panel-border); border-radius: var(--r-md); background: #fff; padding: 15px 16px; }
 .timeline-card .ttl { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0; color: var(--ink-500); margin-bottom: 12px; }
 .tl { display: flex; flex-direction: column; gap: 0; }
@@ -274,7 +350,7 @@ th.sort-desc .sort-ind { opacity: 1; color: var(--brand-700); transform: rotate(
 
 .progress { margin-top: 9px; height: 7px; border-radius: 999px; background: var(--stone-200); overflow: hidden; }
 .progress > span { display: block; width: 0; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--brand-600), var(--brand-500)); }
-.progress.progress-93 > span { width: 93%; }
+.progress.progress-100 > span { width: 100%; }
 
 /* =====================================================================
    Leere Zustände
@@ -294,7 +370,9 @@ th.sort-desc .sort-ind { opacity: 1; color: var(--brand-700); transform: rotate(
 }
 
 body.dark .sk { background: linear-gradient(90deg, var(--panel-muted) 25%, var(--stone-200) 37%, var(--panel-muted) 63%); background-size: 400% 100%; }
+body.dark .source-evidence-card,
 body.dark .timeline-card { background: var(--panel-muted); }
+body.dark .source-evidence-row { background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.1); }
 
 /* =====================================================================
    Primärnavigation (Arbeitsliste / Verwaltung)

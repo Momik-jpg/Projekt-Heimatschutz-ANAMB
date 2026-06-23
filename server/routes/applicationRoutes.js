@@ -4,6 +4,104 @@
 import { randomBytes } from "node:crypto";
 import { nowIso, validateApplicationPatch, validateCommentPayload } from "../httpSupport.js";
 import { protectionStatuses, workflowStatuses } from "../repository/applicationsRepository.js";
+import { SOURCE_KIND_MUNICIPALITY, sourceKindOf } from "../domain/sourceReconciliation.js";
+
+function isHttpUrl(value) {
+  return /^https?:\/\/[^\s]+$/i.test(String(value ?? "").trim());
+}
+
+function isPdfUrl(value) {
+  return /\.pdf(?:$|[?#])/i.test(String(value ?? "").trim());
+}
+
+function sourceContainerUrl(value) {
+  const url = String(value ?? "").trim();
+  if (!isHttpUrl(url) || !isPdfUrl(url)) return url;
+
+  try {
+    const parsed = new URL(url);
+    parsed.search = "";
+    parsed.hash = "";
+    const pathParts = parsed.pathname.split("/");
+    pathParts.pop();
+    parsed.pathname = pathParts.join("/") || "/";
+    if (!parsed.pathname.endsWith("/")) parsed.pathname += "/";
+    return parsed.toString();
+  } catch {
+    return url.replace(/\/[^/?#]+\.pdf(?:[?#].*)?$/i, "/");
+  }
+}
+
+function preferredSourcePageUrl(...values) {
+  for (const value of values) {
+    const sourcePageUrl = sourceContainerUrl(value);
+    if (isHttpUrl(sourcePageUrl)) return sourcePageUrl;
+  }
+
+  return "";
+}
+
+function sourceLinkLabel(_url, sourceName = "") {
+  if (/amtsblatt/i.test(sourceName)) return "Amtsblatt öffnen";
+  return "Gemeindequelle öffnen";
+}
+
+function sourceLinkPayload(url, sourceName, fallbackName = "Gemeindequelle") {
+  const sourcePageUrl = sourceContainerUrl(url);
+  if (!isHttpUrl(sourcePageUrl)) return null;
+
+  return {
+    municipalitySourceUrl: sourcePageUrl,
+    municipalitySourceName: sourceName || fallbackName,
+    municipalitySourceLabel: sourceLinkLabel(sourcePageUrl, sourceName)
+  };
+}
+
+function buildMunicipalitySourceLink(item, municipalitySourcesRepository) {
+  const catalogItem = municipalitySourcesRepository.getCatalogItemByMunicipality(item.municipality);
+  const catalogUrl = preferredSourcePageUrl(
+    catalogItem?.primaryDirectUrl,
+    catalogItem?.primarySourceCanonicalUrl,
+    catalogItem?.officialWebsite
+  );
+
+  const municipalityEvidence = (item.sourceEvidence ?? []).find(
+    (entry) => entry.sourceKind === SOURCE_KIND_MUNICIPALITY && isHttpUrl(entry.sourceUrl)
+  );
+
+  if (municipalityEvidence) {
+    const payload = sourceLinkPayload(
+      municipalityEvidence.sourceUrl,
+      municipalityEvidence.sourceName,
+      "Gemeindequelle"
+    );
+    if (payload) return payload;
+  }
+
+  if (sourceKindOf(item.source) === SOURCE_KIND_MUNICIPALITY && isHttpUrl(item.sourceUrl)) {
+    const payload = sourceLinkPayload(item.sourceUrl, item.source, "Gemeindequelle");
+    if (payload) return payload;
+  }
+
+  if (catalogUrl) {
+    return {
+      municipalitySourceUrl: catalogUrl,
+      municipalitySourceName: catalogItem.primarySourceName || `${item.municipality} Gemeindequelle`,
+      municipalitySourceLabel: sourceLinkLabel(catalogUrl, catalogItem.primarySourceName)
+    };
+  }
+
+  if (isHttpUrl(item.sourceUrl)) {
+    const payload = sourceLinkPayload(item.sourceUrl, item.source, "Originalquelle");
+    if (payload) return payload;
+  }
+
+  return {
+    municipalitySourceUrl: "",
+    municipalitySourceName: "",
+    municipalitySourceLabel: "Gemeindequelle öffnen"
+  };
+}
 
 export function registerApplicationRoutes(app, context) {
   const {
@@ -59,6 +157,7 @@ export function registerApplicationRoutes(app, context) {
 
     response.json({
       ...item,
+      ...buildMunicipalitySourceLink(item, municipalitySourcesRepository),
       ...applicationReadsRepository.get(item.id, request.currentUser.id)
     });
   });

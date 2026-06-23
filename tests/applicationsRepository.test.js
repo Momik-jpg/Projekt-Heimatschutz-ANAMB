@@ -47,6 +47,7 @@ test("getById / update / updateAssessment", () => {
 
   assert.equal(repo.getById(created.id).sourceReference, "REF-1");
   assert.equal(repo.update("nicht-da", {}), null);
+  assert.equal(repo.updateAssessment("nicht-da", {}), null);
 
   const updated = repo.update(created.id, { workflowStatus: "cleared", note: "  geprüft  " });
   assert.equal(updated.workflowStatus, "cleared");

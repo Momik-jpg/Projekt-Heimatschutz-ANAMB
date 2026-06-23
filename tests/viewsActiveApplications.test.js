@@ -44,6 +44,24 @@ test("aktive Arbeitsliste blendet archivierte, alte und Fälle ohne berechenbare
   assert.deepEqual([...visibleIds], ["AKTUELL", "FRIST-BERECHENBAR", "GRENZE"]);
 });
 
+test("aktive Arbeitsliste blendet fehlende, konflikthafte und prüfpflichtige Quellabgleiche aus", () => {
+  const { context } = createContext([
+    { id: "AMTSBLATT", publicationDate: "2026-06-10", workflowStatus: "new", reconciliationStatus: "amtsblatt-confirmed" },
+    { id: "GEMEINDE", publicationDate: "2026-06-10", workflowStatus: "new", reconciliationStatus: "municipality-only" },
+    { id: "OHNE-PUB", publicationDate: "2026-06-10", workflowStatus: "new", reconciliationStatus: "missing-publication" },
+    { id: "KONFLIKT", publicationDate: "2026-06-10", workflowStatus: "new", reconciliationStatus: "conflict-review" },
+    { id: "MEHRDEUTIG", publicationDate: "2026-06-10", workflowStatus: "new", reconciliationStatus: "ambiguous-review" },
+    { id: "IMPORT", publicationDate: "2026-06-10", workflowStatus: "new", reconciliationStatus: "import-review" },
+    { id: "UNKLAR", publicationDate: "2026-06-10", workflowStatus: "new", reconciliationStatus: "ambiguous" }
+  ]);
+
+  const visibleIds = vm.runInContext(
+    "visibleItems(new Date(2026, 5, 22)).map((item) => item.id).sort()",
+    context
+  );
+  assert.deepEqual([...visibleIds], ["AMTSBLATT", "GEMEINDE"]);
+});
+
 test("Arbeitslisten-Zähler berücksichtigen nur aktive Fälle", () => {
   const { context, countNodes } = createContext([
     { id: "AKTUELL", publicationDate: "2026-06-10", workflowStatus: "new", protectionStatus: "combined-hit" },

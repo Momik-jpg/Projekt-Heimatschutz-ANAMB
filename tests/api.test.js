@@ -1114,11 +1114,21 @@ test("master can list seeded municipality sources for all Aargau municipalities"
   });
 
   assert.equal(response.status, 200);
-  assert.ok(response.payload.items.length >= 190);
+  assert.equal(response.payload.items.length, 196);
   assert.ok(response.payload.items.some((item) => item.municipality === "Aarau"));
   assert.ok(response.payload.items.some((item) => item.municipality === "Baden"));
-  assert.ok(response.payload.summary.configuredCount >= 190);
-  assert.ok(response.payload.summary.enabledCount >= 85);
+  assert.equal(response.payload.summary.configuredCount, 196);
+  assert.ok(response.payload.summary.enabledCount >= 195);
+
+  const inactiveOrIncompleteSources = response.payload.items.filter(
+    (item) => !item.enabled || !item.sourceUrl || item.sourceType === "manual"
+  );
+  assert.ok(
+    inactiveOrIncompleteSources.length <= 1,
+    `höchstens eine Gemeindequelle darf fehlen oder deaktiviert sein: ${inactiveOrIncompleteSources
+      .map((item) => item.municipality)
+      .join(", ")}`
+  );
 
   const aarauSource = response.payload.items.find((item) => item.municipality === "Aarau");
   const merenschwandSource = response.payload.items.find((item) => item.municipality === "Merenschwand");
@@ -1136,14 +1146,15 @@ test("master can list seeded municipality sources for all Aargau municipalities"
   assert.equal(auwSource?.sourceUrl, "https://www.auw.ch/gemeinde/aktuelles.html/402");
   assert.equal(auwSource?.enabled, true);
   assert.match(auwSource?.notes ?? "", /Baugesuchseite/i);
-  assert.equal(jonenSource?.enabled, false);
+  assert.equal(jonenSource?.enabled, true);
   assert.equal(jonenSource?.sourceUrl, "https://www.jonen.ch");
   assert.equal(muriSource?.enabled, true);
   assert.equal(rinikenSource?.enabled, true);
   assert.equal(rinikenSource?.sourceUrl, "https://www.riniken.ch/amtliche-publikationen/");
   assert.match(rinikenSource?.notes ?? "", /Baugesuchseite/i);
   assert.equal(zuzgenSource?.sourceType, "html");
-  assert.equal(zuzgenSource?.enabled, false);
+  assert.equal(zuzgenSource?.sourceUrl, "https://www.zuzgen.ch");
+  assert.equal(zuzgenSource?.enabled, true);
   assert.match(zuzgenSource?.notes ?? "", /eBau-Seite/i);
   assert.equal(response.payload.summary.totalCount, response.payload.items.length);
 });
@@ -1251,7 +1262,8 @@ test("municipality source catalog exposes coverage report, ratings and shared so
   assert.equal(moerikenCatalogItem.rating, "A");
   assert.equal(moerikenCatalogItem.primarySourceName, "Möriken-Wildegg: direkte Baugesuchseite");
   assert.ok(zuzgenCatalogItem);
-  assert.equal(zuzgenCatalogItem.primarySourceName, "eBau Aargau");
+  assert.equal(zuzgenCatalogItem.primarySourceName, "Zuzgen: offizielle Gemeindewebsite");
+  assert.ok(zuzgenCatalogItem.supplementalSources.some((source) => source.name === "eBau Aargau"));
 });
 
 test("municipality source exports are available as json and csv", async (context) => {
@@ -4319,6 +4331,29 @@ test("municipality import supports direct official pdf sources", async (context)
   assert.equal(syncResponse.payload.items[0].address, "Bahnhofstrasse 12");
   assert.equal(syncResponse.payload.items[0].projectType, "Neubau Velohaus");
   assert.equal(syncResponse.payload.items[0].source, "Gemeinde-PDF");
+
+  const detailResponse = await requestJson(
+    testServer.baseUrl,
+    `/api/applications/${syncResponse.payload.items[0].id}`,
+    {
+      headers: {
+        Cookie: masterCookie
+      }
+    }
+  );
+  assert.equal(detailResponse.status, 200);
+  assert.equal(
+    detailResponse.payload.sourceUrl,
+    "https://pdf-source.example.org/baugesuche/BG-2026-091.pdf"
+  );
+  assert.equal(detailResponse.payload.municipalitySourceUrl, "https://pdf-source.example.org/baugesuche/");
+  assert.doesNotMatch(detailResponse.payload.municipalitySourceUrl, /\.pdf(?:$|[?#])/i);
+  assert.equal(detailResponse.payload.municipalitySourceLabel, "Gemeindequelle öffnen");
+  assert.ok(
+    detailResponse.payload.sourceEvidence.some(
+      (entry) => entry.sourceUrl === "https://pdf-source.example.org/baugesuche/BG-2026-091.pdf"
+    )
+  );
 });
 
 test("municipality import auto-detects direct pdf urls even if a source is configured as html", async (context) => {
@@ -5892,6 +5927,17 @@ test("Amtsblatt source scrapes canton-wide Baugesuche and tags the correct munic
   assert.equal(item.projectType, "Umnutzung Keller");
   assert.equal(item.publicationDate, "2026-05-29");
   assert.ok(requestedUrls.some((entry) => entry.includes("resultAjax")));
+
+  const detailResponse = await requestJson(testServer.baseUrl, `/api/applications/${item.id}`, {
+    headers: { Cookie: masterCookie }
+  });
+  assert.equal(detailResponse.status, 200);
+  assert.equal(detailResponse.payload.sourceUrl, "https://amtsblatt.ag.ch/ekab/00.096.761/publikation/");
+  assert.equal(
+    detailResponse.payload.municipalitySourceUrl,
+    "https://www.baden.ch/de/home/leben-wohnen/wohnen-und-bauen/baubewilligung.html/570"
+  );
+  assert.equal(detailResponse.payload.municipalitySourceLabel, "Gemeindequelle öffnen");
 });
 
 test("Amtsblatt uses the build-site address, not the applicant's residence", async (context) => {
@@ -6732,7 +6778,7 @@ test("dashboard calculates due-soon cases from the current date", async (context
 
   repository.importItems([
     {
-      source: "Test",
+      source: "Gemeinde-Webseite",
       sourceReference: "DUE-SOON-CURRENT-01",
       sourceUrl: "https://example.org/due-soon",
       municipality: "Aarau",
@@ -6747,7 +6793,7 @@ test("dashboard calculates due-soon cases from the current date", async (context
       workflowStatus: "new"
     },
     {
-      source: "Test",
+      source: "Gemeinde-Webseite",
       sourceReference: "DUE-SOON-CURRENT-02",
       sourceUrl: "https://example.org/later",
       municipality: "Aarau",
@@ -6762,7 +6808,7 @@ test("dashboard calculates due-soon cases from the current date", async (context
       workflowStatus: "new"
     },
     {
-      source: "Test",
+      source: "Gemeinde-Webseite",
       sourceReference: "DUE-SOON-CURRENT-03",
       sourceUrl: "https://example.org/cleared",
       municipality: "Aarau",
@@ -6777,7 +6823,7 @@ test("dashboard calculates due-soon cases from the current date", async (context
       workflowStatus: "cleared"
     },
     {
-      source: "Test",
+      source: "Gemeinde-Webseite",
       sourceReference: "DUE-SOON-CURRENT-04",
       sourceUrl: "https://example.org/overdue",
       municipality: "Aarau",
@@ -6992,7 +7038,7 @@ test("confirmed decisions train future Baugesuch recognition", async (context) =
           municipality: "Baden",
           address: "Mellingerstrasse 7",
           parcel: "1189",
-          publicationDate: dateOnlyDaysFromNow(-1),
+          publicationDate: dateOnlyDaysFromNow(-5),
           deadlineDate: dateOnlyDaysFromNow(14),
           projectType: "Fenstersanierung",
           description: "Ersatz der Fensterfront mit neuen Holz-Metall-Fenstern.",
@@ -7469,6 +7515,123 @@ test("sync prune keeps untouched municipality imports that carry team comments",
   assert.equal(commented, 1, "Fall mit Team-Kommentar darf vom Sync nicht entfernt werden");
   assert.equal(plain, 0, "Unberührter Fall ohne Kommentar wird wie bisher entfernt");
   assert.equal(comment, 1, "Der Kommentar bleibt erhalten");
+});
+
+test("partial municipality fallback sync does not prune stale untouched cases", async (context) => {
+  const sourceUrl = "https://aarau-partial.example.org/";
+  const detailUrl = "https://aarau-partial.example.org/baugesuch-2026-101";
+  const syncFetchImpl = async (url) => {
+    if (String(url) === sourceUrl) {
+      return new Response(
+        `
+          <html>
+            <body>
+              <main>
+                <h1>Aktuelles</h1>
+                <a href="/baugesuch-2026-101">Baugesuch Neubau Wohnhaus</a>
+              </main>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "Content-Type": "text/html" }
+        }
+      );
+    }
+
+    assert.equal(String(url), detailUrl);
+    return new Response(
+      `
+        <html>
+          <body>
+            <main>
+              <h1>Baugesuch</h1>
+              <p>Bauherrschaft: Beispiel AG, Aarau</p>
+              <p>Bauvorhaben: Neubau Wohnhaus</p>
+              <p>Lage: Bahnhofstrasse 12, 5000 Aarau</p>
+              <p>Publikation: 21.03.2026, Auflage bis 20.04.2026</p>
+            </main>
+          </body>
+        </html>
+      `,
+      {
+        status: 200,
+        headers: { "Content-Type": "text/html" }
+      }
+    );
+  };
+
+  const testServer = createTestServer({
+    seedDemoApplications: false,
+    syncFetchImpl,
+    autoSyncEnabled: true,
+    autoSyncRunOnStart: false
+  });
+
+  context.after(async () => {
+    await closeTestServer(testServer);
+    rmSync(testServer.directory, { recursive: true, force: true });
+  });
+
+  const masterCookie = await login(testServer.baseUrl, {
+    username: "master",
+    password: TEST_MASTER_PASSWORD
+  });
+  const sourcesResponse = await requestJson(testServer.baseUrl, "/api/admin/municipality-sources", {
+    headers: { Cookie: masterCookie }
+  });
+  const aarauSource = sourcesResponse.payload.items.find((item) => item.municipality === "Aarau");
+  assert.ok(aarauSource);
+  await requestJson(testServer.baseUrl, `/api/admin/municipality-sources/${aarauSource.id}`, {
+    method: "PATCH",
+    headers: { Cookie: masterCookie },
+    body: JSON.stringify({
+      sourceType: "html",
+      digitalStatus: "partial",
+      enabled: true,
+      sourceUrl,
+      includePattern: "baugesuch|bahnhofstrasse",
+      excludePattern: "",
+      notes: "Partielle Homepage-Fallbackquelle"
+    })
+  });
+
+  const repository = createApplicationsRepository(testServer.db);
+  repository.importItems(
+    [
+      {
+        id: "BG-PARTIAL-STALE",
+        source: "Gemeinde-Webseite",
+        sourceReference: "PARTIAL-STALE",
+        sourceUrl: "https://aarau-partial.example.org/alter-fall",
+        municipality: "Aarau",
+        address: "Alte Gasse 1",
+        coordinates: "",
+        publicationDate: "2026-03-01",
+        deadlineDate: "",
+        projectType: "Umbau",
+        description: "Alter Gemeinde-Fall",
+        protectionStatus: "manual-review",
+        agisMatch: "Noch nicht eindeutig zugeordnet",
+        agisLayers: [],
+        ambiguousAddress: 1
+      }
+    ],
+    "2026-03-01T00:00:00.000Z"
+  );
+
+  const syncResponse = await requestJson(testServer.baseUrl, "/api/sync", {
+    method: "POST",
+    headers: { Cookie: masterCookie }
+  });
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncResponse.payload.importedCount, 1);
+  assert.equal(
+    testServer.db.prepare("SELECT COUNT(*) AS count FROM applications WHERE id = 'BG-PARTIAL-STALE'").get().count,
+    1
+  );
 });
 
 test("startup cleanup keeps junk-pattern rows that carry team comments", () => {

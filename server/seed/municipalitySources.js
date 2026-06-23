@@ -548,13 +548,13 @@ function buildMunicipalitySourceDefaults(municipality) {
     if (looksLikeEbauPortal) {
       return {
         sourceType: "html",
-        sourceUrl,
+        sourceUrl: website,
         sourceToken: "",
-        includePattern: "",
-        excludePattern: "",
-        enabled: 0,
-        digitalStatus: "digital",
-        notes: `Offizielle eBau-Seite der Gemeinde erkannt. ${buildEbauAargauPortalNote(municipality)} (${matchedText || "eBau"})`
+        includePattern: htmlBuildingIncludePattern,
+        excludePattern: htmlPublicationExcludePattern,
+        enabled: 1,
+        digitalStatus: "partial",
+        notes: `Offizielle eBau-Seite der Gemeinde erkannt. ${buildEbauAargauPortalNote(municipality)} Offizielle Gemeindewebseite als offener Fallback aktiviert; Auto-Discovery sucht Baugesuche. (${matchedText || "eBau"})`
       };
     }
 
@@ -565,26 +565,26 @@ function buildMunicipalitySourceDefaults(municipality) {
         sourceToken: "",
         includePattern: htmlBuildingIncludePattern,
         excludePattern: htmlPublicationExcludePattern,
-        enabled: 0,
+        enabled: 1,
         digitalStatus: "partial",
         notes: matchedText
-          ? `Automatisch gefundene Gemeindequelle war thematisch nicht eindeutig für Baugesuche. Offizielle Gemeindewebseite als Fallback hinterlegt. (${matchedText})`
-          : "Automatisch gefundene Gemeindequelle war thematisch nicht eindeutig für Baugesuche. Offizielle Gemeindewebseite als Fallback hinterlegt."
+          ? `Automatisch gefundene Gemeindequelle war thematisch nicht eindeutig für Baugesuche. Offizielle Gemeindewebseite als offener Fallback aktiviert; Auto-Discovery sucht Baugesuche. (${matchedText})`
+          : "Automatisch gefundene Gemeindequelle war thematisch nicht eindeutig für Baugesuche. Offizielle Gemeindewebseite als offener Fallback aktiviert; Auto-Discovery sucht Baugesuche."
       };
     }
 
     if (looksLikeSinglePublication) {
       return {
         sourceType: "html",
-        sourceUrl,
+        sourceUrl: website,
         sourceToken: "",
         includePattern: htmlBuildingIncludePattern,
         excludePattern: htmlPublicationExcludePattern,
-        enabled: 0,
+        enabled: 1,
         digitalStatus: "partial",
         notes: matchedText
-          ? `Automatisch wurde nur eine einzelne Publikation erkannt. Diese Quelle wird nicht blind als Dauer-Sync aktiviert. (${matchedText})`
-          : "Automatisch wurde nur eine einzelne Publikation erkannt. Diese Quelle wird nicht blind als Dauer-Sync aktiviert."
+          ? `Automatisch wurde nur eine einzelne Publikation erkannt. Offizielle Gemeindewebseite als offener Fallback aktiviert; Auto-Discovery sucht die laufenden Baugesuche. (${matchedText})`
+          : "Automatisch wurde nur eine einzelne Publikation erkannt. Offizielle Gemeindewebseite als offener Fallback aktiviert; Auto-Discovery sucht die laufenden Baugesuche."
       };
     }
 
@@ -692,11 +692,20 @@ function buildPrimarySourceDefinition(municipality, rawPrefill, operationalSourc
   const fallbackUrl = operationalSource.sourceUrl || officialWebsite;
   const cueText = `${fallbackUrl} ${rawPrefill.matchedText}`.trim();
   const normalizedDirectUrl = normalizeCatalogUrl(fallbackUrl);
-  const usesEbauPortal = /(?:ebauportal\.ag\.ch|baugesuch-online-einreichen)/i.test(cueText);
+  const normalizedOfficialWebsite = normalizeCatalogUrl(officialWebsite);
+  const normalizedMatchedUrl = normalizeCatalogUrl(rawPrefill.matchedSourceUrl);
+  const usesOfficialWebsiteFallback =
+    Boolean(normalizedDirectUrl && normalizedOfficialWebsite && normalizedMatchedUrl) &&
+    normalizedDirectUrl === normalizedOfficialWebsite &&
+    normalizedMatchedUrl !== normalizedOfficialWebsite;
+  const usesEbauPortal = !usesOfficialWebsiteFallback && /(?:ebauportal\.ag\.ch|baugesuch-online-einreichen)/i.test(cueText);
   const usesAmtlicheNachrichten = /amtliche-nachrichten\.ch/i.test(cueText);
   const usesAmtsblatt = /amtsblatt\.ag\.ch/i.test(cueText);
   const looksLikeDedicatedBuildingPage =
-    htmlBuildingPagePattern.test(cueText) && !usesEbauPortal && !htmlWrongTopicPattern.test(cueText);
+    !usesOfficialWebsiteFallback &&
+    htmlBuildingPagePattern.test(cueText) &&
+    !usesEbauPortal &&
+    !htmlWrongTopicPattern.test(cueText);
   const looksLikePublicationListing =
     htmlOfficialPublicationPattern.test(cueText) || htmlGenericListingPattern.test(cueText);
   const looksLikeSinglePublication = htmlSinglePublicationPattern.test(fallbackUrl);
@@ -807,8 +816,18 @@ function buildPrimarySourceDefinition(municipality, rawPrefill, operationalSourc
 
 function buildMunicipalityQualityAssessment(_municipality, rawPrefill, operationalSource, primarySource) {
   const cueText = `${operationalSource.sourceUrl} ${rawPrefill.matchedText}`.trim();
+  const normalizedSourceUrl = normalizeCatalogUrl(operationalSource.sourceUrl);
+  const normalizedOfficialWebsite = normalizeCatalogUrl(rawPrefill.officialWebsite);
+  const normalizedMatchedUrl = normalizeCatalogUrl(rawPrefill.matchedSourceUrl);
+  const usesOfficialWebsiteFallback =
+    Boolean(normalizedSourceUrl && normalizedOfficialWebsite && normalizedMatchedUrl) &&
+    normalizedSourceUrl === normalizedOfficialWebsite &&
+    normalizedMatchedUrl !== normalizedOfficialWebsite;
   const looksLikeDedicatedBuildingPage =
-    htmlBuildingPagePattern.test(cueText) && !htmlEbauPortalPattern.test(cueText) && !htmlWrongTopicPattern.test(cueText);
+    !usesOfficialWebsiteFallback &&
+    htmlBuildingPagePattern.test(cueText) &&
+    !htmlEbauPortalPattern.test(cueText) &&
+    !htmlWrongTopicPattern.test(cueText);
   const looksLikePublicationListing =
     htmlOfficialPublicationPattern.test(cueText) || htmlGenericListingPattern.test(cueText);
   const looksLikeSinglePublication = htmlSinglePublicationPattern.test(operationalSource.sourceUrl);

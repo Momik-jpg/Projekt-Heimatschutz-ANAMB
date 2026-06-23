@@ -225,7 +225,7 @@ tr.unread .unread-dot {
   color: #1f7350;
 }
 
-.project-scale.scale-unbekannt {
+.project-scale.scale-nicht-klassiert {
   border-color: #c9d0d6;
   background: #f5f6f7;
   color: var(--ink-600);

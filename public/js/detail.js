@@ -260,6 +260,112 @@ function renderComments() {
     .join("");
 }
 
+function evidenceSourceLabel(sourceKind) {
+  if (sourceKind === "amtsblatt") return "Amtsblatt";
+  if (sourceKind === "municipality") return "Gemeindequelle";
+  return "Importquelle";
+}
+
+function renderSourceEvidence(item) {
+  if (!el.sourceEvidenceCard || !el.sourceEvidenceList || !el.sourceEvidenceStatus) return;
+
+  const evidences = Array.isArray(item.sourceEvidence) ? item.sourceEvidence : [];
+  const status = reconciliationMeta(item);
+  el.sourceEvidenceStatus.className = `badge ${status.cls}`;
+  el.sourceEvidenceStatus.textContent = status.label;
+
+  if (evidences.length === 0) {
+    el.sourceEvidenceCard.classList.add("hidden");
+    el.sourceEvidenceList.innerHTML = "";
+    return;
+  }
+
+  el.sourceEvidenceCard.classList.remove("hidden");
+  el.sourceEvidenceList.innerHTML = evidences
+    .map((entry) => {
+      const sourceUrl = String(entry.sourceUrl || "").trim();
+      const hasSourceUrl = /^https?:\/\//i.test(sourceUrl);
+      const title = evidenceSourceLabel(entry.sourceKind);
+      const sourceName = [entry.sourceName, entry.sourceReference].filter(Boolean).join(" · ");
+      const facts = [
+        ["Publiziert", formatDate(entry.publicationDate)],
+        ["Frist", formatDate(entry.deadlineDate)],
+        ["Adresse", entry.address || "-"],
+        ["Parzelle", entry.parcel || "-"]
+      ];
+
+      return `<article class="source-evidence-row source-${escapeHtml(entry.sourceKind || "source")}">
+        <div class="source-evidence-main">
+          <strong>${escapeHtml(title)}</strong>
+          <span>${escapeHtml(sourceName || "-")}</span>
+        </div>
+        <dl class="source-evidence-facts">
+          ${facts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
+        </dl>
+        ${
+          hasSourceUrl
+            ? `<a class="source-evidence-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer">Quelle öffnen</a>`
+            : ""
+        }
+      </article>`;
+    })
+    .join("");
+}
+
+function isHttpUrl(value) {
+  return /^https?:\/\//i.test(String(value ?? "").trim());
+}
+
+function isPdfUrl(value) {
+  return /\.pdf(?:$|[?#])/i.test(String(value ?? "").trim());
+}
+
+function sourceContainerUrl(value) {
+  const url = String(value ?? "").trim();
+  if (!isHttpUrl(url) || !isPdfUrl(url)) return url;
+
+  try {
+    const parsed = new URL(url);
+    parsed.search = "";
+    parsed.hash = "";
+    const pathParts = parsed.pathname.split("/");
+    pathParts.pop();
+    parsed.pathname = pathParts.join("/") || "/";
+    if (!parsed.pathname.endsWith("/")) parsed.pathname += "/";
+    return parsed.toString();
+  } catch {
+    return url.replace(/\/[^/?#]+\.pdf(?:[?#].*)?$/i, "/");
+  }
+}
+
+function fallbackSourceLinkLabel(sourceName = "") {
+  return /amtsblatt/i.test(sourceName) ? "Amtsblatt öffnen" : "Originalquelle öffnen";
+}
+
+function preferredMunicipalitySourceLink(item) {
+  const municipalityUrl = String(item.municipalitySourceUrl || "").trim();
+  const municipalitySourcePageUrl = sourceContainerUrl(municipalityUrl);
+  if (isHttpUrl(municipalitySourcePageUrl)) {
+    return {
+      url: municipalitySourcePageUrl,
+      label: item.municipalitySourceLabel || "Gemeindequelle öffnen",
+      name: item.municipalitySourceName || "Gemeindequelle"
+    };
+  }
+
+  const sourceUrl = String(item.sourceUrl || "").trim();
+  const sourcePageUrl = sourceContainerUrl(sourceUrl);
+  if (isHttpUrl(sourcePageUrl)) {
+    return {
+      url: sourcePageUrl,
+      label: fallbackSourceLinkLabel(item.source),
+      name: item.source || "Originalquelle"
+    };
+  }
+
+  return { url: "", label: "Gemeindequelle öffnen", name: "" };
+}
+
 function renderDetail() {
   const item = state.items.find((entry) => entry.id === state.selectedId) ?? null;
   if (!item) {
@@ -268,6 +374,7 @@ function renderDetail() {
     el.detailStatusBadge.textContent = "Keine Auswahl";
     el.detailHelper.textContent = "Entscheidung, Karte und interne Bearbeitung.";
     el.aiMeta?.classList.add("hidden");
+    el.sourceEvidenceCard?.classList.add("hidden");
     return;
   }
 
@@ -284,13 +391,23 @@ function renderDetail() {
   el.fDue.innerHTML = `${escapeHtml(formatDate(objectionDeadline(item)))} <span class="cell-due-meta cell-due-meta-inline ${due.cls}">· ${escapeHtml(due.txt)}</span>`;
   el.fAgis.textContent = item.agisMatch || protection.label;
   el.fProject.textContent = readableProject(item);
-  el.projectScale.textContent = ({ klein: "Klein", mittel: "Mittel", gross: "Gross", unbekannt: "Unbekannt" })[item.projectScale] || "Unbekannt";
-  el.projectScale.className = `project-scale scale-${item.projectScale || "unbekannt"}`;
-  const sourceUrl = String(item.sourceUrl || "").trim();
-  const hasSourceUrl = /^https?:\/\//i.test(sourceUrl);
+  const scaleText = (() => {
+    if (item.projectScale === "klein") return "Klein";
+    if (item.projectScale === "mittel") return "Mittel";
+    if (item.projectScale === "gross") return "Gross";
+    return "Nicht klassiert";
+  })();
+  const scaleClass = ["klein", "mittel", "gross", "nicht-klassiert"].includes(item.projectScale)
+    ? item.projectScale
+    : "nicht-klassiert";
+  el.projectScale.textContent = scaleText;
+  el.projectScale.className = `project-scale scale-${scaleClass}`;
+  const sourceLink = preferredMunicipalitySourceLink(item);
+  const hasSourceUrl = Boolean(sourceLink.url);
   el.sourceLink.classList.toggle("hidden", !hasSourceUrl);
-  el.sourceLink.href = hasSourceUrl ? sourceUrl : "#";
-  el.sourceLink.textContent = /\.pdf(?:$|[?#])/i.test(sourceUrl) ? "Original-PDF öffnen" : "Originalquelle öffnen";
+  el.sourceLink.href = hasSourceUrl ? sourceLink.url : "#";
+  el.sourceLink.textContent = sourceLink.label;
+  el.sourceLink.title = sourceLink.name || sourceLink.label;
   el.agisLink.href = agisHref(item);
   el.agisLink.textContent = buildDataLinkLabel(item);
   el.recTitle.textContent = recommendationTitle(item);
@@ -299,8 +416,9 @@ function renderDetail() {
   el.recBadge.textContent = protection.label;
   el.dueBadge.className = `badge ${due.cls === "due-over" ? "danger" : due.cls === "due-soon" ? "warning" : "neutral"}`;
   el.dueBadge.textContent = `Frist ${formatDate(item.deadlineDate)} · ${due.txt}`;
-  el.srcMeta.textContent = `Quelle: ${item.source || "unbekannt"}${item.sourceReference ? ` · ${item.sourceReference}` : ""}`;
+  el.srcMeta.textContent = `Quelle: ${item.source || "Quelle ohne Namen"}${item.sourceReference ? ` · ${item.sourceReference}` : ""}`;
   renderAiMeta(item);
+  renderSourceEvidence(item);
   el.fWorkflow.value = item.workflowStatus in WORKFLOW ? item.workflowStatus : "new";
   el.fAssignee.value = item.assignee || "";
   el.fNote.value = item.note || "";
@@ -329,6 +447,17 @@ async function selectItem(id) {
   renderTable();
   renderDetail();
   loadComments(id);
+  try {
+    const detail = await requestJson(`/api/applications/${encodeURIComponent(id)}`);
+    if (state.selectedId === id) {
+      const current = state.items.find((entry) => entry.id === id);
+      const merged = { ...current, ...detail, isRead: current?.isRead ?? detail.isRead };
+      state.items = state.items.map((entry) => (entry.id === id ? merged : entry));
+      renderDetail();
+    }
+  } catch (error) {
+    toast(`Details konnten nicht geladen werden: ${error.message}`);
+  }
   if (wasUnread) {
     try {
       await requestJson(`/api/applications/${encodeURIComponent(id)}/read`, { method: "POST" });
@@ -361,18 +490,22 @@ function renderSourceStats() {
   const report = state.sourceReport ?? {};
   const total = report.totalMunicipalities ?? summary.totalCount ?? 0;
   const enabled = summary.enabledCount ?? 0;
-  const high = report.ratings?.A ?? summary.digitalCount ?? 0;
-  const maintenance = Math.max(0, total - enabled);
+  const ratings = report.ratings ?? {};
+  const direct = ratings.A ?? 0;
+  const platform = ratings.B ?? 0;
+  const check = (ratings.C ?? 0) + (ratings.D ?? 0);
+  const maintenance = Math.max(0, report.uncertainMunicipalities ?? check, total - enabled);
   const missing = Math.max(0, total - (summary.configuredCount ?? 0));
+  const qualityLabel = check > 0 ? "Gemischt" : direct === total && total > 0 ? "Hoch" : "Mittel";
   const statRow = $("#pane-sources .stat-row");
   if (!statRow) return;
   const pct = total ? Math.round((enabled / total) * 100) : 0;
   statRow.innerHTML = `
     <div class="stat"><p class="k">Gemeinden total</p><p class="v">${escapeHtml(total)}</p><p class="d mut">Kanton Aargau</p></div>
     <div class="stat"><p class="k">Quelle aktiv</p><p class="v">${escapeHtml(enabled)}<small> /${escapeHtml(total)}</small></p><div class="progress" role="progressbar" aria-label="Aktive Quellen" aria-valuemin="0" aria-valuemax="100" data-progress="${escapeHtml(pct)}"><span></span></div></div>
-    <div class="stat"><p class="k">Datenqualität Ø</p><p class="v">${high ? "Hoch" : "Offen"}</p><p class="d up">${escapeHtml(high)} strukturiert</p></div>
-    <div class="stat"><p class="k">Wartung nötig</p><p class="v">${escapeHtml(maintenance)}</p><p class="d warn">nicht aktiv</p></div>
-    <div class="stat"><p class="k">Ohne Quelle</p><p class="v">${escapeHtml(missing)}</p><p class="d mut">manuell erfassen</p></div>`;
+    <div class="stat"><p class="k">Quellenqualität</p><p class="v">${escapeHtml(qualityLabel)}</p><p class="d up">${escapeHtml(direct)} direkt · ${escapeHtml(platform)} Plattform · ${escapeHtml(check)} prüfen</p></div>
+    <div class="stat"><p class="k">Prüfung nötig</p><p class="v">${escapeHtml(maintenance)}</p><p class="d warn">indirekt oder unsicher</p></div>
+    <div class="stat"><p class="k">Quelle offen</p><p class="v">${escapeHtml(missing)}</p><p class="d mut">noch erfassen</p></div>`;
   applyProgressBars(statRow);
   const railCount = $('[data-pane="sources"] .rc');
   if (railCount) railCount.textContent = String(total);
@@ -383,7 +516,7 @@ function qualityMeta(source) {
   if (rating === "A") return { level: 3, cls: "q-hi", label: "Hoch", note: source.rationale || "Strukturiert, vollständig" };
   if (rating === "B") return { level: 2, cls: "q-mid", label: "Mittel", note: source.rationale || "Teilfelder fehlen" };
   if (rating === "C") return { level: 1, cls: "q-low", label: "Gering", note: source.rationale || "Quelle prüfen" };
-  return { level: 0, cls: "q-none", label: "Keine", note: source.rationale || "Keine Quelle hinterlegt" };
+  return { level: 0, cls: "q-none", label: "Offen", note: source.rationale || "Quelle erfassen" };
 }
 
 function sourceRows() {
@@ -453,13 +586,13 @@ function renderSources() {
       const quality = qualityMeta(source);
       const operational = source.operational ?? {};
       const hits = hitsByMunicipality.get(source.municipality) ?? 0;
-      const status = source.enabled ? (source.uncertain ? ["warn", "Indirekt"] : ["ok", "Aktiv"]) : ["off", "Keine Quelle"];
+      const status = source.enabled ? (source.uncertain ? ["warn", "Indirekt"] : ["ok", "Aktiv"]) : ["off", "Offen"];
       const bars = [1, 2, 3].map((index) => `<span class="qbar ${index <= quality.level ? "on" : ""}"></span>`).join("");
       return `<tr>
         <td><div class="adm-name">${escapeHtml(source.municipality)}</div><div class="adm-sub">${escapeHtml(source.primarySourceOperator || "Region Aargau")}</div></td>
         <td>${escapeHtml(SOURCE_TYPE[source.sourceType] ?? source.sourceType ?? "-")}</td>
         <td><div class="qmeter ${quality.cls}"><span class="qbars">${bars}</span><span class="qlabel">${escapeHtml(quality.label)}</span></div><div class="adm-sub">${escapeHtml(quality.note)}</div></td>
-        <td><div class="spark-wrap">${sparkSVG(source, hits)}<span class="spark-sum">${escapeHtml(hits)}<small>diese Woche</small></span></div></td>
+        <td><div class="spark-wrap">${sparkSVG(source, hits)}<span class="spark-sum">${escapeHtml(hits)}<small>aktuell</small></span></div></td>
         <td class="adm-sub adm-sub-compact">${escapeHtml(formatDateTime(operational.updatedAt))}</td>
         <td><span class="adm-name">${escapeHtml(hits)}</span></td>
         <td><span class="pill ${status[0]}">${escapeHtml(status[1])}</span></td>
@@ -600,7 +733,7 @@ async function patchSelectedApplication(changes, message) {
     method: "PATCH",
     body: changes
   });
-  state.items = state.items.map((item) => (item.id === updated.id ? updated : item));
+  state.items = state.items.map((item) => (item.id === updated.id ? { ...item, ...updated } : item));
   renderAll();
   toast(message);
 }

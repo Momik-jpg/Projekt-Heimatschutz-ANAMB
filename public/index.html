@@ -187,7 +187,7 @@
       <div class="titleband-meta">
         <span class="band-chip"><span class="dot"></span>Letzter Sync: <b>heute, 06:10</b></span>
         <span class="band-chip">Import: <b>Amtsblatt + 11 Gemeinden</b></span>
-        <span class="band-chip">Gemeindequellen: <b>198/213</b></span>
+        <span class="band-chip">Gemeindequellen: <b>196/196</b></span>
       </div>
     </div>
     <div class="workspace">
@@ -293,8 +293,8 @@
             <div class="fact wide"><dt>Bauvorhaben</dt><dd>
               <span id="fProject">–</span>
               <span class="project-detail-meta">
-                <span id="projectScale" class="project-scale scale-unbekannt">Unbekannt</span>
-                <a id="sourceLink" class="source-link" href="/" target="_blank" rel="noreferrer">Originaldokument öffnen</a>
+                <span id="projectScale" class="project-scale scale-nicht-klassiert">Nicht klassiert</span>
+                <a id="sourceLink" class="source-link" href="/" target="_blank" rel="noreferrer">Gemeindequelle öffnen</a>
               </span>
             </dd></div>
           </dl>
@@ -327,6 +327,14 @@
             </div>
             <div id="aiMeta" class="ai-meta hidden" aria-live="polite"></div>
             <p id="srcMeta" class="src-meta assessment-source">–</p>
+          </section>
+
+          <section id="sourceEvidenceCard" class="source-evidence-card hidden" aria-live="polite">
+            <div class="source-evidence-head">
+              <p class="ttl">Quellnachweise</p>
+              <span id="sourceEvidenceStatus" class="badge neutral">–</span>
+            </div>
+            <div id="sourceEvidenceList" class="source-evidence-list"></div>
           </section>
 
           <section class="timeline-card">
@@ -387,7 +395,7 @@
         <span class="rail-label">Bereiche</span>
         <button class="rail-item active" data-pane="sources" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Gemeindequellen <span class="rc">213</span>
+          Gemeindequellen <span class="rc">196</span>
         </button>
         <button class="rail-item" data-pane="import" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -404,11 +412,11 @@
         <div class="admin-pane active" id="pane-sources">
           <div class="adm-card">
             <div class="stat-row">
-              <div class="stat"><p class="k">Gemeinden total</p><p class="v">213</p><p class="d mut">Kanton Aargau</p></div>
-              <div class="stat"><p class="k">Quelle aktiv</p><p class="v">198<small> /213</small></p><div class="progress progress-93" role="progressbar" aria-label="Aktive Quellen" aria-valuemin="0" aria-valuemax="100" aria-valuenow="93"><span></span></div></div>
-              <div class="stat"><p class="k">Datenqualität Ø</p><p class="v">Hoch</p><p class="d up">181 strukturiert</p></div>
-              <div class="stat"><p class="k">Wartung nötig</p><p class="v">11</p><p class="d warn">Quelle prüfen</p></div>
-              <div class="stat"><p class="k">Ohne Quelle</p><p class="v">4</p><p class="d mut">manuell erfassen</p></div>
+              <div class="stat"><p class="k">Gemeinden total</p><p class="v">196</p><p class="d mut">Kanton Aargau</p></div>
+              <div class="stat"><p class="k">Quelle aktiv</p><p class="v">196<small> /196</small></p><div class="progress progress-100" role="progressbar" aria-label="Aktive Quellen" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></div></div>
+              <div class="stat"><p class="k">Quellenqualität</p><p class="v">Wird geladen</p><p class="d up">direkt · Plattform · prüfen</p></div>
+              <div class="stat"><p class="k">Prüfung nötig</p><p class="v">–</p><p class="d warn">indirekt oder unsicher</p></div>
+              <div class="stat"><p class="k">Quelle offen</p><p class="v">–</p><p class="d mut">noch erfassen</p></div>
             </div>
           </div>
           <div class="adm-card">
@@ -421,7 +429,7 @@
             </div>
             <div class="adm-card-body flush">
               <table class="adm-table">
-                <thead><tr><th>Gemeinde</th><th>Quelltyp</th><th>Datenqualität</th><th>Trend (7 T.)</th><th>Letzter Abruf</th><th>Treffer</th><th>Status</th><th class="cell-actions">Aktion</th></tr></thead>
+                <thead><tr><th>Gemeinde</th><th>Quelltyp</th><th>Quellenqualität</th><th>Trend</th><th>Letzter Abruf</th><th>Treffer</th><th>Status</th><th class="cell-actions">Aktion</th></tr></thead>
                 <tbody id="srcBody"></tbody>
               </table>
             </div>

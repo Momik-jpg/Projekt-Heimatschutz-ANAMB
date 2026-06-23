@@ -81,8 +81,11 @@ test("Detail: Bauvorhaben-Feld zeigt sauberen Text (Regressionsschutz)", async (
   expect(text).not.toBe("–");
   // Regressionsschutz für den Bauvorhaben-Fix: kein roher Mischtext / HTML
   expect(text).not.toMatch(/Bauherr|Bauplatz|Grundeigent|Projektverfasser|<[a-z/]/i);
-  await expect(page.locator("#projectScale")).toContainText(/Klein|Mittel|Gross|Unbekannt/);
+  await expect(page.locator("#projectScale")).toContainText(/Klein|Mittel|Gross|Nicht klassiert/);
   await expect(page.locator("#sourceLink")).toHaveAttribute("href", /^https?:\/\//);
+  await expect(page.locator("#sourceEvidenceCard")).toBeVisible();
+  await expect(page.locator("#sourceEvidenceStatus")).toContainText(/Amtsblatt|Gemeindequelle/);
+  await expect(page.locator("#sourceEvidenceCard .source-evidence-row").first()).toBeVisible();
 });
 
 test("Mobile: Arbeitsliste bleibt ohne horizontales Scrollen bedienbar", async ({ page }) => {

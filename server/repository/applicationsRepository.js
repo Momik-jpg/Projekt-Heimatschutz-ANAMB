@@ -8,6 +8,14 @@ import {
   normalizeImportedDates
 } from "../domain/applicationImportNormalization.js";
 import { importQueue } from "../seed/applications.js";
+import {
+  canReconcileSources,
+  findReconciliationMatch,
+  normalizeMunicipality,
+  sourceKindOf
+} from "../domain/sourceReconciliation.js";
+import { createSourceEvidenceReconciler } from "./applicationSourceEvidence.js";
+import { activeReconciliationCondition } from "./reconciliationFilters.js";
 
 export const protectionStatuses = [
   "no-hit",
@@ -30,6 +38,13 @@ const addressProvenances = new Set(["official-field", "geocoder", "fallback", "l
 function normalizeProvenance(value, allowedValues) {
   const normalized = String(value ?? "").trim();
   return allowedValues.has(normalized) ? normalized : "legacy-unknown";
+}
+
+function toSqlBoolean(value) {
+  if (typeof value === "string") {
+    return ["1", "true", "yes", "ja"].includes(value.trim().toLowerCase()) ? 1 : 0;
+  }
+  return value ? 1 : 0;
 }
 
 function mapRow(row) {
@@ -63,6 +78,7 @@ function mapRow(row) {
     agisLayers: JSON.parse(row.agis_layers || "[]"),
     workflowStatus: row.workflow_status,
     archivedAt: row.archived_at ?? "",
+    reconciliationStatus: row.reconciliation_status ?? "",
     assignee: row.assignee,
     note: row.note,
     automatedAssessment: row.automated_assessment,
@@ -127,6 +143,7 @@ function buildListQuery(filters) {
       agis_layers,
       workflow_status,
       archived_at,
+      reconciliation_status,
       assignee,
       note,
       automated_assessment,
@@ -193,7 +210,7 @@ function buildImportedRecord(item, syncedAt) {
     assignee: item.assignee ?? "",
     note: item.note ?? "",
     automatedAssessment: item.automatedAssessment ?? "",
-    ambiguousAddress: item.ambiguousAddress ?? 0,
+    ambiguousAddress: toSqlBoolean(item.ambiguousAddress ?? 0),
     lastSyncAt: syncedAt,
     createdAt: syncedAt,
     updatedAt: syncedAt
@@ -206,35 +223,37 @@ function toDateOnly(value = new Date()) {
   return safeDate.toISOString().slice(0, 10);
 }
 
-const AMTSBLATT_SOURCE = "Amtsblatt Aargau";
-const DUPLICATE_DATE_WINDOW_DAYS = 60;
-
-// Zwei Publikationsdaten gelten als "gleicher Zeitraum", wenn sie nah beieinander
-// liegen. Fehlt ein Datum, wird nicht ausgeschlossen (im Zweifel als Dublette).
-function datesWithinWindow(first, second, days) {
-  if (!first || !second) return true;
-  const a = new Date(first).getTime();
-  const b = new Date(second).getTime();
-  if (Number.isNaN(a) || Number.isNaN(b)) return true;
-  return Math.abs(a - b) <= days * 24 * 60 * 60 * 1000;
-}
 
 export function createApplicationsRepository(db) {
-  const findBySourceReferenceStatement = db.prepare(`
-    SELECT id
+  const findByEvidenceReferenceStatement = db.prepare(`
+    SELECT application_id AS id
+    FROM application_source_evidence
+    WHERE source_kind = ?
+      AND source_reference = ?
+    LIMIT 1
+  `);
+  const findLegacyReferenceMatchesStatement = db.prepare(`
+    SELECT id, source
     FROM applications
     WHERE source_reference = ?
   `);
-  // Inhaltsbasierte Dublettenerkennung gegen die massgebliche Amtsblatt-Quelle:
-  // derselbe Fall, gleiche Gemeinde + Parzelle, aber anderes source_reference.
-  const findDuplicateParcelStatement = db.prepare(`
-    SELECT publication_date
+  const findByIdAndReferenceStatement = db.prepare(`
+    SELECT id
     FROM applications
-    WHERE source = ?
-      AND lower(trim(municipality)) = lower(trim(?))
-      AND trim(parcel) = trim(?)
-      AND trim(parcel) <> ''
+    WHERE id = ?
+      AND source_reference = ?
+    LIMIT 1
   `);
+  // Kandidaten für den inhaltsbasierten Abgleich: gleiche Gemeinde, nicht
+  // archiviert. Der deterministische Abgleich selbst passiert in JS
+  // (sourceReconciliation), damit er vollständig testbar bleibt.
+  const findReconciliationCandidatesStatement = db.prepare(`
+    SELECT id, source, municipality, publication_date AS publicationDate, deadline_date AS deadlineDate,
+           parcel, address, project_type AS projectType
+    FROM applications
+    WHERE workflow_status <> 'archived'
+  `);
+  const evidenceReconciler = createSourceEvidenceReconciler(db);
   const insertStatement = db.prepare(`
     INSERT INTO applications (
       id,
@@ -299,7 +318,6 @@ export function createApplicationsRepository(db) {
       AND IFNULL(note, '') = ''
       AND id NOT IN (SELECT application_id FROM application_comments)
   `);
-
   return {
     list(filters = {}) {
       const { sql, params } = buildListQuery(filters);
@@ -330,6 +348,7 @@ export function createApplicationsRepository(db) {
             agis_layers,
             workflow_status,
             archived_at,
+            reconciliation_status,
             assignee,
             note,
             automated_assessment,
@@ -342,7 +361,15 @@ export function createApplicationsRepository(db) {
         `)
         .get(id);
 
-      return mapRow(row);
+      const mapped = mapRow(row);
+      if (mapped) {
+        mapped.sourceEvidence = this.listSourceEvidence(id);
+      }
+      return mapped;
+    },
+
+    listSourceEvidence(applicationId) {
+      return evidenceReconciler.listSourceEvidence(applicationId);
     },
 
     update(id, changes) {
@@ -406,34 +433,41 @@ export function createApplicationsRepository(db) {
       const changes = [];
       let importedCount = 0;
       let updatedCount = 0;
-      let skippedDuplicateCount = 0;
+      let mergedCount = 0;
 
       db.exec("BEGIN");
 
       try {
         for (const item of items) {
           const next = buildImportedRecord(item, syncedAt);
-          const existing = findBySourceReferenceStatement.get(next.sourceReference);
-
-          if (!existing && next.source !== AMTSBLATT_SOURCE && String(next.parcel ?? "").trim()) {
-            const amtsblattMatches = findDuplicateParcelStatement.all(
-              AMTSBLATT_SOURCE,
-              next.municipality,
-              next.parcel
-            );
-            const isDuplicateOfAmtsblatt = amtsblattMatches.some((row) =>
-              datesWithinWindow(row.publication_date, next.publicationDate, DUPLICATE_DATE_WINDOW_DAYS)
-            );
-
-            if (isDuplicateOfAmtsblatt) {
-              // Derselbe Fall liegt bereits als amtlicher Amtsblatt-Datensatz vor:
-              // keine Gemeinde-Dublette anlegen (Amtsblatt-Daten haben Vorrang).
-              skippedDuplicateCount += 1;
-              continue;
-            }
-          }
+          const evidence = evidenceReconciler.evidenceFromRecord(next);
+          const existing =
+            findByEvidenceReferenceStatement.get(evidence.sourceKind, next.sourceReference) ??
+            findLegacyReferenceMatchesStatement
+              .all(next.sourceReference)
+              .find((entry) => sourceKindOf(entry.source) === evidence.sourceKind) ??
+            findByIdAndReferenceStatement.get(next.id, next.sourceReference);
 
           if (existing) {
+            const existingItem = this.getById(existing.id);
+            const matchingEvidence = existingItem?.sourceEvidence?.find(
+              (entry) => entry.sourceKind === evidence.sourceKind && entry.sourceReference === next.sourceReference
+            ) ?? existingItem?.sourceEvidence?.find(
+              (entry) => entry.sourceReference === next.sourceReference
+            );
+            const updateEvidence = matchingEvidence
+              ? {
+                  ...evidence,
+                  sourceKind: matchingEvidence.sourceKind,
+                  sourceName: matchingEvidence.sourceKind === evidence.sourceKind
+                    ? evidence.sourceName
+                    : matchingEvidence.sourceName || evidence.sourceName,
+                  sourceUrl: matchingEvidence.sourceKind === evidence.sourceKind
+                    ? evidence.sourceUrl
+                    : matchingEvidence.sourceUrl || evidence.sourceUrl,
+                  matchStatus: matchingEvidence.matchStatus ?? evidence.matchStatus ?? "matched"
+                }
+              : evidence;
             updateImportedStatement.run(
               next.source,
               next.sourceUrl,
@@ -457,16 +491,43 @@ export function createApplicationsRepository(db) {
               next.updatedAt,
               existing.id
             );
+            evidenceReconciler.upsertEvidence(existing.id, updateEvidence, syncedAt);
+            evidenceReconciler.reconcileApplication(existing.id, syncedAt);
             const updatedItem = this.getById(existing.id);
             importedItems.push(updatedItem);
-            changes.push({
-              changeType: "updated",
-              item: updatedItem
-            });
+            changes.push({ changeType: "updated", item: updatedItem });
             updatedCount += 1;
             continue;
           }
 
+          // Neuer source_reference: deterministischer inhaltsbasierter Abgleich
+          // gegen bestehende Fälle derselben Gemeinde.
+          const candidates = findReconciliationCandidatesStatement
+            .all()
+            .filter((candidate) =>
+              normalizeMunicipality(candidate.municipality) === normalizeMunicipality(next.municipality) &&
+              canReconcileSources(evidence.sourceKind, sourceKindOf(candidate.source))
+            );
+          const match = findReconciliationMatch(next, candidates);
+
+          if (match.status === "matched") {
+            const host = this.getById(match.candidate.id);
+
+            if (host) {
+              // Bestehenden Fall um den eigenen Nachweis ergänzen (falls noch
+              // nicht erfasst), dann den neuen Nachweis anhängen und neu abgleichen.
+              evidenceReconciler.ensureSelfEvidence(host, host.lastSyncAt || syncedAt);
+              evidenceReconciler.upsertEvidence(host.id, evidence, syncedAt);
+              evidenceReconciler.reconcileApplication(host.id, syncedAt);
+              importedItems.push(this.getById(host.id));
+              // Bewusst kein changes-Eintrag: ein zusammengeführter Nachweis ist
+              // kein neuer Fall und löst keine Import-Meldung aus.
+              mergedCount += 1;
+              continue;
+            }
+          }
+
+          // Kein eindeutiger Treffer (none oder mehrdeutig): eigenen Fall anlegen.
           insertStatement.run(
             next.id,
             next.source,
@@ -496,12 +557,12 @@ export function createApplicationsRepository(db) {
             next.createdAt,
             next.updatedAt
           );
+          const matchStatus = match.status === "ambiguous" ? "ambiguous" : "matched";
+          evidenceReconciler.upsertEvidence(next.id, { ...evidence, matchStatus }, syncedAt);
+          evidenceReconciler.reconcileApplication(next.id, syncedAt);
           const importedItem = this.getById(next.id);
           importedItems.push(importedItem);
-          changes.push({
-            changeType: "imported",
-            item: importedItem
-          });
+          changes.push({ changeType: "imported", item: importedItem });
           importedCount += 1;
         }
 
@@ -514,7 +575,7 @@ export function createApplicationsRepository(db) {
       return {
         importedCount,
         updatedCount,
-        skippedDuplicates: skippedDuplicateCount,
+        mergedCount,
         items: importedItems,
         changes
       };
@@ -596,13 +657,15 @@ export function createApplicationsRepository(db) {
           SELECT COUNT(*) AS count
           FROM applications
           WHERE protection_status IN ('protected-point', 'protected-zone', 'combined-hit')
+            AND ${activeReconciliationCondition}
         `)
         .get().count;
       const manualReview = db
         .prepare(`
           SELECT COUNT(*) AS count
           FROM applications
-          WHERE protection_status = 'manual-review' OR ambiguous_address = 1
+          WHERE (protection_status = 'manual-review' OR ambiguous_address = 1)
+            AND ${activeReconciliationCondition}
         `)
         .get().count;
       const dueSoon = db
@@ -610,6 +673,7 @@ export function createApplicationsRepository(db) {
           SELECT COUNT(*) AS count
           FROM applications
           WHERE workflow_status NOT IN ('cleared', 'archived')
+            AND ${activeReconciliationCondition}
             AND IFNULL(deadline_date, '') <> ''
             AND julianday(deadline_date) >= julianday(?)
             AND julianday(deadline_date) - julianday(?) <= 7
@@ -649,6 +713,7 @@ export function createApplicationsRepository(db) {
             deadline_date
           FROM applications
           WHERE workflow_status NOT IN ('cleared', 'archived')
+            AND ${activeReconciliationCondition}
           ORDER BY
             CASE
               WHEN protection_status = 'manual-review' THEN 0
