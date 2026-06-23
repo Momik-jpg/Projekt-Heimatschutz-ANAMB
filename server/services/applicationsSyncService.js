@@ -130,7 +130,7 @@ export function createApplicationsSyncService({
           ...source,
           sourceType: normalizedSourceType,
           source: buildImportSourceName(normalizedSourceType, true),
-          pruneStale: true
+          pruneStale: source.digitalStatus === "digital"
         };
       });
   }

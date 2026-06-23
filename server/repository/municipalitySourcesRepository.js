@@ -390,6 +390,12 @@ export function createMunicipalitySourcesRepository(db) {
       return listCatalog(search);
     },
 
+    getCatalogItemByMunicipality(municipality) {
+      const normalizedMunicipality = String(municipality ?? "").trim();
+      if (!normalizedMunicipality) return null;
+      return listCatalog(normalizedMunicipality).find((item) => item.municipality === normalizedMunicipality) ?? null;
+    },
+
     listSharedSources(limit = 10) {
       return listSharedSources(limit);
     },

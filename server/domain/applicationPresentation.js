@@ -231,5 +231,5 @@ export function classifyProjectScale(application = {}) {
   if (largeProjectPattern.test(description)) return "gross";
   if (smallProjectPattern.test(description)) return "klein";
   if (mediumProjectPattern.test(description)) return "mittel";
-  return "unbekannt";
+  return "nicht-klassiert";
 }

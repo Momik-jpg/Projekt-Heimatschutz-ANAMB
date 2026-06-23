@@ -7,7 +7,7 @@ export const schema = `
   CREATE TABLE IF NOT EXISTS applications (
     id TEXT PRIMARY KEY,
     source TEXT NOT NULL,
-    source_reference TEXT NOT NULL UNIQUE,
+    source_reference TEXT NOT NULL,
     source_url TEXT NOT NULL,
     municipality TEXT NOT NULL,
     address TEXT NOT NULL,
@@ -25,6 +25,7 @@ export const schema = `
     agis_layers TEXT NOT NULL DEFAULT '[]',
     workflow_status TEXT NOT NULL,
     archived_at TEXT NOT NULL DEFAULT '',
+    reconciliation_status TEXT NOT NULL DEFAULT '',
     assignee TEXT NOT NULL DEFAULT '',
     note TEXT NOT NULL DEFAULT '',
     automated_assessment TEXT NOT NULL DEFAULT '',
@@ -159,6 +160,25 @@ export const schema = `
     FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS application_source_evidence (
+    id TEXT PRIMARY KEY,
+    application_id TEXT NOT NULL,
+    source_kind TEXT NOT NULL,
+    source_name TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL,
+    source_url TEXT NOT NULL DEFAULT '',
+    municipality TEXT NOT NULL DEFAULT '',
+    publication_date TEXT NOT NULL DEFAULT '',
+    deadline_date TEXT NOT NULL DEFAULT '',
+    address TEXT NOT NULL DEFAULT '',
+    parcel TEXT NOT NULL DEFAULT '',
+    project_type TEXT NOT NULL DEFAULT '',
+    match_status TEXT NOT NULL DEFAULT 'matched',
+    observed_at TEXT NOT NULL,
+    UNIQUE (source_kind, source_reference),
+    FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS application_learning_rules (
     id TEXT PRIMARY KEY,
     municipality_key TEXT NOT NULL,
@@ -254,12 +274,14 @@ export const schema = `
   CREATE INDEX IF NOT EXISTS idx_applications_protection_status ON applications(protection_status);
   CREATE INDEX IF NOT EXISTS idx_applications_workflow_deadline ON applications(workflow_status, deadline_date);
   CREATE INDEX IF NOT EXISTS idx_applications_source_municipality ON applications(source, municipality);
+  CREATE INDEX IF NOT EXISTS idx_applications_source_reference ON applications(source_reference);
   CREATE INDEX IF NOT EXISTS idx_applications_last_sync_at ON applications(last_sync_at DESC);
   CREATE INDEX IF NOT EXISTS idx_registration_keys_created_at ON registration_keys(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_registration_keys_key_code ON registration_keys(key_code);
   CREATE INDEX IF NOT EXISTS idx_sync_jobs_next_run_at ON sync_jobs(next_run_at);
   CREATE INDEX IF NOT EXISTS idx_app_settings_updated_at ON app_settings(updated_at);
   CREATE INDEX IF NOT EXISTS idx_import_notifications_created_at ON import_notifications(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_application_source_evidence_application ON application_source_evidence(application_id);
   CREATE INDEX IF NOT EXISTS idx_application_learning_rules_municipality ON application_learning_rules(municipality_key, confidence DESC);
   CREATE INDEX IF NOT EXISTS idx_application_learning_rules_updated ON application_learning_rules(updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_municipality_sources_enabled ON municipality_sources(enabled, municipality);

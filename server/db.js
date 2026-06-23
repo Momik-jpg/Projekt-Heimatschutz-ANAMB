@@ -16,6 +16,8 @@ import {
   normalizeLegacyApplicationCoordinates,
   normalizeInvalidApplicationDeadlines,
   repairImportedApplicationFields,
+  backfillApplicationSourceEvidence,
+  relaxApplicationSourceReferenceUniqueness,
   applyMigrationOnce
 } from "./db/migrations.js";
 
@@ -91,6 +93,12 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
   ensureColumn(db, "applications", "address_provenance", "TEXT NOT NULL DEFAULT 'legacy-unknown'");
   ensureColumn(db, "applications", "deadline_provenance", "TEXT NOT NULL DEFAULT 'legacy-unknown'");
   ensureColumn(db, "applications", "archived_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "applications", "reconciliation_status", "TEXT NOT NULL DEFAULT ''");
+  applyMigrationOnce(
+    db,
+    { id: "relax-application-source-reference-unique-v1", dbPath, destructive: true, transaction: false },
+    relaxApplicationSourceReferenceUniqueness
+  );
   // Datenmigrationen laufen einmalig pro Datenbank (vermerkt in
   // schema_migrations), nicht bei jedem Start. Vor destruktiven Schritten wird
   // – sofern Daten vorhanden sind – ein Backup angelegt.
@@ -349,6 +357,12 @@ export function createDatabase(dbPath = defaultDbPath, options = {}) {
       throw error;
     }
   }
+
+  applyMigrationOnce(
+    db,
+    { id: "backfill-application-source-evidence-v1", dbPath, destructive: true },
+    backfillApplicationSourceEvidence
+  );
 
   db.exec("BEGIN");
 

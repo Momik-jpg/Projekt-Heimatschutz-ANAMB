@@ -98,7 +98,7 @@
 .pill.off { color: var(--danger); background: var(--danger-soft); border-color: var(--danger-line); }
 .pill.mut { color: var(--ink-600); background: var(--stone-150); border-color: var(--stone-200); }
 
-/* Datenqualität-Meter */
+/* Quellenqualität-Meter */
 .qmeter { display: inline-flex; align-items: center; gap: 8px; }
 .qbars { display: inline-flex; gap: 3px; align-items: flex-end; height: 14px; }
 .qbar { width: 5px; border-radius: 1px; background: var(--stone-200); }

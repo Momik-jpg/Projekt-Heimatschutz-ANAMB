@@ -16,6 +16,16 @@ const WORKFLOW = {
   archived: { label: "Abgelegt", cls: "archived" }
 };
 
+const RECONCILIATION = {
+  "amtsblatt-confirmed": { label: "Amtsblatt bestätigt", short: "Amtsblatt", cls: "ok" },
+  "municipality-only": { label: "Nur Gemeindequelle", short: "Gemeindequelle", cls: "warning" },
+  "conflict-review": { label: "Quellenkonflikt", short: "Konflikt", cls: "danger" },
+  "missing-publication": { label: "Publikation fehlt", short: "Publikation fehlt", cls: "warning" },
+  "ambiguous-review": { label: "Mehrdeutiger Quellenabgleich", short: "Mehrdeutig", cls: "danger" },
+  "import-review": { label: "Importquelle prüfen", short: "Importprüfung", cls: "warning" },
+  "": { label: "Quellenprüfung offen", short: "Prüfung offen", cls: "neutral" }
+};
+
 const SOURCE_TYPE = {
   manual: "Manuell",
   html: "Gemeindeportal",
@@ -169,6 +179,9 @@ function collectElements() {
     dueBadge: $("#dueBadge"),
     aiMeta: $("#aiMeta"),
     srcMeta: $("#srcMeta"),
+    sourceEvidenceCard: $("#sourceEvidenceCard"),
+    sourceEvidenceStatus: $("#sourceEvidenceStatus"),
+    sourceEvidenceList: $("#sourceEvidenceList"),
     timeline: $("#timeline"),
     fWorkflow: $("#fWorkflow"),
     fAssignee: $("#fAssignee"),
@@ -209,6 +222,13 @@ function escapeHtml(value) {
 
 function normalizeText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function reconciliationMeta(itemOrStatus) {
+  const status = typeof itemOrStatus === "string"
+    ? itemOrStatus
+    : String(itemOrStatus?.reconciliationStatus ?? "");
+  return RECONCILIATION[status] ?? { label: "Quellenprüfung offen", short: "Prüfung offen", cls: "neutral" };
 }
 
 function truncate(value, max = 96) {

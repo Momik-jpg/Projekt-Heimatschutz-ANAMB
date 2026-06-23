@@ -20,7 +20,7 @@ test("archiviert Fälle 31 Tage nach Publikation und behält Team-Daten", () => 
       sourceReference: id,
       sourceUrl: `https://example.org/${id}.pdf`,
       municipality: "Aarau",
-      address: "Teststrasse 1",
+      address: `Teststrasse ${id}`,
       coordinates: "",
       publicationDate,
       deadlineDate,
