@@ -420,7 +420,7 @@ const municipalitySourcePrefills = {
 // übrigen bleibt es der belegte Fallback. Darum wird ihre Gemeindequelle
 // deterministisch auf das Amtsblatt gesetzt; die offizielle Gemeindewebsite
 // bleibt als officialWebsite erhalten, das eBau-Portal als Zusatzquelle.
-const amtsblattFallbackMunicipalities = new Set([
+export const amtsblattFallbackMunicipalities = new Set([
   "Aristau", "Auw", "Beinwil am See", "Besenbüren", "Biberstein", "Birr",
   "Birrhard", "Birrwil", "Boswil", "Bottenwil", "Densbüren", "Dietwil",
   "Dürrenäsch", "Eggenwil", "Egliswil", "Erlinsbach", "Fisibach", "Freienwil",
